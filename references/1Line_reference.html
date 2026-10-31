@@ -1,0 +1,1578 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Growth Archive - 나의 성장을 기록하다</title>
+
+  <!-- Pretendard Web Font -->
+  <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Pretendard', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'Roboto', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              bg: '#F8F9FC',
+              surface: '#FFFFFF',
+              primary: '#4F6EF7',
+              primaryHover: '#3B57E0',
+              primarySoft: '#EEF2FF',
+              secondary: '#8B7CF6',
+              secondarySoft: '#F5F3FF',
+              text: '#111827',
+              muted: '#6B7280',
+              border: '#E8EAF0',
+              success: '#10B981',
+              warning: '#F59E0B',
+              accentBg: '#FAF5FF',
+            }
+          },
+          boxShadow: {
+            soft: '0 4px 20px -2px rgba(17, 24, 39, 0.04), 0 2px 6px -1px rgba(17, 24, 39, 0.02)',
+            cardHover: '0 10px 25px -3px rgba(79, 110, 247, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.03)',
+            drawer: '-4px 0 24px rgba(0, 0, 0, 0.08)'
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    /* Custom Scrollbar & Animations */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+
+    .typing-dot {
+      animation: typing 1.4s infinite ease-in-out both;
+    }
+    .typing-dot:nth-child(1) { animation-delay: 0s; }
+    .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes typing {
+      0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+      40% { transform: scale(1); opacity: 1; }
+    }
+
+    .drawer-slide-in {
+      animation: slideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    @keyframes slideIn {
+      from { transform: translateX(100%); }
+      to { transform: translateX(0); }
+    }
+
+  </style>
+</head>
+
+<body class="bg-brand-bg text-brand-text font-sans antialiased min-h-screen flex flex-col md:flex-row overflow-x-hidden">
+
+  <!-- ========================================== -->
+  <!-- SIDEBAR NAVIGATION                         -->
+  <!-- ========================================== -->
+  <aside class="w-full md:w-[240px] bg-brand-surface border-r border-brand-border flex-shrink-0 flex flex-col justify-between z-20 md:sticky md:top-0 md:h-screen">
+    <div>
+      <!-- Brand Header -->
+      <div class="p-5 flex items-center justify-between border-b border-brand-border/60">
+        <div class="flex items-center space-x-2.5 cursor-pointer" onclick="navigateTo('home')">
+          <div class="w-9 h-9 rounded-xl bg-brand-primary/10 flex items-center justify-center text-brand-primary">
+            <i data-lucide="sparkles" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h1 class="font-bold text-base tracking-tight text-brand-text leading-tight">Growth Archive</h1>
+            <p class="text-[11px] text-brand-muted font-medium">Personal AI Knowledge</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Navigation Menu -->
+      <nav class="p-3 space-y-1">
+        <button id="nav-home" onclick="navigateTo('home')"
+          class="nav-btn w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all text-brand-primary bg-brand-primarySoft border-l-4 border-brand-primary">
+          <i data-lucide="home" class="w-4 h-4"></i>
+          <span>홈</span>
+        </button>
+
+        <!-- Growth Journey Header / Collapsible Section -->
+        <div class="pt-3 pb-1 px-3">
+          <span class="text-[11px] font-semibold tracking-wider text-brand-muted uppercase">나의 성장일지</span>
+        </div>
+
+        <button id="nav-growthJourney" onclick="navigateTo('growthJourney')"
+          class="nav-btn w-full flex items-center space-x-3 px-3.5 py-2 rounded-xl text-sm font-medium transition-all text-brand-muted hover:bg-slate-50 hover:text-brand-text">
+          <i data-lucide="trending-up" class="w-4 h-4"></i>
+          <span>Growth Journey</span>
+        </button>
+
+        <div class="pt-3 pb-1 px-3">
+          <span class="text-[11px] font-semibold tracking-wider text-brand-muted uppercase">아카이브</span>
+        </div>
+
+        <button id="nav-footprints" onclick="navigateTo('footprints')"
+          class="nav-btn w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all text-brand-muted hover:bg-slate-50 hover:text-brand-text">
+          <i data-lucide="footprints" class="w-4 h-4"></i>
+          <span>나의 발자국</span>
+        </button>
+      </nav>
+    </div>
+
+    <!-- User Mini Profile -->
+    <div class="p-3.5 m-3 rounded-2xl bg-slate-50 border border-brand-border flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-brand-primary to-brand-secondary text-white font-semibold text-xs flex items-center justify-center">
+          김성장
+        </div>
+        <div>
+          <p class="text-xs font-semibold text-brand-text">김성장 님</p>
+          <p class="text-[10px] text-brand-muted">활동 6개 기록 중</p>
+        </div>
+      </div>
+      <i data-lucide="settings" class="w-4 h-4 text-brand-muted cursor-pointer hover:text-brand-text"></i>
+    </div>
+  </aside>
+
+  <!-- ========================================== -->
+  <!-- MAIN CONTENT AREA                          -->
+  <!-- ========================================== -->
+  <main class="flex-1 min-w-0 max-w-[1400px] mx-auto p-4 sm:p-6 lg:p-8 flex flex-col gap-6">
+
+    <!-- PAGE 1: HOME (Growth AI Chatbot + Upload First) -->
+    <section id="page-home" class="page-view space-y-6">
+      
+      <!-- Top Title Header -->
+      <div>
+        <h2 class="text-xl sm:text-2xl font-bold tracking-tight text-brand-text">오늘 어떤 경험을 기록해볼까요?</h2>
+        <p class="text-sm text-brand-muted mt-1">
+          파일이나 링크를 올리거나, 오늘 있었던 일을 간단히 적어보세요. Growth AI가 기존 기록과 연결해 정리해드려요.
+        </p>
+      </div>
+
+      <!-- Growth AI Chatbot Interface (Core Experience) -->
+      <div class="bg-brand-surface rounded-2xl border border-brand-border shadow-soft flex flex-col h-[520px] overflow-hidden">
+        
+        <!-- Chatbot Header -->
+        <div class="px-5 py-3.5 border-b border-brand-border bg-slate-50/50 flex items-center justify-between">
+          <div class="flex items-center space-x-2.5">
+            <div class="w-7 h-7 rounded-lg bg-brand-primary/10 flex items-center justify-center text-brand-primary">
+              <i data-lucide="sparkles" class="w-4 h-4"></i>
+            </div>
+            <span class="font-semibold text-sm text-brand-text">Growth AI</span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5"></span>기록 정리 준비됨
+            </span>
+          </div>
+          <button onclick="clearChatHistory()" class="text-xs text-brand-muted hover:text-brand-text flex items-center gap-1">
+            <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> 대화 초기화
+          </button>
+        </div>
+
+        <!-- Chat Messages Container -->
+        <div id="chat-messages" class="flex-1 p-5 overflow-y-auto space-y-4">
+          <!-- Initial Welcome Message -->
+          <div class="flex gap-3">
+            <div class="w-8 h-8 rounded-xl bg-brand-primary/10 text-brand-primary flex items-center justify-center flex-shrink-0">
+              <i data-lucide="bot" class="w-4 h-4"></i>
+            </div>
+            <div class="space-y-2 max-w-[85%]">
+              <div class="bg-slate-100/80 p-3.5 rounded-2xl rounded-tl-sm text-sm text-brand-text leading-relaxed">
+                안녕하세요! 오늘 만든 자료나 기록하고 싶은 경험을 남겨주세요.<br/>
+                어떤 활동인지 제가 먼저 확인하고 기존 기록과 연결해볼게요.
+              </div>
+              <p class="text-[10px] text-brand-muted pl-1">방금 전</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dynamic Scenario Quick Buttons for Demo -->
+        <div class="px-4 py-2 bg-slate-50 border-t border-brand-border/60 flex flex-wrap gap-2 text-xs">
+          <span class="text-brand-muted self-center text-[11px] font-medium mr-1">💡 시연 시나리오:</span>
+          <button onclick="runScenarioText()" class="px-2.5 py-1 bg-white border border-brand-border rounded-lg hover:border-brand-primary text-slate-700 transition">
+            1. 텍스트 경험 입력 (기능 축소)
+          </button>
+          <button onclick="runScenarioFile()" class="px-2.5 py-1 bg-white border border-brand-border rounded-lg hover:border-brand-primary text-slate-700 transition">
+            2. 파일 업로드 (wireframe_v2)
+          </button>
+          <button onclick="runScenarioNoChange()" class="px-2.5 py-1 bg-white border border-brand-border rounded-lg hover:border-brand-primary text-slate-700 transition">
+            3. 변화 없음 파일 (typo_fix)
+          </button>
+          <button onclick="runScenarioBatchFiles()" class="px-2.5 py-1 bg-white border border-brand-border rounded-lg hover:border-brand-primary text-slate-700 transition">
+            4. 다중 파일 일괄 업로드 (5개)
+          </button>
+        </div>
+
+        <!-- Chat Input Bar -->
+        <div class="p-3 bg-brand-surface border-t border-brand-border">
+          <form id="chat-form" onsubmit="handleChatSubmit(event)" class="relative flex items-center bg-slate-50 border border-brand-border rounded-xl focus-within:border-brand-primary focus-within:ring-2 focus-within:ring-brand-primarySoft transition">
+            <!-- File Input hidden -->
+            <input type="file" id="file-input" multiple class="hidden" onchange="handleFileSelect(event)" />
+            
+            <button type="button" onclick="document.getElementById('file-input').click()" class="p-2.5 text-brand-muted hover:text-brand-primary rounded-lg transition ml-1" title="파일 업로드">
+              <i data-lucide="paperclip" class="w-5 h-5"></i>
+            </button>
+            <button type="button" onclick="openModal('link-modal')" class="p-2.5 text-brand-muted hover:text-brand-primary rounded-lg transition" title="링크 추가">
+              <i data-lucide="link" class="w-5 h-5"></i>
+            </button>
+            
+            <input type="text" id="chat-input" placeholder="오늘 있었던 일을 적거나 자료를 추가해보세요." class="w-full bg-transparent px-3 py-3 text-sm focus:outline-none text-brand-text placeholder-brand-muted" />
+            
+            <button type="submit" class="m-1.5 p-2 bg-brand-primary hover:bg-brand-primaryHover text-white rounded-lg transition flex items-center justify-center flex-shrink-0">
+              <i data-lucide="send" class="w-4 h-4"></i>
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Bottom Layout: Recent Activities & Recent Logged Records -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        <!-- Recent Activities (2 cols) -->
+        <div class="lg:col-span-2 bg-brand-surface rounded-2xl border border-brand-border p-5 shadow-soft">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="font-bold text-base text-brand-text flex items-center gap-2">
+              <i data-lucide="folder-git-2" class="w-4 h-4 text-brand-primary"></i> 최근 활동
+            </h3>
+            <button onclick="navigateTo('footprints')" class="text-xs text-brand-primary font-medium hover:underline flex items-center gap-1">
+              전체 보기 <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
+          <div id="recent-activities-list" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
+
+        <!-- Recent Logged Records List (1 col) -->
+        <div class="bg-brand-surface rounded-2xl border border-brand-border p-5 shadow-soft flex flex-col">
+          <h3 class="font-bold text-base text-brand-text mb-4 flex items-center gap-2">
+            <i data-lucide="history" class="w-4 h-4 text-brand-secondary"></i> 최근 추가된 기록
+          </h3>
+          <div id="recent-records-list" class="space-y-3 flex-1 overflow-y-auto">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- PAGE 2: GROWTH JOURNEY -->
+    <section id="page-growthJourney" class="page-view space-y-6 hidden">
+      <div>
+        <h2 class="text-xl sm:text-2xl font-bold tracking-tight text-brand-text">Growth Journey</h2>
+        <p class="text-sm text-brand-muted mt-1">시간에 따라 내가 어떻게 달라졌는지 확인해보세요.</p>
+      </div>
+
+      <!-- Top Summary Banner Card -->
+      <div class="bg-gradient-to-r from-brand-primarySoft via-white to-brand-secondarySoft p-6 rounded-2xl border border-brand-border shadow-soft">
+        <div class="flex items-start justify-between">
+          <div class="space-y-2">
+            <span class="text-xs font-bold tracking-wider text-brand-primary uppercase flex items-center gap-1.5">
+              <i data-lucide="sparkles" class="w-4 h-4"></i> 최근 성장 흐름 AI 분석
+            </span>
+            <h3 class="text-lg font-bold text-brand-text">
+              서비스 기획 경험 → 사용자 중심 기획 → MVP 기준 설정 → PM 역할 확장
+            </h3>
+            <p class="text-xs text-brand-muted leading-relaxed">
+              최근 활동 기록을 기반으로 반복적으로 나타난 변화 흐름이에요. 프로젝트의 질적 향상이 지속적으로 관찰되고 있습니다.
+            </p>
+          </div>
+        </div>
+
+        <!-- Experience Badges -->
+        <div class="mt-4 pt-4 border-t border-brand-border/60 flex flex-wrap items-center gap-2">
+          <span class="text-xs font-semibold text-brand-muted mr-1">새롭게 쌓인 경험:</span>
+          <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-white border border-brand-border text-brand-primary shadow-sm">🌱 첫 PM</span>
+          <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-white border border-brand-border text-brand-primary shadow-sm">💬 첫 사용자 인터뷰</span>
+          <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-white border border-brand-border text-brand-primary shadow-sm">🚀 첫 배포</span>
+          <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-white border border-brand-border text-brand-primary shadow-sm">🏆 첫 연합해커톤</span>
+        </div>
+      </div>
+
+      <!-- Growth Filter Controls -->
+      <div class="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
+        <!-- Growth Type Pill Buttons -->
+        <div class="flex flex-wrap gap-2">
+          <button onclick="filterJourneyType('all')" class="journey-type-btn active px-3.5 py-1.5 rounded-full text-xs font-medium bg-brand-primary text-white">전체</button>
+          <button onclick="filterJourneyType('🧩 능력 확장')" class="journey-type-btn px-3.5 py-1.5 rounded-full text-xs font-medium bg-white border border-brand-border text-slate-700 hover:bg-slate-50">🧩 능력 확장</button>
+          <button onclick="filterJourneyType('🏆 성과 향상')" class="journey-type-btn px-3.5 py-1.5 rounded-full text-xs font-medium bg-white border border-brand-border text-slate-700 hover:bg-slate-50">🏆 성과 향상</button>
+          <button onclick="filterJourneyType('🌱 경험 축적')" class="journey-type-btn px-3.5 py-1.5 rounded-full text-xs font-medium bg-white border border-brand-border text-slate-700 hover:bg-slate-50">🌱 경험 축적</button>
+          <button onclick="filterJourneyType('⚡ 효율성')" class="journey-type-btn px-3.5 py-1.5 rounded-full text-xs font-medium bg-white border border-brand-border text-slate-700 hover:bg-slate-50">⚡ 효율성</button>
+          <button onclick="filterJourneyType('🔁 경험 전이')" class="journey-type-btn px-3.5 py-1.5 rounded-full text-xs font-medium bg-white border border-brand-border text-slate-700 hover:bg-slate-50">🔁 경험 전이</button>
+        </div>
+
+        <!-- Growth Axis Filter -->
+        <div class="flex items-center space-x-2 bg-white px-3 py-1.5 rounded-xl border border-brand-border text-xs">
+          <span class="text-brand-muted font-medium">성장 축:</span>
+          <select id="journey-axis-select" onchange="filterJourneyAxis(this.value)" class="bg-transparent font-semibold text-brand-text focus:outline-none">
+            <option value="all">전체 분야</option>
+            <option value="기획 / PM">기획 / PM</option>
+            <option value="AI·기술">AI·기술</option>
+            <option value="데이터">데이터</option>
+            <option value="발표·협업">발표·협업</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Vertical Growth Journey Timeline -->
+      <div id="journey-timeline-container" class="relative pl-6 space-y-8 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-brand-border">
+        <!-- Rendered by JS -->
+      </div>
+    </section>
+
+    <!-- PAGE 3: FOOTPRINTS (Archive List) -->
+    <section id="page-footprints" class="page-view space-y-6 hidden">
+      <div>
+        <h2 class="text-xl sm:text-2xl font-bold tracking-tight text-brand-text">나의 발자국</h2>
+        <p class="text-sm text-brand-muted mt-1">지금까지의 활동과 그 안에 남겨둔 자료를 한곳에서 확인해보세요.</p>
+      </div>
+
+      <!-- Search & Filters Bar -->
+      <div class="bg-brand-surface p-4 rounded-2xl border border-brand-border shadow-soft space-y-4">
+        <!-- Big Search Bar -->
+        <div class="relative">
+          <i data-lucide="search" class="w-5 h-5 absolute left-3.5 top-3 text-brand-muted"></i>
+          <input type="text" id="footprints-search-input" oninput="handleFootprintsSearch()" placeholder="활동명, 파일명, 내용으로 검색..." class="w-full bg-slate-50 border border-brand-border rounded-xl pl-11 pr-4 py-2.5 text-sm text-brand-text focus:outline-none focus:border-brand-primary transition" />
+        </div>
+
+        <!-- Filter Dropdowns & Pills -->
+        <div class="flex flex-wrap gap-4 items-center justify-between text-xs">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="font-semibold text-brand-muted">유형:</span>
+            <button onclick="filterFootprintType('all')" class="footprint-type-btn active px-3 py-1 rounded-lg font-medium bg-brand-primary text-white">전체</button>
+            <button onclick="filterFootprintType('해커톤')" class="footprint-type-btn px-3 py-1 rounded-lg font-medium bg-slate-100 text-brand-muted hover:bg-slate-200">해커톤</button>
+            <button onclick="filterFootprintType('전공수업')" class="footprint-type-btn px-3 py-1 rounded-lg font-medium bg-slate-100 text-brand-muted hover:bg-slate-200">수업</button>
+            <button onclick="filterFootprintType('프로젝트')" class="footprint-type-btn px-3 py-1 rounded-lg font-medium bg-slate-100 text-brand-muted hover:bg-slate-200">프로젝트</button>
+            <button onclick="filterFootprintType('공모전')" class="footprint-type-btn px-3 py-1 rounded-lg font-medium bg-slate-100 text-brand-muted hover:bg-slate-200">공모전</button>
+          </div>
+
+          <div class="flex items-center space-x-3">
+            <div class="flex items-center space-x-1.5">
+              <span class="text-brand-muted">상태:</span>
+              <select id="footprint-status-select" onchange="filterFootprints()" class="bg-slate-50 border border-brand-border rounded-lg px-2.5 py-1 text-xs text-brand-text focus:outline-none">
+                <option value="all">전체</option>
+                <option value="진행 중">진행 중</option>
+                <option value="완료">완료</option>
+              </select>
+            </div>
+
+            <div class="flex items-center space-x-1.5">
+              <span class="text-brand-muted">정렬:</span>
+              <select id="footprint-sort-select" onchange="filterFootprints()" class="bg-slate-50 border border-brand-border rounded-lg px-2.5 py-1 text-xs text-brand-text focus:outline-none">
+                <option value="recent">최근 업데이트</option>
+                <option value="materials">자료 많은 순</option>
+                <option value="oldest">오래된 순</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footprint Activities List -->
+      <div id="footprints-list-container" class="space-y-3">
+        <!-- Rendered by JS -->
+      </div>
+    </section>
+
+    <!-- PAGE 4: ACTIVITY ARCHIVE DETAILS (Folders/Files) -->
+    <section id="page-activityArchive" class="page-view space-y-6 hidden">
+      <!-- Top Nav back -->
+      <div class="flex items-center justify-between">
+        <button onclick="navigateTo('footprints')" class="inline-flex items-center space-x-1.5 text-xs font-semibold text-brand-muted hover:text-brand-text">
+          <i data-lucide="arrow-left" class="w-4 h-4"></i> <span>나의 발자국으로 돌아가기</span>
+        </button>
+        <button id="archive-timeline-btn" onclick="openActivityTimeline()" class="px-4 py-2 rounded-xl bg-brand-primary hover:bg-brand-primaryHover text-white font-medium text-xs flex items-center space-x-2 shadow-sm transition">
+          <i data-lucide="git-commit" class="w-4 h-4"></i>
+          <span>변화 과정 보기 (Project Timeline)</span>
+        </button>
+      </div>
+
+      <!-- Activity Info Card Header -->
+      <div id="activity-archive-header" class="bg-brand-surface p-6 rounded-2xl border border-brand-border shadow-soft space-y-3">
+        <!-- Rendered dynamically -->
+      </div>
+
+      <!-- Folders & Files Accordion View -->
+      <div class="space-y-3">
+        <h3 class="font-bold text-base text-brand-text flex items-center gap-2">
+          <i data-lucide="folder" class="w-4.5 h-4.5 text-brand-primary"></i> 보관된 자료 폴더
+        </h3>
+
+        <div id="archive-folders-container" class="space-y-3">
+          <!-- Folder accordions rendered dynamically by JS -->
+        </div>
+      </div>
+    </section>
+
+    <!-- PAGE 5: PROJECT TIMELINE (Specific Activity Turning Points) -->
+    <section id="page-projectTimeline" class="page-view space-y-6 hidden">
+      <!-- Back Nav -->
+      <div class="flex items-center justify-between">
+        <button id="timeline-back-btn" onclick="navigateTo('activityArchive')" class="inline-flex items-center space-x-1.5 text-xs font-semibold text-brand-muted hover:text-brand-text">
+          <i data-lucide="arrow-left" class="w-4 h-4"></i> <span id="timeline-back-text">활동 상세로 돌아가기</span>
+        </button>
+        <button id="timeline-view-materials-btn" onclick="navigateTo('activityArchive')" class="px-3.5 py-1.5 rounded-xl bg-white border border-brand-border hover:bg-slate-50 text-slate-700 font-medium text-xs flex items-center space-x-2 transition">
+          <i data-lucide="folder" class="w-4 h-4 text-brand-primary"></i>
+          <span>관련 자료 보기</span>
+        </button>
+      </div>
+
+      <!-- Activity Timeline Header Banner -->
+      <div id="timeline-header-card" class="bg-brand-surface p-6 rounded-2xl border border-brand-border shadow-soft flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <!-- Dynamic header rendered by JS -->
+      </div>
+
+      <!-- Timeline Turning Point Events -->
+      <div id="project-timeline-events" class="relative pl-6 space-y-6 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-brand-border">
+        <!-- Rendered by JS -->
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ========================================== -->
+  <!-- DRAWERS & MODALS                           -->
+  <!-- ========================================== -->
+
+  <!-- Drawer Overlay -->
+  <div id="drawer-overlay" onclick="closeDrawer()" class="fixed inset-0 bg-slate-900/30 backdrop-blur-xs z-40 hidden transition-opacity"></div>
+
+  <!-- Right Side Drawer -->
+  <div id="side-drawer" class="fixed top-0 right-0 h-full w-full sm:w-[440px] bg-brand-surface z-50 border-l border-brand-border shadow-drawer hidden flex flex-col">
+    <div class="p-5 border-b border-brand-border flex items-center justify-between bg-slate-50/50">
+      <h3 id="drawer-title" class="font-bold text-base text-brand-text">상세 정보</h3>
+      <button onclick="closeDrawer()" class="p-1 rounded-lg text-brand-muted hover:bg-slate-200">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+    </div>
+    <div id="drawer-content" class="p-6 flex-1 overflow-y-auto space-y-5">
+      <!-- Drawer Content Inserted via JS -->
+    </div>
+  </div>
+
+  <!-- Link Input Modal -->
+  <div id="link-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-brand-surface rounded-2xl border border-brand-border shadow-xl max-w-md w-full p-6 space-y-4">
+      <div class="flex items-center justify-between border-b border-brand-border pb-3">
+        <h3 class="font-bold text-base text-brand-text flex items-center gap-2">
+          <i data-lucide="link" class="w-4.5 h-4.5 text-brand-primary"></i> 링크 추가
+        </h3>
+        <button onclick="closeModal('link-modal')" class="text-brand-muted hover:text-brand-text">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <p class="text-xs text-brand-muted">GitHub repository 또는 ChatGPT 공유 링크를 붙여넣어주세요.</p>
+      <input type="url" id="modal-link-input" placeholder="https://github.com/username/project 또는 https://chatgpt.com/share/..." value="https://github.com/growth-archive/1line-hackathon" class="w-full border border-brand-border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-brand-primary" />
+      <div class="flex justify-end space-x-2 pt-2">
+        <button onclick="closeModal('link-modal')" class="px-4 py-2 rounded-xl border border-brand-border text-xs font-medium text-slate-700 hover:bg-slate-50">취소</button>
+        <button onclick="submitLinkModal()" class="px-4 py-2 rounded-xl bg-brand-primary text-white text-xs font-medium hover:bg-brand-primaryHover">분석 및 저장</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Categorization Modal -->
+  <div id="edit-category-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-brand-surface rounded-2xl border border-brand-border shadow-xl max-w-md w-full p-6 space-y-4">
+      <div class="flex items-center justify-between border-b border-brand-border pb-3">
+        <h3 class="font-bold text-base text-brand-text flex items-center gap-2">
+          <i data-lucide="edit-3" class="w-4.5 h-4.5 text-brand-primary"></i> 기록 분류 수정
+        </h3>
+        <button onclick="closeModal('edit-category-modal')" class="text-brand-muted hover:text-brand-text">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block font-medium text-brand-text mb-1">연결할 활동 선택</label>
+          <select id="edit-activity-select" class="w-full border border-brand-border rounded-xl p-2.5 focus:outline-none focus:border-brand-primary">
+            <option value="line1-hackathon">1호선톤 (해커톤)</option>
+            <option value="computer-vision">컴퓨터비전 (전공수업)</option>
+            <option value="scent-orbit">Scent Orbit (프로젝트)</option>
+            <option value="data-vis">데이터분석과시각화 (전공수업)</option>
+            <option value="ai-contest">AI 분석 공모전 (공모전)</option>
+          </select>
+        </div>
+        <div>
+          <label class="block font-medium text-brand-text mb-1">자료 유형</label>
+          <input type="text" id="edit-type-input" value="디자인 · 와이어프레임" class="w-full border border-brand-border rounded-xl p-2.5 focus:outline-none focus:border-brand-primary" />
+        </div>
+      </div>
+      <div class="flex justify-end space-x-2 pt-2">
+        <button onclick="closeModal('edit-category-modal')" class="px-4 py-2 rounded-xl border border-brand-border text-xs font-medium text-slate-700 hover:bg-slate-50">취소</button>
+        <button onclick="saveCategoryEdit()" class="px-4 py-2 rounded-xl bg-brand-primary text-white text-xs font-medium hover:bg-brand-primaryHover">수정 저장</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ========================================== -->
+  <!-- JAVASCRIPT APP LOGIC                       -->
+  <!-- ========================================== -->
+  <script>
+    // -------------------------------------------------------------
+    // MOCK DATA ARCHITECTURE
+    // -------------------------------------------------------------
+    const mockActivities = [
+      {
+        id: "line1-hackathon",
+        title: "1호선톤",
+        category: "해커톤",
+        status: "진행 중",
+        role: "PM / 기획",
+        period: "2026.10 ~",
+        materialsCount: 14,
+        field: ["기획", "AI"],
+        summary: "AI 기반 개인 성장 아카이브 서비스를 기획하고 개발하고 있는 연합 해커톤 프로젝트",
+        updatedAt: "오늘 14:32",
+        folders: [
+          {
+            name: "기획",
+            count: 4,
+            files: [
+              { name: "idea_candidates.pdf", type: "아이디어 기획", date: "10/23", summary: "초기 후보 서비스 아이디어 3종 정리문서" },
+              { name: "service_planning_v1.pdf", type: "기획안", date: "10/25", summary: "기능 6개가 포함된 초기 상세 기획안" },
+              { name: "service_planning_final.pdf", type: "기획안", date: "10/26", summary: "핵심 기능 3개로 축소 및 AI 강조 기획안" },
+              { name: "feature_spec.pdf", type: "기능 명세", date: "10/27", summary: "상세 기능 목록 및 AI 프롬프트 파이프라인 명세" }
+            ]
+          },
+          {
+            name: "디자인",
+            count: 3,
+            files: [
+              { 
+                name: "wireframe_v1.pdf", 
+                type: "디자인 · 와이어프레임", 
+                date: "10/25", 
+                summary: "대시보드 중심의 초기 화면 와이어프레임",
+                version: "v1"
+              },
+              { 
+                name: "wireframe_v2.pdf", 
+                type: "디자인 · 와이어프레임", 
+                date: "10/26", 
+                summary: "Growth Journey 및 Growth AI 메인 인터페이스 구체화",
+                version: "v2",
+                beforeText: "파일 업로드 영역 중심 대시보드 구조",
+                afterText: "Growth AI 챗봇 + 통합 파일 기록 인터페이스",
+                timelineRef: "기록 입력 UX 변경"
+              },
+              { 
+                name: "final_ui.fig", 
+                type: "디자인 · 피그마", 
+                date: "11/08", 
+                summary: "최종 배포용 컴포넌트 시스템 및 완성 UI",
+                version: "final"
+              }
+            ]
+          },
+          {
+            name: "협업",
+            count: 2,
+            files: [
+              { name: "meeting_1026.docx", type: "회의록", date: "10/26", summary: "기능 범위 축소 및 챗봇 우선순위 합의 회의" },
+              { name: "team_feedback.pdf", type: "멘토링 피드백", date: "10/28", summary: "AI 근거 제시 UI 명확화에 관한 피드백" }
+            ]
+          },
+          {
+            name: "개발",
+            count: 3,
+            files: [
+              { name: "architecture.png", type: "시스템 구조도", date: "10/27", summary: "클라이언트 단일 실행 구조 및 AI Mock 파이프라인" }
+            ]
+          },
+          {
+            name: "발표 / 결과",
+            count: 2,
+            files: [
+              { name: "presentation_typo_fix.pdf", type: "발표자료", date: "10/29", summary: "1호선톤 발표자료 오탈자 수정본" }
+            ]
+          }
+        ],
+        timeline: [
+          {
+            date: "10/23",
+            title: "아이디어 후보 3개 선정",
+            isTurningPoint: false,
+            desc: "팀 회의를 통해 성장의 과정 기록 서비스 아이디어 채택."
+          },
+          {
+            date: "10/25",
+            title: "서비스 방향 확정",
+            isTurningPoint: true,
+            before: "일반적인 성장 결과 리포트 작성 서비스",
+            after: "실제 제출 자료 기반의 경험 연결 및 자동 변화 발견",
+            reason: "단순한 결과 요약보다 AI가 실제 자료에서 변화 근거를 직접 찾아주는 것이 핵심 가치라고 판단함.",
+            evidence: "service_planning_v1.pdf"
+          },
+          {
+            date: "10/26",
+            title: "기록 입력 UX 변경",
+            isTurningPoint: true,
+            before: "프로젝트를 먼저 생성한 후 파일을 개별 업로드하는 방식",
+            after: "자료/텍스트를 먼저 입력하면 AI가 활동을 자동 분류하는 Upload-First 방식",
+            reason: "사용자의 초기 입력 부담을 최소화하기 위해 Ask Only When Needed 원칙을 적용함.",
+            evidence: "wireframe_v2.pdf"
+          },
+          {
+            date: "10/27",
+            title: "Growth Journey 구성 구체화",
+            isTurningPoint: false,
+            desc: "시간 흐름에 따른 사용자 성장을 확인할 수 있도록 Growth Journey 구성을 구체화."
+          },
+          {
+            date: "NOW",
+            title: "상 상세기획 및 디자인 진행 중",
+            isTurningPoint: false,
+            desc: "해커톤 발표용 완성 프로토타입 제작 중."
+          }
+        ]
+      },
+      {
+        id: "computer-vision",
+        title: "컴퓨터비전",
+        category: "전공수업",
+        status: "진행 중",
+        role: "수강생",
+        period: "2026.09 ~",
+        materialsCount: 8,
+        field: ["AI"],
+        summary: "CNN과 이미지 분석 관련 원리를 학습하고 실습 과제를 진행하는 전공수업",
+        updatedAt: "어제 18:20",
+        folders: [
+          {
+            name: "강의자료",
+            count: 5,
+            files: [
+              { name: "segmentation.pdf", type: "강의노트", date: "10/25", summary: "Semantic Segmentation 및 U-Net 구조 정리" }
+            ]
+          }
+        ],
+        timeline: []
+      },
+      {
+        id: "scent-orbit",
+        title: "Scent Orbit",
+        category: "프로젝트",
+        status: "완료",
+        role: "기획 · 개발",
+        period: "2025.03 ~ 2025.06",
+        materialsCount: 18,
+        field: ["기획", "개발"],
+        summary: "사용자 취향 기반 향수 추천 및 노트 분석 웹서비스 프로젝트",
+        updatedAt: "2025.06.30",
+        folders: [],
+        timeline: []
+      },
+      {
+        id: "data-vis",
+        title: "데이터분석과시각화",
+        category: "전공수업",
+        status: "진행 중",
+        role: "수강생",
+        period: "2026.09 ~",
+        materialsCount: 11,
+        field: ["데이터"],
+        summary: "Pandas, Seaborn을 활용한 데이터 탐색 및 인사이트 도출 실습",
+        updatedAt: "3일 전",
+        folders: [],
+        timeline: []
+      },
+      {
+        id: "ai-contest",
+        title: "AI 분석 공모전",
+        category: "공모전",
+        status: "진행 중",
+        role: "데이터 분석",
+        period: "2026.08 ~",
+        materialsCount: 5,
+        field: ["AI", "데이터"],
+        summary: "공공 데이터를 활용한 지역별 생활 패턴 변화 분석 공모전",
+        updatedAt: "5일 전",
+        folders: [],
+        timeline: []
+      },
+      {
+        id: "cvis-learning",
+        title: "CVIS 학습",
+        category: "자격증 / 개인학습",
+        status: "진행 중",
+        role: "개인",
+        period: "2026.07 ~",
+        materialsCount: 3,
+        field: ["AI"],
+        summary: "비전 AI 관련 주요 논문 스터디 및 개인 구현 아카이브",
+        updatedAt: "1주일 전",
+        folders: [],
+        timeline: []
+      }
+    ];
+
+    // Growth Journey Timeline Events Data
+    const mockJourneyEvents = [
+      {
+        date: "2025.05",
+        title: "첫 서비스 기획 경험",
+        activity: "Scent Orbit",
+        type: "🌱 경험 축적",
+        axis: "기획 / PM",
+        desc: "초기 요구사항 정의서를 작성하며 화면 단위의 기능 기획을 처음 수행함."
+      },
+      {
+        date: "2025.09",
+        title: "사용자 관점 기획 범위 확장",
+        activity: "Scent Orbit",
+        type: "🧩 능력 확장",
+        axis: "기획 / PM",
+        desc: "개발 중심 기획에서 벗어나 실제 타겟 유저 인터뷰 결과를 반영한 와이어프레임 설계."
+      },
+      {
+        date: "2026.03",
+        title: "이전 프로젝트 경험을 새로운 프로젝트 기획에 반영",
+        activity: "1호선톤",
+        type: "🔁 경험 전이",
+        axis: "기획 / PM",
+        desc: "Scent Orbit에서 경험한 오버스펙 문제를 방지하기 위해 1호선톤에서 초기에 핵심 기능 3개만 빠르게 검증하는 전략을 취함."
+      },
+      {
+        date: "2026.08",
+        title: "데이터 모델링을 통한 결과물 질적 향상",
+        activity: "AI 분석 공모전",
+        type: "🏆 성과 향상",
+        axis: "AI·기술",
+        desc: "전공 수업에서 배운 비전 및 데이터 시각화 라이브러리를 공모전 분석 리포트에 적용."
+      },
+      {
+        date: "2026.10",
+        title: "PM 역할 수행 및 팀 프로세스 수립",
+        activity: "1호선톤",
+        type: "🧩 능력 확장",
+        axis: "기획 / PM",
+        before: "기획 담당",
+        after: "PM + 기획",
+        evidence: "회의록, 역할분담표",
+        desc: "이전 프로젝트에서는 기획서 작성에 집중했지만, 이번 1호선톤에서는 팀 전체의 데드라인과 개발자-디자이너 간 이슈 싱크업을 주도함."
+      }
+    ];
+
+    // Recent Logged Records Sample Data
+    const mockRecentRecords = [
+      { title: "wireframe_v2.pdf", meta: "1호선톤 · 와이어프레임", time: "오늘 14:32", icon: "file-text" },
+      { title: "segmentation.pdf", meta: "컴퓨터비전 · 강의자료", time: "어제 18:20", icon: "file-text" },
+      { title: "AI 기획 대화 기록", meta: "1호선톤 · AI 대화 기록", time: "2일 전", icon: "message-square" }
+    ];
+
+    // APP GLOBAL STATE
+    let currentState = {
+      currentPage: 'home',
+      selectedActivityId: 'line1-hackathon',
+      journeyTypeFilter: 'all',
+      journeyAxisFilter: 'all',
+      footprintTypeFilter: 'all',
+      footprintStatusFilter: 'all',
+      footprintSort: 'recent',
+      footprintSearch: ''
+    };
+
+    // -------------------------------------------------------------
+    // INITIALIZATION & ROUTING
+    // -------------------------------------------------------------
+    window.onload = function() {
+      lucide.createIcons();
+      renderRecentActivitiesHome();
+      renderRecentRecordsHome();
+      renderGrowthJourneyTimeline();
+      renderFootprintsList();
+    };
+
+    function navigateTo(pageId) {
+      currentState.currentPage = pageId;
+
+      // Update Navigation Menu UI Active States
+      document.querySelectorAll('.nav-btn').forEach(btn => {
+        btn.classList.remove('bg-brand-primarySoft', 'text-brand-primary', 'border-l-4', 'border-brand-primary');
+        btn.classList.add('text-brand-muted');
+      });
+
+      const activeBtn = document.getElementById(`nav-${pageId}`);
+      if (activeBtn) {
+        activeBtn.classList.add('bg-brand-primarySoft', 'text-brand-primary', 'border-l-4', 'border-brand-primary');
+        activeBtn.classList.remove('text-brand-muted');
+      }
+
+      // Hide all pages, show target
+      document.querySelectorAll('.page-view').forEach(p => p.classList.add('hidden'));
+      const targetPage = document.getElementById(`page-${pageId}`);
+      if (targetPage) {
+        targetPage.classList.remove('hidden');
+      }
+
+      // Special re-renders on page open
+      if (pageId === 'activityArchive') {
+        renderActivityArchivePage();
+      } else if (pageId === 'projectTimeline') {
+        renderProjectTimelinePage();
+      }
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // -------------------------------------------------------------
+    // CHATBOT & UPLOAD SCENARIOS (P0 UX Implementation)
+    // -------------------------------------------------------------
+    const chatMessagesContainer = document.getElementById('chat-messages');
+
+    function appendUserMessage(content) {
+      const msgHtml = `
+        <div class="flex justify-end gap-3">
+          <div class="space-y-1 max-w-[80%] text-right">
+            <div class="bg-brand-primary text-white p-3.5 rounded-2xl rounded-tr-sm text-sm leading-relaxed inline-block text-left">
+              ${content}
+            </div>
+            <p class="text-[10px] text-brand-muted pr-1">방금 전</p>
+          </div>
+        </div>
+      `;
+      chatMessagesContainer.insertAdjacentHTML('beforeend', msgHtml);
+      chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
+    }
+
+    function appendTypingIndicator() {
+      const id = 'typing-' + Date.now();
+      const typingHtml = `
+        <div id="${id}" class="flex gap-3">
+          <div class="w-8 h-8 rounded-xl bg-brand-primary/10 text-brand-primary flex items-center justify-center flex-shrink-0">
+            <i data-lucide="bot" class="w-4 h-4"></i>
+          </div>
+          <div class="bg-slate-100 p-3.5 rounded-2xl rounded-tl-sm flex items-center space-x-1.5">
+            <span class="w-2 h-2 rounded-full bg-slate-400 typing-dot"></span>
+            <span class="w-2 h-2 rounded-full bg-slate-400 typing-dot"></span>
+            <span class="w-2 h-2 rounded-full bg-slate-400 typing-dot"></span>
+          </div>
+        </div>
+      `;
+      chatMessagesContainer.insertAdjacentHTML('beforeend', typingHtml);
+      lucide.createIcons();
+      chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
+      return id;
+    }
+
+    function removeTypingIndicator(id) {
+      const el = document.getElementById(id);
+      if (el) el.remove();
+    }
+
+    function appendAIMessageCard(cardContentHtml) {
+      const msgHtml = `
+        <div class="flex gap-3">
+          <div class="w-8 h-8 rounded-xl bg-brand-primary/10 text-brand-primary flex items-center justify-center flex-shrink-0">
+            <i data-lucide="sparkles" class="w-4 h-4"></i>
+          </div>
+          <div class="space-y-2 max-w-[90%] sm:max-w-[85%]">
+            <div class="bg-white border border-brand-border shadow-soft p-4 rounded-2xl rounded-tl-sm text-sm text-brand-text space-y-3">
+              ${cardContentHtml}
+            </div>
+            <p class="text-[10px] text-brand-muted pl-1">방금 전 · Growth AI 분석 완료</p>
+          </div>
+        </div>
+      `;
+      chatMessagesContainer.insertAdjacentHTML('beforeend', msgHtml);
+      lucide.createIcons();
+      chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
+    }
+
+    function handleChatSubmit(e) {
+      e.preventDefault();
+      const input = document.getElementById('chat-input');
+      const val = input.value.trim();
+      if (!val) return;
+
+      appendUserMessage(val);
+      input.value = '';
+
+      // Default mock reaction to custom user typing
+      const typingId = appendTypingIndicator();
+      setTimeout(() => {
+        removeTypingIndicator(typingId);
+        appendAIMessageCard(`
+          <div class="font-semibold text-brand-primary flex items-center gap-1.5">
+            <i data-lucide="check-circle" class="w-4 h-4 text-emerald-500"></i> 1호선톤 활동 기록으로 분석되었습니다.
+          </div>
+          <p class="text-xs text-brand-muted">입력하신 내용에서 프로젝트 진행 방식에 대한 주요 경험 변화를 확인하여 1호선톤 아카이브에 기록했습니다.</p>
+          <div class="pt-2 flex gap-2">
+            <button onclick="navigateTo('projectTimeline')" class="px-3 py-1.5 rounded-lg bg-brand-primarySoft text-brand-primary text-xs font-medium hover:bg-brand-primary hover:text-white transition">Timeline 확인</button>
+            <button onclick="openModal('edit-category-modal')" class="px-3 py-1.5 rounded-lg border border-brand-border text-xs text-brand-muted hover:text-brand-text">수정</button>
+          </div>
+        `);
+      }, 1000);
+    }
+
+    // SCENARIO 1: Text Experience Input (Function reduction)
+    function runScenarioText() {
+      const text = "오늘 회의에서 기능이 너무 많다는 의견이 나와서 6개 기능을 3개 핵심 기능으로 줄였어.";
+      appendUserMessage(text);
+      const typingId = appendTypingIndicator();
+
+      setTimeout(() => {
+        removeTypingIndicator(typingId);
+        const cardHtml = `
+          <div class="font-bold text-sm text-brand-text flex items-center justify-between">
+            <span class="flex items-center gap-1.5 text-brand-primary">
+              <i data-lucide="folder-git-2" class="w-4 h-4"></i> 1호선톤 활동 기록으로 보이네요.
+            </span>
+            <span class="text-[11px] font-normal text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">확신도 높음</span>
+          </div>
+          <p class="text-xs text-brand-text">기존 기획 기록과 비교했을 때 <strong>기능 범위를 축소한 중요한 변화</strong>가 확인됐어요.</p>
+          
+          <!-- Before / After Card -->
+          <div class="grid grid-cols-2 gap-2 p-3 bg-slate-50 rounded-xl border border-brand-border text-xs">
+            <div class="space-y-1">
+              <span class="text-[10px] font-bold text-brand-muted block uppercase">Before</span>
+              <p class="font-medium text-slate-700">기능 6개</p>
+            </div>
+            <div class="space-y-1 border-l border-brand-border pl-2.5">
+              <span class="text-[10px] font-bold text-brand-primary block uppercase">After</span>
+              <p class="font-bold text-brand-primary">핵심 기능 3개</p>
+            </div>
+          </div>
+
+          <div class="space-y-1 text-xs text-brand-muted">
+            <p>· <strong>변화 유형:</strong> 기능 범위 변경 (MVP 최적화)</p>
+            <p>· <strong>근거:</strong> 사용자 직접 기록</p>
+          </div>
+
+          <div class="pt-1 flex items-center space-x-2">
+            <button onclick="confirmSaveToTimeline('1호선톤')" class="px-3 py-1.5 bg-brand-primary text-white rounded-lg text-xs font-medium hover:bg-brand-primaryHover">1호선톤에 기록</button>
+            <button onclick="openModal('edit-category-modal')" class="px-3 py-1.5 border border-brand-border rounded-lg text-xs text-slate-700 hover:bg-slate-50">수정</button>
+            <button onclick="openModal('edit-category-modal')" class="px-3 py-1.5 text-brand-muted hover:text-brand-text text-xs">다른 활동 선택</button>
+          </div>
+        `;
+        appendAIMessageCard(cardHtml);
+      }, 1200);
+    }
+
+    // SCENARIO 2: Single File Upload with Progress (wireframe_v2.pdf)
+    function runScenarioFile() {
+      const fileName = "wireframe_v2.pdf";
+      appendUserMessage(`<div class="flex items-center gap-2"><i data-lucide="file-text" class="w-4 h-4"></i> <span>${fileName}</span></div>`);
+
+      const typingId = appendTypingIndicator();
+
+      // Progress animation simulation inside chat
+      setTimeout(() => {
+        removeTypingIndicator(typingId);
+        const progressId = 'prog-' + Date.now();
+        const progressHtml = `
+          <div id="${progressId}" class="flex gap-3">
+            <div class="w-8 h-8 rounded-xl bg-brand-primary/10 text-brand-primary flex items-center justify-center flex-shrink-0">
+              <i data-lucide="sparkles" class="w-4 h-4"></i>
+            </div>
+            <div class="bg-white border border-brand-border p-4 rounded-2xl rounded-tl-sm text-xs space-y-2 w-64 shadow-soft">
+              <p class="font-semibold text-brand-text">파일을 확인하고 있어요...</p>
+              <div class="space-y-1 text-brand-muted text-[11px]">
+                <p class="text-emerald-600 flex items-center gap-1"><i data-lucide="check" class="w-3 h-3"></i> 파일 확인 완료</p>
+                <p class="text-emerald-600 flex items-center gap-1"><i data-lucide="check" class="w-3 h-3"></i> 기존 활동 비교 완료</p>
+                <p class="text-emerald-600 flex items-center gap-1"><i data-lucide="check" class="w-3 h-3"></i> 자료 유형 분석 완료</p>
+                <p class="text-brand-primary font-medium flex items-center gap-1 animate-pulse"><i data-lucide="loader" class="w-3 h-3 animate-spin"></i> 이전 기록과 비교 중...</p>
+              </div>
+            </div>
+          </div>
+        `;
+        chatMessagesContainer.insertAdjacentHTML('beforeend', progressHtml);
+        lucide.createIcons();
+        chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
+
+        setTimeout(() => {
+          const el = document.getElementById(progressId);
+          if (el) el.remove();
+
+          const resultCard = `
+            <div class="font-bold text-sm text-brand-text flex items-center justify-between">
+              <span>분석이 끝났어요. <span class="text-brand-primary">wireframe_v2.pdf</span></span>
+              <span class="px-2 py-0.5 text-[10px] bg-brand-primarySoft text-brand-primary font-semibold rounded-md">새로운 변화 1개 발견</span>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 text-xs bg-slate-50 p-3 rounded-xl border border-brand-border">
+              <div><span class="text-brand-muted">활동:</span> <strong class="text-brand-text">1호선톤</strong></div>
+              <div><span class="text-brand-muted">자료 유형:</span> <strong>디자인 · 와이어프레임</strong></div>
+              <div><span class="text-brand-muted">단계:</span> <strong>진행 중</strong></div>
+              <div><span class="text-brand-muted">관련 자료:</span> <strong class="text-slate-600">wireframe_v1.pdf</strong></div>
+            </div>
+
+            <p class="text-xs text-brand-text leading-relaxed">
+              <strong>AI 요약:</strong> Growth Journey와 메인 AI 기록 인터페이스를 구체화한 와이어프레임이에요.
+            </p>
+
+            <div class="grid grid-cols-2 gap-2 p-3 bg-indigo-50/50 border border-indigo-100 rounded-xl text-xs">
+              <div>
+                <span class="text-[10px] text-brand-muted block font-semibold">BEFORE</span>
+                <p class="text-slate-600">파일 업로드 영역 중심 대시보드</p>
+              </div>
+              <div class="border-l border-indigo-100 pl-2.5">
+                <span class="text-[10px] text-brand-primary block font-semibold">AFTER</span>
+                <p class="font-bold text-brand-primary">Growth AI 챗봇 + 파일 업로드 통합</p>
+              </div>
+            </div>
+
+            <div class="pt-1 flex items-center space-x-2">
+              <button onclick="confirmSaveToTimeline('1호선톤')" class="px-3.5 py-1.5 bg-brand-primary text-white rounded-lg text-xs font-medium hover:bg-brand-primaryHover">저장</button>
+              <button onclick="openModal('edit-category-modal')" class="px-3.5 py-1.5 border border-brand-border rounded-lg text-xs text-slate-700 hover:bg-slate-50">수정</button>
+            </div>
+          `;
+          appendAIMessageCard(resultCard);
+        }, 1300);
+      }, 600);
+    }
+
+    // SCENARIO 3: No Change File (No Fake Growth Principle)
+    function runScenarioNoChange() {
+      const fileName = "presentation_typo_fix.pdf";
+      appendUserMessage(`<div class="flex items-center gap-2"><i data-lucide="file-text" class="w-4 h-4"></i> <span>${fileName}</span></div>`);
+      const typingId = appendTypingIndicator();
+
+      setTimeout(() => {
+        removeTypingIndicator(typingId);
+        const cardHtml = `
+          <div class="font-semibold text-sm text-brand-text flex items-center gap-1.5">
+            <i data-lucide="info" class="w-4 h-4 text-slate-500"></i> 1호선톤 발표자료의 수정본으로 정리했어요.
+          </div>
+          <div class="p-3 bg-slate-50 rounded-xl border border-brand-border text-xs text-brand-muted space-y-1">
+            <p class="font-medium text-slate-700">이번 자료에서는 새로운 주요 변화가 발견되지 않았어요.</p>
+            <p class="text-[11px]">기존 1호선톤 발표 자료의 오탈자 텍스트 수정 사항만 확인되어 별도의 Turning Point 생성 없이 아카이브에 버전 업데이트만 반영합니다.</p>
+          </div>
+          <div class="pt-1 flex items-center space-x-2">
+            <button onclick="confirmSaveToTimeline('1호선톤')" class="px-3 py-1.5 bg-brand-primary text-white rounded-lg text-xs font-medium">아카이브 저장</button>
+            <button onclick="openModal('edit-category-modal')" class="px-3 py-1.5 border border-brand-border rounded-lg text-xs text-slate-700 hover:bg-slate-50">수정</button>
+          </div>
+        `;
+        appendAIMessageCard(cardHtml);
+      }, 1000);
+    }
+
+    // SCENARIO 4: Multiple Batch Files Upload
+    function runScenarioBatchFiles() {
+      appendUserMessage(`
+        <div class="space-y-1">
+          <p class="font-semibold text-xs">총 5개 파일 일괄 업로드:</p>
+          <p class="text-xs text-indigo-100 font-mono">idea_v1.pdf, idea_final.pdf, wireframe_v1.pdf, wireframe_v2.pdf, meeting.docx</p>
+        </div>
+      `);
+      const typingId = appendTypingIndicator();
+
+      setTimeout(() => {
+        removeTypingIndicator(typingId);
+        const cardHtml = `
+          <div class="font-bold text-sm text-brand-text">
+            총 5개의 자료를 확인 후 일괄 그룹화했어요.
+          </div>
+          <div class="p-3 bg-slate-50 rounded-xl border border-brand-border text-xs space-y-2">
+            <div class="flex items-center justify-between border-b border-brand-border/60 pb-1.5">
+              <span class="font-bold text-brand-primary">1호선톤</span>
+              <span class="px-2 py-0.5 bg-brand-primarySoft text-brand-primary rounded font-semibold text-[10px]">5개 파일 자동 매칭</span>
+            </div>
+            <div class="grid grid-cols-3 gap-2 text-center text-[11px]">
+              <div class="bg-white p-2 rounded border border-brand-border">기획안 <strong>2개</strong></div>
+              <div class="bg-white p-2 rounded border border-brand-border">와이어프레임 <strong>2개</strong></div>
+              <div class="bg-white p-2 rounded border border-brand-border">회의록 <strong>1개</strong></div>
+            </div>
+            <p class="text-[11px] text-brand-muted">💡 기획안과 와이어프레임에서 각각 버전(v1 → v2/final) 연관 관계를 자동으로 연동했습니다.</p>
+          </div>
+          <div class="pt-1 flex items-center space-x-2">
+            <button onclick="confirmSaveToTimeline('1호선톤')" class="px-3.5 py-1.5 bg-brand-primary text-white rounded-lg text-xs font-medium hover:bg-brand-primaryHover">전체 저장</button>
+            <button onclick="navigateTo('footprints')" class="px-3.5 py-1.5 border border-brand-border rounded-lg text-xs text-slate-700 hover:bg-slate-50">자료 확인</button>
+          </div>
+        `;
+        appendAIMessageCard(cardHtml);
+      }, 1300);
+    }
+
+    function handleFileSelect(e) {
+      if (e.target.files && e.target.files.length > 0) {
+        if (e.target.files.length === 1) {
+          runScenarioFile();
+        } else {
+          runScenarioBatchFiles();
+        }
+      }
+    }
+
+    function clearChatHistory() {
+      chatMessagesContainer.innerHTML = `
+        <div class="flex gap-3">
+          <div class="w-8 h-8 rounded-xl bg-brand-primary/10 text-brand-primary flex items-center justify-center flex-shrink-0">
+            <i data-lucide="bot" class="w-4 h-4"></i>
+          </div>
+          <div class="space-y-2 max-w-[85%]">
+            <div class="bg-slate-100/80 p-3.5 rounded-2xl rounded-tl-sm text-sm text-brand-text leading-relaxed">
+              안녕하세요! 오늘 만든 자료나 기록하고 싶은 경험을 남겨주세요.<br/>
+              어떤 활동인지 제가 먼저 확인하고 기존 기록과 연결해볼게요.
+            </div>
+            <p class="text-[10px] text-brand-muted pl-1">방금 전</p>
+          </div>
+        </div>
+      `;
+      lucide.createIcons();
+    }
+
+    function confirmSaveToTimeline(actName) {
+      alert(`[${actName}] 아카이브에 성공적으로 추가 기록되었습니다.`);
+    }
+
+    // -------------------------------------------------------------
+    // RENDER RECENT ACTIVITIES & RECORDS (Home Page)
+    // -------------------------------------------------------------
+    function renderRecentActivitiesHome() {
+      const container = document.getElementById('recent-activities-list');
+      if (!container) return;
+
+      const top3 = mockActivities.slice(0, 3);
+      container.innerHTML = top3.map(act => `
+        <div onclick="openActivityArchive('${act.id}')" class="group bg-white p-4 rounded-xl border border-brand-border hover:border-brand-primary hover:shadow-cardHover transition cursor-pointer flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="font-bold text-sm text-brand-text group-hover:text-brand-primary transition">${act.title}</span>
+              <span class="text-[10px] px-2 py-0.5 rounded-full font-medium ${act.status === '진행 중' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-600'}">
+                ${act.status === '진행 중' ? '🟢 진행 중' : '✓ 완료'}
+              </span>
+            </div>
+            <span class="inline-block px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-semibold mb-2">${act.category}</span>
+            <p class="text-xs text-brand-muted line-clamp-2 leading-relaxed mb-3">${act.summary}</p>
+          </div>
+          <div class="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-brand-muted">
+            <span>자료 ${act.materialsCount}개</span>
+            <span>${act.updatedAt}</span>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderRecentRecordsHome() {
+      const container = document.getElementById('recent-records-list');
+      if (!container) return;
+
+      container.innerHTML = mockRecentRecords.map(rec => `
+        <div onclick="openActivityArchive('line1-hackathon')" class="p-3 bg-slate-50 hover:bg-slate-100/80 rounded-xl border border-brand-border/60 transition cursor-pointer flex items-center space-x-3">
+          <div class="w-8 h-8 rounded-lg bg-white border border-brand-border flex items-center justify-center text-brand-primary flex-shrink-0">
+            <i data-lucide="${rec.icon}" class="w-4 h-4"></i>
+          </div>
+          <div class="flex-1 min-w-0">
+            <p class="text-xs font-semibold text-brand-text truncate">${rec.title}</p>
+            <p class="text-[10px] text-brand-muted truncate">${rec.meta}</p>
+          </div>
+          <span class="text-[10px] text-brand-muted flex-shrink-0">${rec.time}</span>
+        </div>
+      `).join('');
+      lucide.createIcons();
+    }
+
+    // -------------------------------------------------------------
+    // RENDER GROWTH JOURNEY TIMELINE (Page 2)
+    // -------------------------------------------------------------
+    function renderGrowthJourneyTimeline() {
+      const container = document.getElementById('journey-timeline-container');
+      if (!container) return;
+
+      const filteredEvents = mockJourneyEvents.filter(ev => {
+        const matchesType = currentState.journeyTypeFilter === 'all' || ev.type === currentState.journeyTypeFilter;
+        const matchesAxis = currentState.journeyAxisFilter === 'all' || ev.axis === currentState.journeyAxisFilter;
+        return matchesType && matchesAxis;
+      });
+
+      if (filteredEvents.length === 0) {
+        container.innerHTML = `<div class="p-8 text-center text-xs text-brand-muted">해본 조건에 부합하는 성장 이벤트가 아직 없습니다.</div>`;
+        return;
+      }
+
+      container.innerHTML = filteredEvents.map((ev, idx) => `
+        <div class="relative group">
+          <!-- Dot Indicator -->
+          <div class="absolute -left-[31px] top-1.5 w-4 h-4 rounded-full border-2 border-brand-primary bg-white group-hover:bg-brand-primary transition"></div>
+
+          <!-- Event Card -->
+          <div onclick="toggleJourneyDetail(${idx})" class="bg-white p-5 rounded-2xl border border-brand-border hover:border-brand-primary shadow-soft hover:shadow-cardHover transition cursor-pointer space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="flex items-center space-x-2">
+                <span class="text-xs font-bold text-brand-primary">${ev.date}</span>
+                <span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-700">${ev.type}</span>
+                <span class="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600">${ev.activity}</span>
+              </div>
+              <span class="text-[11px] text-brand-muted">${ev.axis}</span>
+            </div>
+
+            <h4 class="font-bold text-base text-brand-text">${ev.title}</h4>
+            <p class="text-xs text-brand-muted leading-relaxed">${ev.desc}</p>
+
+            ${ev.before ? `
+              <div id="journey-detail-${idx}" class="hidden pt-3 border-t border-slate-100 space-y-2">
+                <div class="grid grid-cols-2 gap-2 text-xs bg-slate-50 p-3 rounded-xl border border-brand-border">
+                  <div>
+                    <span class="text-[10px] font-bold text-brand-muted block">Before</span>
+                    <p class="text-slate-700 font-medium">${ev.before}</p>
+                  </div>
+                  <div class="border-l border-brand-border pl-2.5">
+                    <span class="text-[10px] font-bold text-brand-primary block">After</span>
+                    <p class="text-brand-primary font-bold">${ev.after}</p>
+                  </div>
+                </div>
+                <p class="text-[11px] text-brand-muted"><strong>근거 자료:</strong> ${ev.evidence}</p>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function toggleJourneyDetail(idx) {
+      const el = document.getElementById(`journey-detail-${idx}`);
+      if (el) el.classList.toggle('hidden');
+    }
+
+    function filterJourneyType(type) {
+      currentState.journeyTypeFilter = type;
+      document.querySelectorAll('.journey-type-btn').forEach(btn => {
+        btn.classList.remove('bg-brand-primary', 'text-white');
+        btn.classList.add('bg-white', 'text-slate-700');
+      });
+      event.target.classList.add('bg-brand-primary', 'text-white');
+      event.target.classList.remove('bg-white', 'text-slate-700');
+      renderGrowthJourneyTimeline();
+    }
+
+    function filterJourneyAxis(axis) {
+      currentState.journeyAxisFilter = axis;
+      renderGrowthJourneyTimeline();
+    }
+
+    // -------------------------------------------------------------
+    // RENDER FOOTPRINTS LIST (Page 3)
+    // -------------------------------------------------------------
+    function renderFootprintsList() {
+      const container = document.getElementById('footprints-list-container');
+      if (!container) return;
+
+      let list = [...mockActivities];
+
+      // Filters
+      if (currentState.footprintTypeFilter !== 'all') {
+        list = list.filter(a => a.category === currentState.footprintTypeFilter);
+      }
+      if (currentState.footprintStatusFilter !== 'all') {
+        list = list.filter(a => a.status === currentState.footprintStatusFilter);
+      }
+      if (currentState.footprintSearch) {
+        const q = currentState.footprintSearch.toLowerCase();
+        list = list.filter(a => a.title.toLowerCase().includes(q) || a.summary.toLowerCase().includes(q));
+      }
+
+      if (list.length === 0) {
+        container.innerHTML = `<div class="p-8 text-center text-xs text-brand-muted bg-white rounded-2xl border border-brand-border">조건에 맞는 활동이 없어요.</div>`;
+        return;
+      }
+
+      container.innerHTML = list.map(act => `
+        <div onclick="openActivityArchive('${act.id}')" class="group bg-white p-5 rounded-2xl border border-brand-border hover:border-brand-primary shadow-soft hover:shadow-cardHover transition cursor-pointer flex flex-col md:flex-row justify-between md:items-center gap-4">
+          <div class="space-y-1.5 flex-1 min-w-0">
+            <div class="flex items-center space-x-2.5">
+              <span class="font-bold text-base text-brand-text group-hover:text-brand-primary transition truncate">${act.title}</span>
+              <span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-700">${act.category}</span>
+              <span class="px-2 py-0.5 rounded text-[10px] font-semibold ${act.status === '진행 중' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}">
+                ${act.status === '진행 중' ? '🟢 진행 중' : '✓ 완료'}
+              </span>
+            </div>
+            <p class="text-xs text-brand-muted leading-relaxed line-clamp-1">${act.summary}</p>
+            <div class="flex items-center space-x-3 text-[11px] text-brand-muted pt-1">
+              <span>기간: ${act.period}</span>
+              <span>·</span>
+              <span>역할: ${act.role}</span>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between md:justify-end space-x-4 border-t md:border-t-0 border-slate-100 pt-3 md:pt-0 flex-shrink-0">
+            <span class="text-xs font-semibold text-brand-primary bg-brand-primarySoft px-3 py-1.5 rounded-xl">자료 ${act.materialsCount}개</span>
+            <i data-lucide="chevron-right" class="w-5 h-5 text-brand-muted group-hover:text-brand-primary transition"></i>
+          </div>
+        </div>
+      `).join('');
+      lucide.createIcons();
+    }
+
+    function filterFootprintType(type) {
+      currentState.footprintTypeFilter = type;
+      document.querySelectorAll('.footprint-type-btn').forEach(btn => {
+        btn.classList.remove('bg-brand-primary', 'text-white');
+        btn.classList.add('bg-slate-100', 'text-brand-muted');
+      });
+      event.target.classList.add('bg-brand-primary', 'text-white');
+      event.target.classList.remove('bg-slate-100', 'text-brand-muted');
+      renderFootprintsList();
+    }
+
+    function filterFootprints() {
+      currentState.footprintStatusFilter = document.getElementById('footprint-status-select').value;
+      renderFootprintsList();
+    }
+
+    function handleFootprintsSearch() {
+      currentState.footprintSearch = document.getElementById('footprints-search-input').value;
+      renderFootprintsList();
+    }
+
+    // -------------------------------------------------------------
+    // RENDER ACTIVITY ARCHIVE PAGE (Folders & Files - Page 4)
+    // -------------------------------------------------------------
+    function openActivityArchive(actId) {
+      currentState.selectedActivityId = actId;
+      navigateTo('activityArchive');
+    }
+
+    function renderActivityArchivePage() {
+      const act = mockActivities.find(a => a.id === currentState.selectedActivityId) || mockActivities[0];
+
+      // Render Top Info Header
+      const headerContainer = document.getElementById('activity-archive-header');
+      headerContainer.innerHTML = `
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex items-center space-x-3">
+            <h2 class="text-xl font-bold text-brand-text">${act.title}</h2>
+            <span class="px-2.5 py-1 rounded-lg text-xs font-bold bg-brand-primarySoft text-brand-primary">${act.category}</span>
+            <span class="px-2.5 py-1 rounded-lg text-xs font-bold ${act.status === '진행 중' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}">${act.status}</span>
+          </div>
+          <span class="text-xs text-brand-muted font-medium">역할: ${act.role} (${act.period})</span>
+        </div>
+        <div class="p-3.5 bg-indigo-50/50 border border-indigo-100 rounded-xl text-xs space-y-1">
+          <span class="font-bold text-brand-primary flex items-center gap-1"><i data-lucide="sparkles" class="w-3.5 h-3.5"></i> AI 활동 요약</span>
+          <p class="text-slate-700 leading-relaxed">${act.summary}</p>
+        </div>
+      `;
+
+      // Render Accordion Folders
+      const foldersContainer = document.getElementById('archive-folders-container');
+      if (!act.folders || act.folders.length === 0) {
+        foldersContainer.innerHTML = `<div class="p-6 text-center text-xs text-brand-muted bg-white rounded-xl border border-brand-border">보관된 자료 폴더가 아직 준비되지 않았습니다.</div>`;
+        return;
+      }
+
+      foldersContainer.innerHTML = act.folders.map((folder, idx) => `
+        <div class="bg-white rounded-2xl border border-brand-border overflow-hidden shadow-soft">
+          <!-- Folder Header Accordion -->
+          <button onclick="toggleFolderAccordion(${idx})" class="w-full p-4 flex items-center justify-between hover:bg-slate-50/80 transition text-left">
+            <div class="flex items-center space-x-3">
+              <i data-lucide="folder-open" class="w-5 h-5 text-brand-primary"></i>
+              <span class="font-bold text-sm text-brand-text">📁 ${folder.name}</span>
+              <span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs font-semibold">${folder.count}개</span>
+            </div>
+            <i data-lucide="chevron-down" class="w-4 h-4 text-brand-muted transition"></i>
+          </button>
+
+          <!-- Files List -->
+          <div id="folder-files-${idx}" class="border-t border-brand-border/60 divide-y divide-slate-100 bg-slate-50/30">
+            ${folder.files.map(file => `
+              <div onclick="openFileDetailDrawer('${file.name}')" class="p-3.5 px-5 hover:bg-indigo-50/40 cursor-pointer transition flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                  <i data-lucide="file-text" class="w-4 h-4 text-brand-muted"></i>
+                  <div>
+                    <p class="text-xs font-semibold text-brand-text hover:text-brand-primary transition">${file.name}</p>
+                    <p class="text-[10px] text-brand-muted">${file.type} · ${file.date}</p>
+                  </div>
+                </div>
+                ${file.version ? `<span class="px-2 py-0.5 bg-brand-secondarySoft text-brand-secondary text-[10px] font-semibold rounded">${file.version}</span>` : ''}
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `).join('');
+      lucide.createIcons();
+    }
+
+    function toggleFolderAccordion(idx) {
+      const el = document.getElementById(`folder-files-${idx}`);
+      if (el) el.classList.toggle('hidden');
+    }
+
+    // Single File Detail Drawer (Requirement 45)
+    function openFileDetailDrawer(fileName) {
+      document.getElementById('drawer-title').innerText = fileName;
+      document.getElementById('drawer-content').innerHTML = `
+        <div class="space-y-4">
+          <div class="p-3.5 bg-slate-50 rounded-xl border border-brand-border text-xs space-y-2">
+            <div><span class="text-brand-muted">자료 유형:</span> <strong>디자인 · 와이어프레임</strong></div>
+            <div><span class="text-brand-muted">단계:</span> <strong>프로젝트 진행 중 (v2)</strong></div>
+            <div><span class="text-brand-muted">버전 이력:</span> <span class="text-brand-primary font-semibold">v1 → v2 → final</span></div>
+          </div>
+
+          <div class="space-y-1">
+            <h4 class="font-bold text-xs text-brand-text">AI 요약</h4>
+            <p class="text-xs text-brand-muted leading-relaxed">
+              Growth Journey를 구체화하고 Growth AI 메인 인터페이스를 추가한 와이어프레임이에요.
+            </p>
+          </div>
+
+          <div class="p-4 bg-indigo-50/60 border border-indigo-100 rounded-xl space-y-2">
+            <h4 class="font-bold text-xs text-brand-primary flex items-center gap-1.5">
+              <i data-lucide="git-commit" class="w-4 h-4"></i> 발견된 변화 (Turning Point)
+            </h4>
+            <div class="grid grid-cols-2 gap-2 text-xs">
+              <div>
+                <span class="text-[10px] text-brand-muted block">Before</span>
+                <p class="text-slate-700">파일 업로드 중심</p>
+              </div>
+              <div class="border-l border-indigo-200 pl-2">
+                <span class="text-[10px] text-brand-primary block">After</span>
+                <p class="font-bold text-brand-primary">Growth AI 기록 인터페이스 중심</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="space-y-1 text-xs text-brand-muted">
+            <p>· <strong>관련 Timeline 이벤트:</strong> 메인 입력 UX 변경</p>
+          </div>
+
+          <div class="pt-4">
+            <button onclick="closeDrawer(); navigateTo('projectTimeline');" class="w-full py-2.5 bg-brand-primary text-white font-medium rounded-xl text-xs hover:bg-brand-primaryHover transition flex items-center justify-center gap-2">
+              <span>Project Timeline에서 보기</span> <i data-lucide="arrow-right" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+      `;
+      openDrawer();
+    }
+
+    // -------------------------------------------------------------
+    // RENDER PROJECT TIMELINE PAGE (Page 5)
+    // -------------------------------------------------------------
+    function openActivityTimeline() {
+      navigateTo('projectTimeline');
+    }
+
+    function renderProjectTimelinePage() {
+      const act = mockActivities.find(a => a.id === currentState.selectedActivityId) || mockActivities[0];
+
+      // Header Banner
+      const headerContainer = document.getElementById('timeline-header-card');
+      headerContainer.innerHTML = `
+        <div class="space-y-1">
+          <div class="flex items-center space-x-2">
+            <h2 class="text-xl font-bold text-brand-text">${act.title} Project Timeline</h2>
+            <span class="px-2 py-0.5 rounded text-xs font-semibold bg-emerald-50 text-emerald-700">${act.status}</span>
+          </div>
+          <p class="text-xs text-brand-muted">${act.category} · ${act.role} (${act.period})</p>
+        </div>
+
+        <div class="flex items-center space-x-3 text-xs">
+          <div class="px-3.5 py-2 bg-slate-50 border border-brand-border rounded-xl text-center">
+            <span class="text-brand-muted block text-[10px]">주요 변화</span>
+            <strong class="text-base text-brand-text">5개</strong>
+          </div>
+          <div class="px-3.5 py-2 bg-brand-secondarySoft border border-indigo-100 rounded-xl text-center">
+            <span class="text-brand-secondary block text-[10px] font-bold">Turning Point</span>
+            <strong class="text-base text-brand-secondary">2개</strong>
+          </div>
+        </div>
+      `;
+
+      // Timeline Events rendering
+      const eventsContainer = document.getElementById('project-timeline-events');
+      if (!act.timeline || act.timeline.length === 0) {
+        eventsContainer.innerHTML = `<div class="p-6 text-center text-xs text-brand-muted bg-white rounded-xl border border-brand-border">등록된 타임라인 이벤트가 없습니다.</div>`;
+        return;
+      }
+
+      eventsContainer.innerHTML = act.timeline.map((ev, idx) => `
+        <div class="relative group">
+          <!-- Dot Indicator -->
+          <div class="absolute -left-[31px] top-2 w-4 h-4 rounded-full border-2 ${ev.isTurningPoint ? 'border-brand-secondary bg-brand-secondary' : 'border-slate-300 bg-white'}"></div>
+
+          <!-- Event Card -->
+          <div class="p-5 rounded-2xl border transition ${ev.isTurningPoint ? 'bg-brand-accentBg border-indigo-200 shadow-soft' : 'bg-white border-brand-border'} space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold ${ev.isTurningPoint ? 'text-brand-secondary' : 'text-brand-muted'}">${ev.date}</span>
+              ${ev.isTurningPoint ? '<span class="px-2 py-0.5 bg-brand-secondary text-white rounded text-[10px] font-bold flex items-center gap-1">⭐ TURNING POINT</span>' : ''}
+            </div>
+
+            <h4 class="font-bold text-base text-brand-text">${ev.title}</h4>
+
+            ${ev.desc ? `<p class="text-xs text-brand-muted leading-relaxed">${ev.desc}</p>` : ''}
+
+            ${ev.isTurningPoint ? `
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3 p-3.5 bg-white/80 rounded-xl border border-indigo-100 text-xs">
+                <div>
+                  <span class="text-[10px] font-bold text-brand-muted block">Before</span>
+                  <p class="text-slate-700 font-medium">${ev.before}</p>
+                </div>
+                <div class="border-t md:border-t-0 md:border-l border-indigo-100 pt-2 md:pt-0 md:pl-3">
+                  <span class="text-[10px] font-bold text-brand-primary block">After</span>
+                  <p class="text-brand-primary font-bold">${ev.after}</p>
+                </div>
+              </div>
+              <div class="text-[11px] text-brand-muted space-y-1">
+                <p><strong>Reason:</strong> ${ev.reason}</p>
+                <p><strong>Evidence:</strong> <span class="text-brand-primary font-semibold">${ev.evidence}</span></p>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // -------------------------------------------------------------
+    // MODAL & DRAWER HELPER FUNCTIONS
+    // -------------------------------------------------------------
+    function openDrawer() {
+      document.getElementById('drawer-overlay').classList.remove('hidden');
+      const drawer = document.getElementById('side-drawer');
+      drawer.classList.remove('hidden');
+      drawer.classList.add('drawer-slide-in');
+      lucide.createIcons();
+    }
+
+    function closeDrawer() {
+      document.getElementById('drawer-overlay').classList.add('hidden');
+      document.getElementById('side-drawer').classList.add('hidden');
+    }
+
+    function openModal(modalId) {
+      document.getElementById(modalId).classList.remove('hidden');
+    }
+
+    function closeModal(modalId) {
+      document.getElementById(modalId).classList.add('hidden');
+    }
+
+    function submitLinkModal() {
+      closeModal('link-modal');
+      const url = document.getElementById('modal-link-input').value;
+      appendUserMessage(`<div class="flex items-center gap-1.5"><i data-lucide="link" class="w-4 h-4"></i> <span>${url}</span></div>`);
+      const typingId = appendTypingIndicator();
+
+      setTimeout(() => {
+        removeTypingIndicator(typingId);
+        appendAIMessageCard(`
+          <div class="font-bold text-sm text-brand-text">링크 내용을 성공적으로 확인했어요.</div>
+          <div class="p-3 bg-slate-50 rounded-xl border border-brand-border text-xs space-y-1">
+            <div><span class="text-brand-muted">자료 유형:</span> <strong>AI 대화 기록 / 기획 리포지토리</strong></div>
+            <div><span class="text-brand-muted">활동:</span> <strong>1호선톤</strong></div>
+            <p class="text-slate-600 pt-1"><strong>요약:</strong> 서비스 후보 선정부터 Growth Archive 상세기획까지 이어진 기획 대화 및 코드 기록입니다.</p>
+          </div>
+          <div class="pt-1 flex space-x-2">
+            <button onclick="confirmSaveToTimeline('1호선톤')" class="px-3 py-1.5 bg-brand-primary text-white text-xs rounded-lg">저장</button>
+            <button onclick="openModal('edit-category-modal')" class="px-3 py-1.5 border border-brand-border text-xs rounded-lg">수정</button>
+          </div>
+        `);
+      }, 1100);
+    }
+
+    function saveCategoryEdit() {
+      closeModal('edit-category-modal');
+      alert("분류 수정이 반영되었습니다.");
+    }
+  </script>
+</body>
+</html>
