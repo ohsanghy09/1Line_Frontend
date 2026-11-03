@@ -6,8 +6,11 @@ import { mockRecentActivities } from '../mocks/Home/recentActivities'
 import { mockRecentRecords } from '../mocks/Home/records'
 import { mockGreetingReply } from '../mocks/Home/chat'
 import ChatReplyCard from '../components/ChatReplyCard'
-import { getChatReply } from '../services/chat'
-import type { ChatMessage } from '../types/chat'
+import ChatMessageTime from '../components/ChatMessageTime'
+import FileAnalysisProgress from '../components/FileAnalysisProgress'
+import ChatServiceStatusBadge from '../components/ChatServiceStatusBadge'
+import { getChatReply, getChatServiceStatus } from '../services/chat'
+import type { ChatMessage, ChatProgress, ChatServiceStatus } from '../types/chat'
 
 function Home() {
     // 입력 중인 내용과 전송한 메시지 목록
@@ -15,6 +18,32 @@ function Home() {
     const [messages, setMessages] = useState<ChatMessage[]>([])
     const [isReplying, setIsReplying] = useState(false)
     const [replyError, setReplyError] = useState('')
+    const [analysisProgress, setAnalysisProgress] = useState<ChatProgress | null>(null)
+
+    // 헤더의 준비 상태는 별도 서비스에서 조회한다. 응답 전에는 준비 완료로 표시하지 않는다.
+    const [serviceStatus, setServiceStatus] = useState<ChatServiceStatus | null>(null)
+    const [hasServiceStatusError, setHasServiceStatusError] = useState(false)
+
+    useEffect(() => {
+        let isActive = true
+
+        void getChatServiceStatus().then(
+            (status) => { if (isActive) setServiceStatus(status) },
+            () => { if (isActive) setHasServiceStatusError(true) },
+        )
+
+        // 홈을 떠난 뒤 도착한 상태 응답은 화면에 반영하지 않는다.
+        return () => { isActive = false }
+    }, [])
+
+    // 초기 인사 시각과 현재 시각. 메시지가 추가되지 않아도 상대 시간을 갱신한다.
+    const [greetingCreatedAt, setGreetingCreatedAt] = useState(() => Date.now())
+    const [currentTime, setCurrentTime] = useState(() => Date.now())
+
+    useEffect(() => {
+        const timer = window.setInterval(() => setCurrentTime(Date.now()), 30_000)
+        return () => window.clearInterval(timer)
+    }, [])
 
     // 전송 전 첨부 목록. 같은 이름의 파일도 구별하고 개별 삭제할 수 있도록 ID를 부여한다.
     const [pendingFiles, setPendingFiles] = useState<{ id: string; file: File }[]>([])
@@ -94,27 +123,32 @@ function Home() {
         if (container) {
             container.scrollTop = container.scrollHeight
         }
-    }, [messages, isReplying, replyError])
+    }, [messages, isReplying, replyError, analysisProgress])
 
 
     // 전송 버튼과 Enter 입력을 같은 폼 제출 동작으로 처리
-    async function handleChatSubmit(event: SubmitEvent<HTMLFormElement>) {
+    function handleChatSubmit(event: SubmitEvent<HTMLFormElement>) {
         
         // 폼 제출 시 브라우저가 기본으로 하는 페이지 이동·새로고침을 막음.
         event.preventDefault()
 
-        const content = chatInput.trim()
+        void sendChatMessage(chatInput.trim(), pendingFiles.map(({ file }) => file))
+    }
+
+    // 실제 입력과 첨부만 공통 서비스로 전송하고 비동기 보호를 적용한다.
+    async function sendChatMessage(content: string, filesToSend: File[]) {
 
         // 글 없이 파일만 선택한 경우에도 전송할 수 있다.
-        if ((!content && pendingFiles.length === 0) || pendingRequestRef.current) return
+        if ((!content && filesToSend.length === 0) || pendingRequestRef.current) return
 
-        const filesToSend = pendingFiles.map(({ file }) => file)
-        const attachments = pendingFiles.map(({ id, file }) => ({ id, name: file.name, size: file.size }))
+        // 사용자가 선택한 파일명과 크기를 그대로 말풍선에 표시한다.
+        const attachments = filesToSend.map((file) => ({ id: crypto.randomUUID(), name: file.name, size: file.size }))
+        const sentAt = Date.now()
 
         // 기존 메시지 배열에 id, content 추가
         setMessages((previousMessages) => [
             ...previousMessages,
-            { id: crypto.randomUUID(), role: 'user', content, attachments },
+            { id: crypto.randomUUID(), role: 'user', content, attachments, createdAt: sentAt },
         ])
 
         // 입력 중인 내용을 빈 문자열로 수정
@@ -126,13 +160,20 @@ function Home() {
         const requestId = ++requestIdRef.current
         setIsReplying(true)
         setReplyError('')
+        setAnalysisProgress(null)
 
         try {
-            const reply = await getChatReply(content, filesToSend)
+            // 초기화·화면 이동 후 도착한 진행 상태도 이전 요청의 응답처럼 무시한다.
+            const onProgress = (progress: ChatProgress) => {
+                if (requestId === requestIdRef.current) setAnalysisProgress(progress)
+            }
+            const reply = await getChatReply(content, filesToSend, onProgress)
 
             if (requestId !== requestIdRef.current) return
 
-            setMessages((previousMessages) => [...previousMessages, reply])
+            // AI 메시지는 응답이 실제로 도착한 시각을 저장한다.
+            const receivedAt = Date.now()
+            setMessages((previousMessages) => [...previousMessages, { ...reply, createdAt: receivedAt }])
         } catch {
             if (requestId === requestIdRef.current) {
                 setReplyError('답변을 받아오지 못했어요. 메시지를 다시 보내주세요.')
@@ -141,6 +182,7 @@ function Home() {
             if (requestId === requestIdRef.current) {
                 pendingRequestRef.current = false
                 setIsReplying(false)
+                setAnalysisProgress(null)
             }
         }
     }
@@ -151,6 +193,8 @@ function Home() {
         requestIdRef.current += 1
         pendingRequestRef.current = false
         setMessages([])
+        setGreetingCreatedAt(Date.now())
+        setCurrentTime(Date.now())
         setChatInput('')
         setPendingFiles([])
         if (fileInputRef.current) fileInputRef.current.value = ''
@@ -158,6 +202,7 @@ function Home() {
         setIsDraggingFiles(false)
         setIsReplying(false)
         setReplyError('')
+        setAnalysisProgress(null)
     }
 
 
@@ -192,10 +237,7 @@ function Home() {
 
                         <span className="font-semibold text-sm text-brand-text">Growth AI</span>
 
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5"></span>
-                            기록 정리 준비됨
-                        </span>
+                        <ChatServiceStatusBadge status={serviceStatus} hasError={hasServiceStatusError} />
                     </div>
 
                     <button type="button" onClick={handleResetChat} className="text-xs text-brand-muted hover:text-brand-text flex items-center gap-1">
@@ -220,21 +262,29 @@ function Home() {
                                 {mockGreetingReply.content}
                             </div>
 
-                            <p className="text-[10px] text-brand-muted pl-1">방금 전</p>
+                            <p className="text-[10px] text-brand-muted pl-1">
+                                <ChatMessageTime createdAt={greetingCreatedAt} now={currentTime} />
+                            </p>
                         </div>
                     </div>
 
                     {/* 한 배열을 순회하며 사용자 말풍선과 AI 카드를 대화 순서대로 표시 */}
                     {messages.map((message) => message.role === 'assistant' ? (
-                        <ChatReplyCard key={message.id} reply={message} />
+                        <ChatReplyCard key={message.id} reply={message} now={currentTime} />
                     ) : (
-                        <div key={message.id} className="flex justify-end">
-                            <div className="min-w-0 max-w-[85%] space-y-2">
-                                <div className="bg-brand-primary p-3.5 rounded-2xl rounded-tr-sm text-sm text-white leading-relaxed break-words space-y-2">
+                        <div key={message.id} className="flex justify-end gap-3">
+                            {/* 원본처럼 말풍선은 오른쪽에 붙이고 하단 시각과는 4px 간격을 둔다. */}
+                            <div className="min-w-0 max-w-[80%] space-y-1 text-right">
+                                <div className="bg-brand-primary p-3.5 rounded-2xl rounded-tr-sm text-sm text-white leading-relaxed inline-block text-left break-words space-y-2 max-w-full">
                                     {message.content && <p className="whitespace-pre-wrap">{message.content}</p>}
 
                                     {/* 전송한 파일명은 사용자 말풍선에 고정해 첨부 목록과 분리한다. */}
-                                    {!!message.attachments?.length && (
+                                    {message.attachments?.length === 1 ? (
+                                        <div className="flex items-center gap-2">
+                                            <FileText className="w-4 h-4 shrink-0" aria-hidden="true" />
+                                            <span className="min-w-0 break-all">{message.attachments[0].name}</span>
+                                        </div>
+                                    ) : !!message.attachments?.length && (
                                         <div className="space-y-2">
                                             <p className="text-xs font-semibold">첨부 파일 {message.attachments.length}개</p>
                                             <ul className="space-y-1.5">
@@ -249,13 +299,15 @@ function Home() {
                                     )}
                                 </div>
 
-                                <p className="text-[10px] text-brand-muted text-right pr-1">나</p>
+                                <p className="text-[10px] text-brand-muted pr-1">
+                                    <ChatMessageTime createdAt={message.createdAt} now={currentTime} />
+                                </p>
                             </div>
                         </div>
                     ))}
 
                     {/* 원본과 같은 AI 아이콘과 점 3개. 응답이 도착하면 분석 카드로 교체한다. */}
-                    {isReplying && (
+                    {isReplying && (analysisProgress ? <FileAnalysisProgress progress={analysisProgress} /> : (
                         <div role="status" className="flex gap-3">
                             <span className="sr-only">Growth AI가 답변을 작성하고 있어요.</span>
 
@@ -269,34 +321,9 @@ function Home() {
                                 <span className="w-2 h-2 rounded-full bg-slate-400 typing-dot"></span>
                             </div>
                         </div>
-                    )}
+                    ))}
 
                     {replyError && <p role="alert" className="text-sm text-red-600">{replyError}</p>}
-
-                </div>
-
-
-
-                {/* 시연 시나리오 영역: 버튼 모양만 표시하며 클릭 동작은 연결하지 않음 */}
-                <div className="px-4 py-2 bg-slate-50 border-t border-brand-border/60 flex flex-wrap gap-2 text-xs">
-
-                    <span className="text-brand-muted self-center text-[11px] font-medium mr-1">💡 시연 시나리오:</span>
-
-                    <button type="button" className="px-2.5 py-1 bg-white border border-brand-border rounded-lg hover:border-brand-primary text-slate-700 transition">
-                        1. 텍스트 경험 입력 (기능 축소)
-                    </button>
-
-                    <button type="button" className="px-2.5 py-1 bg-white border border-brand-border rounded-lg hover:border-brand-primary text-slate-700 transition">
-                        2. 파일 업로드 (wireframe_v2)
-                    </button>
-
-                    <button type="button" className="px-2.5 py-1 bg-white border border-brand-border rounded-lg hover:border-brand-primary text-slate-700 transition">
-                        3. 변화 없음 파일 (typo_fix)
-                    </button>
-
-                    <button type="button" className="px-2.5 py-1 bg-white border border-brand-border rounded-lg hover:border-brand-primary text-slate-700 transition">
-                        4. 다중 파일 일괄 업로드 (5개)
-                    </button>
 
                 </div>
 

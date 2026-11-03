@@ -1,11 +1,17 @@
 import { FileText, FolderGit2, Sparkles } from 'lucide-react'
 import type { ChatReply } from '../types/chat'
 import BatchAnalysisContent from './BatchAnalysisContent'
+import ChatMessageTime from './ChatMessageTime'
+import FileAnalysisContent from './FileAnalysisContent'
+import NoChangeAnalysisContent from './NoChangeAnalysisContent'
 
 // API 또는 목데이터로 받은 값을 카드로 표시하는 컴포넌트
-function ChatReplyCard({ reply }: { reply: ChatReply }) {
+function ChatReplyCard({ reply, now }: { reply: ChatReply & { createdAt: number }; now: number }) {
     const analysis = reply.analysis
     const isBatchAnalysis = reply.kind === 'batch-analysis'
+    const isSingleFileAnalysis = (reply.kind === 'file-analysis' || reply.kind === 'no-change') && analysis?.files.length === 1
+    // 파일명이 아닌 응답의 변화 배열로 선택한다. API가 file-analysis로 보내도 처리한다.
+    const isNoChangeAnalysis = isSingleFileAnalysis && analysis?.changes.length === 0
     const confidenceLabels = { high: '높음', medium: '보통', low: '낮음' }
 
     return (
@@ -14,30 +20,30 @@ function ChatReplyCard({ reply }: { reply: ChatReply }) {
                 <Sparkles className="w-4 h-4" aria-hidden="true" />
             </div>
 
-            {/* 다중 파일 카드는 전체 내용에 맞춰 늘어나며, 최대 28rem과 채팅 영역 너비 안에서 줄바꿈한다. */}
-            <div className={`min-w-0 space-y-2 ${isBatchAnalysis ? 'w-fit max-w-[min(28rem,calc(100%-2.75rem))]' : 'max-w-[90%] sm:max-w-[85%]'}`}>
+            {/* 모든 결과 카드의 최대 너비를 조금 줄이고 하단 안내 간격은 유지한다. */}
+            <div className="min-w-0 space-y-2 max-w-[85%] sm:max-w-[80%]">
                 <div className="bg-white border border-brand-border shadow-soft p-4 rounded-2xl rounded-tl-sm text-sm text-brand-text space-y-3 break-words">
 
-                    {isBatchAnalysis ? <BatchAnalysisContent reply={reply} /> : (
+                    {isBatchAnalysis ? <BatchAnalysisContent reply={reply} /> : isNoChangeAnalysis ? <NoChangeAnalysisContent reply={reply} /> : isSingleFileAnalysis ? <FileAnalysisContent reply={reply} /> : (
                         <>
 
                     {/* AI가 연결한 활동과 분류 확신도 */}
                     {analysis && (
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                            <span className="font-semibold text-brand-primary flex items-center gap-1.5">
+                        <div className="flex flex-wrap items-center justify-between gap-2 font-bold text-sm">
+                            <span className="text-brand-primary flex items-center gap-1.5">
                                 <FolderGit2 className="w-4 h-4 shrink-0" aria-hidden="true" />
                                 {analysis.activity.name} 활동 기록
                             </span>
 
                             {analysis.activity.confidence && (
-                                <span className="text-[11px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                                <span className="text-[11px] font-normal text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
                                     확신도 {confidenceLabels[analysis.activity.confidence]}
                                 </span>
                             )}
                         </div>
                     )}
 
-                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{reply.content}</p>
+                    <p className="text-xs whitespace-pre-wrap">{reply.content}</p>
 
                     {/* 파일 응답은 실제 첨부 이름과 유형별 개수를 함께 표시한다. */}
                     {!!analysis?.files.length && (
@@ -106,7 +112,7 @@ function ChatReplyCard({ reply }: { reply: ChatReply }) {
                 </div>
 
                 <p className="text-[10px] text-brand-muted pl-1">
-                    {isBatchAnalysis ? '방금 전 · Growth AI 분석 완료' : 'Growth AI · 목 응답'}
+                    <ChatMessageTime createdAt={reply.createdAt} now={now} /> · Growth AI
                 </p>
             </div>
         </div>

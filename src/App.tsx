@@ -1,9 +1,9 @@
 import { Route, Routes } from 'react-router'
 import MainPage from './pages/MainPage'
-import ExamplePage from './examples/ExamplePage'
 import Home from './pages/Home'
 import GrowthJourney from './pages/GrowthJourney'
 import Footprints from './pages/Footprints'
+import ExamplePage from './examples/ExamplePage'
 
 
 function App() {
@@ -22,10 +22,8 @@ function App() {
 
       </Route>
 
-
-
-      {/* 예시 페이지 */}
-      <Route path='/example' element={<ExamplePage />}></Route>
+      {/* 실제 채팅 컴포넌트와 응답 데이터를 확인하는 독립 페이지 */}
+      <Route path='/example' element={<ExamplePage />} />
       
     </Routes>
 

@@ -84,5 +84,6 @@ npm run dev
 
 ## 참고 문서
 
-- [화면 참고 HTML](references/1Line_reference.html)
-- [React · TypeScript 구현 가이드라인](references/구현_가이드라인.md)
+- [문서 목록](docs/README.md)
+- [화면 참고 HTML](docs/references/1Line_reference.html)
+- [React · TypeScript 구현 가이드라인](docs/references/구현_가이드라인.md)

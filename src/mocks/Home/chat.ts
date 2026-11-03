@@ -1,8 +1,12 @@
-import type { ChatReply } from '../../types/chat'
+import type { ChatProgress, ChatReply } from '../../types/chat'
 
 // 레퍼런스 HTML의 AI 채팅 응답을 데이터로 옮긴 파일.
 // 텍스트 분석 응답은 채팅 화면에 연결했으며 실제 AI 분석이나 저장 요청을 수행하지 않는다.
 // 버튼, 아이콘, 색상, 로딩 시간은 API 답변이 아닌 화면의 역할이므로 포함하지 않는다.
+
+// 단일 파일의 현재 목 응답을 선택한다. 파일 내용·이름으로 실제 변화를 판단하지 않는다.
+// 변화 있는 카드를 다시 확인하려면 'change'로 변경한다. 실제 API 연결 후에는 사용하지 않는다.
+export const mockSingleFileAnalysisMode: 'change' | 'no-change' = 'no-change'
 
 
 // 1. 초기 인사: 대화가 처음 열렸을 때 표시할 AI 메시지
@@ -53,6 +57,17 @@ export const mockTextAnalysisReply: ChatReply = {
 
 // 시나리오 2: wireframe_v2.pdf를 업로드했을 때의 분석 완료 결과.
 // 이전 파일과의 버전 관계, 자료 분류, 발견된 UX 변화를 표시한다.
+// 원본의 진행 화면 한 장면을 재현한 목 상태이며 실제 처리 완료 신호가 아니다.
+export const mockFileAnalysisProgress: ChatProgress = {
+    title: '파일을 확인하고 있어요...',
+    steps: [
+        { label: '파일 확인 완료', status: 'completed' },
+        { label: '기존 활동 비교 완료', status: 'completed' },
+        { label: '자료 유형 분석 완료', status: 'completed' },
+        { label: '이전 기록과 비교 중...', status: 'working' },
+    ],
+}
+
 export const mockFileAnalysisReply: ChatReply = {
     id: 'mock-file-analysis',
     role: 'assistant',
@@ -82,12 +97,13 @@ export const mockNoChangeReply: ChatReply = {
     id: 'mock-no-change',
     role: 'assistant',
     kind: 'no-change',
-    content: '1호선톤 발표자료의 수정본으로 정리했어요. 이번 자료에서는 새로운 주요 변화가 발견되지 않았어요.',
+    content: '1호선톤 발표자료의 수정본으로 정리했어요.',
     analysis: {
         activity: { name: '1호선톤', confidence: null },
         materialType: '발표자료',
         stage: null,
         summary: '오탈자 텍스트 수정 사항만 확인되어 별도의 Turning Point 생성 없이 아카이브에 버전 업데이트를 제안해요.',
+        noChangeMessage: '이번 자료에서는 새로운 주요 변화가 발견되지 않았어요.',
         changes: [],
         files: [{ name: 'presentation_typo_fix.pdf', materialType: '발표자료', previousVersion: null }],
         groups: [],

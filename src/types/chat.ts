@@ -13,7 +13,21 @@ export type UserMessage = {
     attachments?: ChatAttachment[]
 }
 
-export type ChatMessage = UserMessage | ChatReply
+// 전송·응답 도착 시각은 화면에서 기록하며 API 응답 계약과 분리한다.
+export type ChatMessage = (UserMessage | ChatReply) & { createdAt: number }
+
+// 서비스가 알리는 진행 표시용 데이터. 실제 API 연결 시 서버 이벤트를 이 구조로 변환한다.
+export type ChatProgress = {
+    title: string
+    steps: { label: string; status: 'completed' | 'working' }[]
+}
+
+// 채팅 서비스의 준비 상태. 요청 중/조회 실패는 서버 상태와 별도로 화면에서 관리한다.
+// 실제 서버 명세가 확정되면 서비스에서 이 화면용 구조로 변환한다.
+export type ChatServiceStatus = {
+    status: 'ready' | 'unavailable'
+    label: string
+}
 
 // 화면에서 일반 말풍선 또는 종류별 분석 카드를 선택할 때 사용한다.
 export type ChatReplyKind = 'greeting' | 'general' | 'text-analysis' | 'file-analysis' | 'no-change' | 'batch-analysis' | 'link-analysis'
@@ -56,6 +70,9 @@ export type ChatReply = {
         materialType: string
         stage: string | null
         summary: string
+
+        // 변화 없음 카드의 안내 문구. 실제 API 응답은 서비스에서 이 필드로 변환할 수 있다.
+        noChangeMessage?: string
 
         // 중요 변화가 없으면 빈 배열. 오탈자 수정도 여기에 억지로 추가하지 않는다.
         changes: ChatChange[]
