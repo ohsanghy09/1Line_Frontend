@@ -3,6 +3,8 @@ import MainPage from './pages/MainPage'
 import Home from './pages/Home'
 import GrowthJourney from './pages/GrowthJourney'
 import Footprints from './pages/Footprints'
+import ActivityArchive from './pages/ActivityArchive'
+import ProjectTimeline from './pages/ProjectTimeline'
 import ExamplePage from './examples/ExamplePage'
 
 
@@ -19,6 +21,8 @@ function App() {
         <Route index element={<Home />}/> 
         <Route path='/journey' element={<GrowthJourney />} />
         <Route path='/archive' element={<Footprints />} />
+        <Route path='/archive/:activityId' element={<ActivityArchive />} />
+        <Route path='/archive/:activityId/timeline' element={<ProjectTimeline />} />
 
       </Route>
 

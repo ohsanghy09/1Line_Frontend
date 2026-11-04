@@ -1,5 +1,19 @@
 @import "tailwindcss";
 
+/* 원본 파일 Drawer의 우측 등장 모션. 모션 감소 설정에서는 바로 표시한다. */
+.footprint-drawer[open] {
+  animation: footprint-slide-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes footprint-slide-in {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .footprint-drawer[open] { animation: none; }
+}
+
 /* 원본의 응답 대기 애니메이션: 점 3개가 0.2초 간격으로 커졌다 작아진다. */
 .typing-dot {
   animation: typing 1.4s infinite ease-in-out both;

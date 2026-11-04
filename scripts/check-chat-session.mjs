@@ -22,6 +22,17 @@ assert.equal(session.readChatSession(), null)
 assert.equal(session.writeChatSession(snapshot), true)
 assert.deepEqual(session.readChatSession(), snapshot)
 assert.equal(session.readChatSession().messages[1].recordId, 'saved-1')
+// 확장된 새 활동 후보도 확인 전 상태로 보관하며 잘못된 날짜는 복원하지 않는다.
+const proposedSession = structuredClone(snapshot)
+proposedSession.messages[1].analysis.activity = {
+    name: '새 연구 활동', confidence: 'medium', id: null, match: 'new', category: '프로젝트',
+    status: '진행 중', role: null, period: { start: '2026-09', end: null }, summary: null,
+}
+session.writeChatSession(proposedSession)
+assert.deepEqual(session.readChatSession(), proposedSession)
+proposedSession.messages[1].analysis.activity.period.start = '2026-02-30'
+session.writeChatSession(proposedSession)
+assert.equal(session.readChatSession(), null)
 // 다시 읽어도 변경된 분류·정확한 시각·첨부 표시 정보가 유지된다.
 const changed = structuredClone(snapshot)
 changed.messages[1].analysis.materialType = '회의록'

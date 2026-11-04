@@ -2,6 +2,8 @@
 
 최종 정리: 2026-11-04. Node.js 24·Express·CORS·Multer·Zod·Node 내장 SQLite를 사용한다. 홈의 텍스트·파일·링크 접수, 준비 상태·진행 조회와 홈/미리보기 카드 저장·수정을 연결했다. 분석과 진행은 서버 목 응답이며 실제 AI·웹 수집은 하지 않는다.
 
+나의 발자국 목록·상세·자료 Drawer·Project Timeline도 확정 기록의 실제 DB 조회에 연결했다. [DB 연동과 조회 계약](../docs/footprints/DB_연동.md), [현재 화면 동작](../docs/footprints/현재_구현_상태.md)을 참고한다. 기존 DB는 활동 메타정보 컬럼을 추가하는 방식으로 보존한다.
+
 - [전체 구현·검증 현황](../docs/chat/현재_구현_상태.md)
 - [실제 백엔드·AI 서버 전환 가이드](../docs/chat/api/실제_서버_전환_가이드.md)
 - [진행·시간 제한·작업 조회 계약](../docs/chat/api/파일_분석_진행.md)
@@ -37,6 +39,10 @@ npm.cmd run dev
 | --- | --- |
 | GET `/api/health` | 준비 상태, `analysisProvider: mock` |
 | GET `/api/activities` | 초기 활동 5개 |
+| GET `/api/home/recent` | 최근 변경 활동 3개 + 최초 저장순 자료 3개. [시간 기준·갱신](../docs/chat/구현_기능/최근_활동_기록.md) |
+| GET `/api/archive/activities` | q/category/status/sort 검색, `{ items, total }`. [검색 범위·계약](../docs/footprints/검색_API.md), 파일 내부 본문 제외 |
+| GET `/api/archive/activities/:id` | 활동 정보·자료 유형별 폴더·Timeline |
+| GET `/api/archive/activities/:id/materials/:fileId` | 활동 내 자료 상세·연결 이벤트 |
 | POST `/api/chat` | multipart/form-data: `message`, `files`(반복), `conversationId`(선택), `mode`(선택) |
 | POST `/api/chat/links` | JSON `url`, `conversationId`(선택). 링크 작업 접수 |
 | GET `/api/chat/jobs/:id` | 파일·링크 작업의 진행·완료 결과 조회 |
@@ -58,6 +64,8 @@ npm.cmd run dev
 
 `analysisId`와 `reply`는 하나만 보낸다. 같은 초안을 다시 저장하면 409다. 독립 카드 저장은 매번 새 기록을 만들므로 프론트에서 저장 ID 보관과 중복 클릭 방지가 필요하다.
 
+활동 정보 후속 확장: 응답의 `analysis.activity`에 기존/신규/미확인 구분·ID와 nullable 유형/상태/역할/기간/활동 요약을 추가했다. `newActivity`로 확인한 활동 생성과 기록을 함께 저장하거나, `activityUpdates`로 기존 활동의 non-null 값만 명시적으로 반영한다. 기존 요청도 지원하며 상세는 [활동 정보 응답·저장 계약](../docs/chat/api/활동_정보_응답_저장.md)을 참고한다. 활동 날짜 컬럼도 기존 DB를 보존해 추가한다. 현재 목 분석은 새 메타정보를 추출하지 않는다.
+
 수정 요청 예시:
 
 ```json
@@ -74,9 +82,9 @@ npm.cmd run dev
 - PDF/문서 내용 추출과 실제 AI 호출은 하지 않는다. 원본 파일 자체는 보관한다.
 - 오류 형식: `{ "error": "설명" }`. 입력 오류 400, 자원 없음 404, 중복 저장 409.
 - 개인 로컬 개발용으로 127.0.0.1에 바인딩하며 인증은 없다. 공개 배포·사용자별 접근 제어·삭제 정책은 미구현이다.
-- 아카이브·Timeline 화면의 DB 조회, Growth Journey 분석과 실제 AI 연결은 남은 작업이다.
+- 아카이브·Timeline의 확정 기록 DB 조회와 카드의 활동 정보 확인·생성/수정 저장은 연결했다. 독립 활동 관리 화면, ID 기반 버전 관계, Growth Journey 분석과 실제 AI 연결은 남은 작업이다.
 - DB와 비밀 설정은 Git에서 제외한다.
 
 ## 코드
 
-`src/database.js`: DB·트랜잭션, `src/mock-reply.js`: 파일·텍스트·링크 목 분석, `src/progress.js`: 목 단계 계산, `src/validation.js`: JSON 검증, `src/app.js`: API, `src/server.js`: 실행. `test/`는 HTTP·SQLite·진행·링크를 검증한다. 프론트 서비스와 세션 검사는 루트 `scripts/check-chat-api.mjs`, `scripts/check-chat-session.mjs`를 사용한다.
+`src/database.js`: DB·트랜잭션·기존 DB 마이그레이션, `src/archive.js`: 확정 기록 집계·자료/이벤트 조회, `src/mock-reply.js`: 파일·텍스트·링크 목 분석, `src/progress.js`: 목 단계 계산, `src/validation.js`: JSON 검증, `src/app.js`: API, `src/server.js`: 실행. `test/`는 HTTP·SQLite·진행·링크·아카이브를 검증한다. 프론트 채팅·세션 검사는 루트 `scripts/check-chat-api.mjs`, `scripts/check-chat-session.mjs`, 아카이브 서비스 통합 검사는 `node --test tests/footprint-file-timeline.test.mjs`를 사용한다.

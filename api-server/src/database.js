@@ -33,8 +33,16 @@ export function openDatabase(path) {
       started_at INTEGER NOT NULL, error TEXT
     );
   `)
-  const insert = db.prepare('INSERT OR IGNORE INTO activities VALUES (?, ?)')
+  // 기존 DB의 활동·기록·원본을 보존하며 상세 메타정보 자리만 추가한다.
+  const activityColumns = new Set(db.prepare('PRAGMA table_info(activities)').all().map(column => column.name))
+  for (const column of ['category', 'status', 'role', 'period', 'summary', 'start_date', 'end_date', 'updated_at']) {
+    if (!activityColumns.has(column)) db.exec(`ALTER TABLE activities ADD COLUMN ${column} TEXT`)
+  }
+  const insert = db.prepare('INSERT OR IGNORE INTO activities (id, name) VALUES (?, ?)')
   for (const [id, name] of [['line1-hackathon', '1호선톤'], ['computer-vision', '컴퓨터비전'], ['scent-orbit', 'Scent Orbit'], ['data-vis', '데이터분석과시각화'], ['ai-contest', 'AI 분석 공모전']]) insert.run(id, name)
+  // 과거 활동은 실제 기록 수정 시각만 이관한다. 서버 실행 시각을 최근 활동으로 만들지 않는다.
+  db.exec(`UPDATE activities SET updated_at = (SELECT MAX(updated_at) FROM records WHERE activity_id = activities.id)
+    WHERE updated_at IS NULL`)
   return db
 }
 

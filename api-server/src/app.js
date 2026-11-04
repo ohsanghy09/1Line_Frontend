@@ -4,8 +4,12 @@ import multer from 'multer'
 import { randomUUID } from 'node:crypto'
 import { transaction } from './database.js'
 import { createMockReply, createMockLinkReply } from './mock-reply.js'
-import { saveSchema, editSchema, linkSchema } from './validation.js'
+import { saveSchema, editSchema, linkSchema, replySchema, archiveQuerySchema } from './validation.js'
 import { jobProgress } from './progress.js'
+import { readArchive, readArchiveFile } from './archive.js'
+import { activityInformation, analysisContext, resolveActivity, touchActivities } from './activities.js'
+import { readHomeRecent } from './home.js'
+import { searchArchive } from './archive-search.js'
 
 export function createApp(db, { origin = 'http://localhost:5173' } = {}) {
   const app = express()
@@ -30,7 +34,21 @@ export function createApp(db, { origin = 'http://localhost:5173' } = {}) {
   }
 
   app.get('/api/health', (_req, res) => res.json({ status: 'ready', label: '기록 정리 준비됨', analysisProvider: 'mock' }))
-  app.get('/api/activities', (_req, res) => res.json(db.prepare('SELECT * FROM activities').all()))
+  app.get('/api/activities', (_req, res) => res.json(analysisContext(db).activities))
+  app.get('/api/home/recent', (_req, res) => res.json(readHomeRecent(db)))
+
+  // 기존 활동 선택 API와 분리해 아카이브 화면에 필요한 DB 조회 계약을 제공한다.
+  app.get('/api/archive/activities', (req, res) => res.json(searchArchive(db, archiveQuerySchema.parse(req.query))))
+  app.get('/api/archive/activities/:id', (req, res) => {
+    const result = readArchive(db, req.params.id)
+    if (!result) throw fail(404, '활동을 찾을 수 없습니다.')
+    res.json(result)
+  })
+  app.get('/api/archive/activities/:id/materials/:fileId', (req, res) => {
+    const result = readArchiveFile(db, req.params.id, req.params.fileId)
+    if (!result) throw fail(404, '이 활동에서 자료를 찾을 수 없습니다.')
+    res.json(result)
+  })
 
   // 전송 단계: 채팅 내용·원본 파일·목 응답을 분석 초안으로 보관한다.
   app.post('/api/chat', upload.array('files', 10), (req, res) => {
@@ -45,7 +63,7 @@ export function createApp(db, { origin = 'http://localhost:5173' } = {}) {
     if (typeof message !== 'string' || message.length > 20000 || (!message.trim() && !files.length)) throw fail(400, '텍스트 또는 파일을 보내주세요. 텍스트는 최대 20000자입니다.')
     if (!['change', 'no-change'].includes(mode) || typeof conversationId !== 'string' || !conversationId.trim() || conversationId.length > 200) throw fail(400, 'mode 또는 conversationId가 올바르지 않습니다.')
     const id = randomUUID(), now = new Date().toISOString()
-    const reply = createMockReply(message, files, mode)
+    const reply = replySchema.parse(createMockReply(message, files, mode, analysisContext(db)))
     // 파일 요청은 Prefer 헤더로 비동기 진행 조회를 선택한다. 기존 동기 클라이언트는 유지한다.
     const jobId = files.length && req.get('Prefer') === 'respond-async' ? randomUUID() : null
     const attachments = transaction(db, () => {
@@ -64,7 +82,7 @@ export function createApp(db, { origin = 'http://localhost:5173' } = {}) {
   app.post('/api/chat/links', (req, res) => {
     const input = linkSchema.parse(req.body)
     const id = randomUUID(), jobId = randomUUID(), now = new Date().toISOString()
-    const reply = createMockLinkReply(input.url)
+    const reply = replySchema.parse(createMockLinkReply(input.url, analysisContext(db)))
     transaction(db, () => {
       db.prepare('INSERT INTO analyses VALUES (?, ?, ?, ?, ?)').run(id, input.conversationId ?? randomUUID(), input.url, JSON.stringify(reply), now)
       db.prepare('INSERT INTO analysis_jobs VALUES (?, ?, ?, NULL)').run(jobId, id, Date.now())
@@ -99,7 +117,6 @@ export function createApp(db, { origin = 'http://localhost:5173' } = {}) {
   // 확정 단계: 채팅 초안 또는 /example의 카드 JSON을 활동 기록으로 저장한다.
   app.post('/api/records', (req, res) => {
     const input = saveSchema.parse(req.body)
-    const target = activity(input.activityId)
     let reply = input.reply, message = input.message
     if (input.analysisId) {
       const draft = db.prepare('SELECT * FROM analyses WHERE id = ?').get(input.analysisId)
@@ -107,11 +124,9 @@ export function createApp(db, { origin = 'http://localhost:5173' } = {}) {
       const job = db.prepare('SELECT * FROM analysis_jobs WHERE analysis_id = ?').get(input.analysisId)
       if (job && (job.error || jobProgress(job.started_at).status !== 'completed')) throw fail(409, '분석이 완료된 뒤 기록해 주세요.')
       if (db.prepare('SELECT id FROM records WHERE analysis_id = ?').get(input.analysisId)) throw fail(409, '이미 기록한 분석입니다.')
-      reply = JSON.parse(draft.reply)
+      reply = replySchema.parse(JSON.parse(draft.reply))
       message = draft.message
     }
-    reply.content = reply.content.replaceAll(reply.analysis.activity.name, target.name)
-    reply.analysis.activity.name = target.name
     if (input.classification && input.classification.materialType !== reply.analysis.materialType) {
       reply.analysis.materialType = input.classification.materialType
       reply.analysis.files.forEach(file => { file.materialType = input.classification.materialType })
@@ -119,8 +134,12 @@ export function createApp(db, { origin = 'http://localhost:5173' } = {}) {
     }
     const id = randomUUID(), now = new Date().toISOString()
     transaction(db, () => {
+      const target = resolveActivity(db, input, activity, fail)
+      reply.content = reply.content.replaceAll(reply.analysis.activity.name, target.name)
+      reply.analysis.activity = { ...activityInformation(target), match: 'existing', confidence: reply.analysis.activity.confidence }
       db.prepare('INSERT INTO records VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, target.id, input.analysisId ?? null, message, JSON.stringify(reply), now, now)
       syncEvents(id, reply, now)
+      touchActivities(db, [target.id], now)
     })
     res.status(201).json(record(id))
   })
@@ -131,10 +150,7 @@ export function createApp(db, { origin = 'http://localhost:5173' } = {}) {
   })
   app.patch('/api/records/:id', (req, res) => {
     const input = editSchema.parse(req.body), current = record(req.params.id)
-    const target = activity(input.activityId ?? current.activityId)
     const reply = current.reply
-    reply.content = reply.content.replaceAll(reply.analysis.activity.name, target.name)
-    reply.analysis.activity.name = target.name
     if (input.materialType !== undefined) {
       reply.analysis.materialType = input.materialType
       reply.analysis.files.forEach(file => { file.materialType = input.materialType })
@@ -148,8 +164,12 @@ export function createApp(db, { origin = 'http://localhost:5173' } = {}) {
     }
     const now = new Date().toISOString()
     transaction(db, () => {
+      const target = resolveActivity(db, { activityId: input.activityId ?? current.activityId, activityUpdates: input.activityUpdates }, activity, fail)
+      reply.content = reply.content.replaceAll(reply.analysis.activity.name, target.name)
+      reply.analysis.activity = { ...activityInformation(target), match: 'existing', confidence: reply.analysis.activity.confidence }
       db.prepare('UPDATE records SET activity_id = ?, reply = ?, updated_at = ? WHERE id = ?').run(target.id, JSON.stringify(reply), now, current.id)
       if (input.changes !== undefined) syncEvents(current.id, reply, now)
+      touchActivities(db, [current.activityId, target.id], now)
     })
     res.json(record(current.id))
   })

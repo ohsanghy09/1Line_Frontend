@@ -2,8 +2,8 @@ import { Bot, ChevronRight, FileText, FolderGit2, History, Link, MessageSquare, 
 import { useEffect, useRef, useState } from 'react'
 import type { ChangeEvent, DragEvent, SubmitEvent } from 'react'
 import { Link as RouterLink } from 'react-router'
-import { mockRecentActivities } from '../mocks/Home/recentActivities'
-import { mockRecentRecords } from '../mocks/Home/records'
+import { useHomeRecent } from '../hooks/useHomeRecent'
+import { formatRecentActivityTime } from '../utils/recentActivityTime'
 import { mockGreetingReply } from '../mocks/Home/chat'
 import ConnectedChatReplyCard from '../components/chat/ConnectedChatReplyCard'
 import LinkInputModal from '../components/chat/modals/LinkInputModal'
@@ -16,6 +16,7 @@ import { appendChatReply, readChatSession, writeChatSession } from '../utils/cha
 import type { PendingChatJob } from '../utils/chatSession'
 
 function Home() {
+    const { data: recent, loading: recentLoading, error: recentError, retry: retryRecent } = useHomeRecent()
     // 탭의 저장값은 처음 한 번만 읽어 새로고침·홈 재진입 시 같은 대화를 복원한다.
     const [restoredSession] = useState(() => readChatSession())
     const [sessionError, setSessionError] = useState('')
@@ -526,21 +527,24 @@ function Home() {
 
 
 
-                    {/* 활동 카드 목록: 원본처럼 앞의 3개 표시, 모바일 1열 / md 이상 3열 */}
+                    {/* DB에서 변경 시각이 최신인 활동 최대 3개. 로딩·오류·빈 결과를 구분한다. */}
+                    {recentLoading && <p role="status" className="text-xs text-brand-muted">최근 활동을 불러오고 있어요.</p>}
+                    {recentError && <div role="alert" className="text-xs text-brand-muted space-y-2"><p>{recentError}</p><button type="button" onClick={retryRecent} className="text-brand-primary underline">최근 목록 다시 불러오기</button></div>}
+                    {!recentLoading && !recentError && recent?.activities.length === 0 && <p className="text-xs text-brand-muted">최근 변경된 활동이 없어요.</p>}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
-                        {mockRecentActivities.slice(0, 3).map((activity) => (
-                            <RouterLink key={activity.id} to="/archive" className="group bg-white p-4 rounded-xl border border-brand-border hover:border-brand-primary hover:shadow-cardHover transition cursor-pointer flex flex-col justify-between">
+                        {recent?.activities.map((activity) => (
+                            <RouterLink key={activity.id} to={`/archive/${encodeURIComponent(activity.id)}`} className="group bg-white p-4 rounded-xl border border-brand-border hover:border-brand-primary hover:shadow-cardHover transition cursor-pointer flex flex-col justify-between min-w-0">
 
                                 {/* 카드 상단: 활동명, 상태, 유형, 요약 */}
                                 <div>
-                                    <div className="flex items-center justify-between mb-2">
-                                        <span className="font-bold text-sm text-brand-text group-hover:text-brand-primary transition">
+                                    <div className="flex items-start justify-between gap-2 mb-2">
+                                        <span className="flex-1 min-w-0 font-bold text-sm text-brand-text group-hover:text-brand-primary transition wrap-anywhere">
                                             {activity.title}
                                         </span>
 
-                                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${activity.status === '진행 중' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-600'}`}>
-                                            {activity.status === '진행 중' ? '🟢 진행 중' : '✓ 완료'}
+                                        <span className={`shrink-0 whitespace-nowrap text-[10px] px-2 py-0.5 rounded-full font-medium ${activity.status === '진행 중' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-600'}`}>
+                                            {activity.status === '진행 중' ? '🟢 진행 중' : activity.status === '완료' ? '✓ 완료' : '상태 미설정'}
                                         </span>
                                     </div>
 
@@ -555,9 +559,9 @@ function Home() {
 
 
                                 {/* 카드 하단: 자료 개수와 업데이트 시각 */}
-                                <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-brand-muted">
+                                <div className="pt-2 border-t border-slate-100 flex flex-wrap gap-1 items-center justify-between text-[11px] text-brand-muted">
                                     <span>자료 {activity.materialsCount}개</span>
-                                    <span>{activity.updatedAt}</span>
+                                    <time dateTime={activity.updatedAt}>{formatRecentActivityTime(activity.updatedAt, currentTime)}</time>
                                 </div>
 
                             </RouterLink>
@@ -580,29 +584,32 @@ function Home() {
 
 
 
-                    {/* 기록 목록: 목데이터의 아이콘 종류에 따라 파일 또는 대화 아이콘 표시 */}
+                    {/* 기록은 최초 저장 시각순이며, 실제 자료 ID로 Drawer에 연결한다. */}
                     <div className="space-y-3 flex-1 overflow-y-auto">
+                        {recentLoading && <p role="status" className="text-xs text-brand-muted">최근 기록을 불러오고 있어요.</p>}
+                        {recentError && <div className="text-xs text-brand-muted space-y-2"><p>최근 기록을 불러오지 못했어요.</p><button type="button" onClick={retryRecent} className="text-brand-primary underline">최근 목록 다시 불러오기</button></div>}
+                        {!recentLoading && !recentError && recent?.records.length === 0 && <p className="text-xs text-brand-muted">아직 추가된 기록이 없어요.</p>}
 
-                        {mockRecentRecords.map((record) => (
-                            <RouterLink key={record.id} to="/archive" className="p-3 bg-slate-50 hover:bg-slate-100/80 rounded-xl border border-brand-border/60 transition cursor-pointer flex items-center space-x-3">
+                        {recent?.records.map((record) => (
+                            <RouterLink key={record.id} to={`/archive/${encodeURIComponent(record.activityId)}?file=${encodeURIComponent(record.id)}`} className="p-3 bg-slate-50 hover:bg-slate-100/80 rounded-xl border border-brand-border/60 transition cursor-pointer flex flex-wrap gap-3 items-center">
 
                                 {/* 기록 아이콘 */}
                                 <div className="w-8 h-8 rounded-lg bg-white border border-brand-border flex items-center justify-center text-brand-primary shrink-0">
-                                    {record.icon === 'file-text'
+                                    {record.kind === 'file'
                                         ? <FileText className="w-4 h-4" aria-hidden="true" />
-                                        : <MessageSquare className="w-4 h-4" aria-hidden="true" />}
+                                        : record.kind === 'link' ? <Link className="w-4 h-4" aria-hidden="true" /> : <MessageSquare className="w-4 h-4" aria-hidden="true" />}
                                 </div>
 
 
                                 {/* 기록 이름과 소속 활동 / 자료 유형 */}
                                 <div className="flex-1 min-w-0">
                                     <p className="text-xs font-semibold text-brand-text truncate">{record.title}</p>
-                                    <p className="text-[10px] text-brand-muted truncate">{record.meta}</p>
+                                    <p className="text-[10px] text-brand-muted truncate">{record.activityName} · {record.materialType}</p>
                                 </div>
 
 
                                 {/* 기록 추가 시각 */}
-                                <span className="text-[10px] text-brand-muted shrink-0">{record.time}</span>
+                                <time dateTime={record.savedAt} className="text-[10px] text-brand-muted shrink-0">{formatRecentActivityTime(record.savedAt, currentTime)}</time>
 
                             </RouterLink>
                         ))}
