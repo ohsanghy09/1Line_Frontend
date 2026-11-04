@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
-import ChatReplyCard from '../components/ChatReplyCard'
-import FileAnalysisProgress from '../components/FileAnalysisProgress'
-import ChatServiceStatusBadge from '../components/ChatServiceStatusBadge'
+import ConnectedChatReplyCard from '../components/chat/ConnectedChatReplyCard'
+import FileAnalysisProgress from '../components/chat/FileAnalysisProgress'
+import ChatServiceStatusBadge from '../components/chat/ChatServiceStatusBadge'
 import { mockBatchAnalysisReply, mockFileAnalysisProgress, mockFileAnalysisReply, mockNoChangeReply, mockTextAnalysisReply } from '../mocks/Home/chat'
 import { mockChatServiceStatus } from '../mocks/Home/chatStatus'
 import type { ChatReply } from '../types/chat'
@@ -21,9 +21,9 @@ const cardExamples: {
         reply: mockTextAnalysisReply,
         source: 'ChatReplyCard.tsx',
         buttons: [
-            { label: '1호선톤에 기록', behavior: '비활성 · 기록 저장 미연결' },
-            { label: '수정', behavior: '비활성 · 분류 수정 미연결' },
-            { label: '다른 활동 선택', behavior: '비활성 · 활동 변경 미연결' },
+            { label: '활동에 기록', behavior: 'API로 기록 저장 · 저장 완료 후 중복 클릭 방지' },
+            { label: '수정', behavior: '분류 수정 모달 · 저장 후에는 DB도 수정' },
+            { label: '다른 활동 선택', behavior: '같은 분류 수정 모달에서 활동 변경' },
         ],
     },
     {
@@ -32,8 +32,8 @@ const cardExamples: {
         reply: mockFileAnalysisReply,
         source: 'FileAnalysisContent.tsx',
         buttons: [
-            { label: '저장', behavior: '비활성 · 저장 미연결' },
-            { label: '수정', behavior: '비활성 · 분류 수정 미연결' },
+            { label: '저장', behavior: 'API로 기록과 변화 이벤트 저장' },
+            { label: '수정', behavior: '분류 수정 모달 · 저장 후에는 DB도 수정' },
         ],
     },
     {
@@ -42,8 +42,8 @@ const cardExamples: {
         reply: mockNoChangeReply,
         source: 'NoChangeAnalysisContent.tsx',
         buttons: [
-            { label: '아카이브 저장', behavior: '비활성 · 아카이브 저장 미연결' },
-            { label: '수정', behavior: '비활성 · 분류 수정 미연결' },
+            { label: '아카이브 저장', behavior: '변화 이벤트 없이 기록 저장' },
+            { label: '수정', behavior: '분류 수정 모달 · 저장 후에는 DB도 수정' },
         ],
     },
     {
@@ -52,7 +52,7 @@ const cardExamples: {
         reply: mockBatchAnalysisReply,
         source: 'BatchAnalysisContent.tsx',
         buttons: [
-            { label: '전체 저장', behavior: '비활성 · 일괄 저장 미연결' },
+            { label: '전체 저장', behavior: '파일 목록을 포함한 분석 결과를 하나의 기록으로 저장' },
             { label: '자료 확인', behavior: '클릭 시 /archive로 이동 · 자료 저장은 하지 않음' },
         ],
     },
@@ -61,6 +61,8 @@ const cardExamples: {
 function ExamplePage() {
     // 카드 비교 중 시간만 달라지지 않도록 페이지를 연 시각을 미리보기 기준으로 고정한다.
     const [previewTime] = useState(() => Date.now())
+    // 수정한 카드 데이터를 JSON 펼침에도 반영하되 목 원본은 변경하지 않는다.
+    const [replies, setReplies] = useState<Record<string, ChatReply>>({})
 
     return (
         <main className="min-h-screen bg-brand-bg text-brand-text p-4 sm:p-6 lg:p-8">
@@ -75,7 +77,7 @@ function ExamplePage() {
                 </header>
 
                 <div className="bg-white border border-brand-border rounded-xl px-4 py-3 text-sm text-brand-muted leading-relaxed">
-                    분석 내용은 모두 목데이터입니다. 저장·수정·활동 선택은 아직 연결되지 않아 실제 채팅과 동일하게 비활성입니다.
+                    분석 내용은 모두 목데이터입니다. 기록·저장 버튼은 실제 API로 저장하며, 수정·활동 선택은 분류 수정 모달을 엽니다.
                     현재 홈의 단일 파일 목 모드와 관계없이 이 페이지에서는 변화 있음·없음을 함께 표시합니다.
                 </div>
 
@@ -90,7 +92,7 @@ function ExamplePage() {
 
                             {/* 별도 복제한 디자인이 아니라 실제 홈 카드이므로 공통 컴포넌트 수정이 즉시 반영된다. */}
                             <div className="p-4 sm:p-5 bg-brand-bg">
-                                <ChatReplyCard reply={{ ...example.reply, createdAt: previewTime }} now={previewTime} />
+                                <ConnectedChatReplyCard reply={{ ...example.reply, createdAt: previewTime }} now={previewTime} onChange={reply => setReplies(current => ({ ...current, [example.reply.id]: reply }))} />
                             </div>
 
                             <div className="p-5 space-y-4">
@@ -108,7 +110,7 @@ function ExamplePage() {
 
                                 <details className="border border-brand-border rounded-xl overflow-hidden">
                                     <summary className="px-3 py-2.5 text-xs font-medium cursor-pointer hover:bg-slate-50">이 카드의 응답 데이터 보기</summary>
-                                    <pre className="p-3 text-[11px] leading-relaxed bg-slate-50 border-t border-brand-border whitespace-pre-wrap break-all max-h-96 overflow-y-auto">{JSON.stringify(example.reply, null, 2)}</pre>
+                                    <pre className="p-3 text-[11px] leading-relaxed bg-slate-50 border-t border-brand-border whitespace-pre-wrap break-all max-h-96 overflow-y-auto">{JSON.stringify(replies[example.reply.id] ?? example.reply, null, 2)}</pre>
                                 </details>
                             </div>
                         </section>

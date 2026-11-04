@@ -5,19 +5,28 @@ import { Link as RouterLink } from 'react-router'
 import { mockRecentActivities } from '../mocks/Home/recentActivities'
 import { mockRecentRecords } from '../mocks/Home/records'
 import { mockGreetingReply } from '../mocks/Home/chat'
-import ChatReplyCard from '../components/ChatReplyCard'
-import ChatMessageTime from '../components/ChatMessageTime'
-import FileAnalysisProgress from '../components/FileAnalysisProgress'
-import ChatServiceStatusBadge from '../components/ChatServiceStatusBadge'
-import { getChatReply, getChatServiceStatus } from '../services/chat'
+import ConnectedChatReplyCard from '../components/chat/ConnectedChatReplyCard'
+import LinkInputModal from '../components/chat/modals/LinkInputModal'
+import ChatMessageTime from '../components/chat/ChatMessageTime'
+import FileAnalysisProgress from '../components/chat/FileAnalysisProgress'
+import ChatServiceStatusBadge from '../components/chat/ChatServiceStatusBadge'
+import { getChatReply, getLinkReply, getChatServiceStatus, resumeChatReply } from '../services/chat'
 import type { ChatMessage, ChatProgress, ChatServiceStatus } from '../types/chat'
+import { appendChatReply, readChatSession, writeChatSession } from '../utils/chatSession'
+import type { PendingChatJob } from '../utils/chatSession'
 
 function Home() {
+    // 탭의 저장값은 처음 한 번만 읽어 새로고침·홈 재진입 시 같은 대화를 복원한다.
+    const [restoredSession] = useState(() => readChatSession())
+    const [sessionError, setSessionError] = useState('')
     // 입력 중인 내용과 전송한 메시지 목록
     const [chatInput, setChatInput] = useState('')
-    const [messages, setMessages] = useState<ChatMessage[]>([])
-    const [isReplying, setIsReplying] = useState(false)
-    const [replyError, setReplyError] = useState('')
+    const [isLinkModalOpen, setIsLinkModalOpen] = useState(false)
+    const [linkDraft, setLinkDraft] = useState('')
+    const [messages, setMessages] = useState<ChatMessage[]>(() => restoredSession?.messages ?? [])
+    const [pendingJob, setPendingJob] = useState<PendingChatJob | null>(restoredSession?.pendingJob ?? null)
+    const [isReplying, setIsReplying] = useState(Boolean(restoredSession?.pendingJob))
+    const [replyError, setReplyError] = useState(restoredSession?.pending && !restoredSession.pendingJob ? '작업 ID를 받기 전에 응답 확인이 중단됐어요. 전송 내역은 복원했지만 요청은 자동 재전송하지 않습니다.' : '')
     const [analysisProgress, setAnalysisProgress] = useState<ChatProgress | null>(null)
 
     // 헤더의 준비 상태는 별도 서비스에서 조회한다. 응답 전에는 준비 완료로 표시하지 않는다.
@@ -37,7 +46,7 @@ function Home() {
     }, [])
 
     // 초기 인사 시각과 현재 시각. 메시지가 추가되지 않아도 상대 시간을 갱신한다.
-    const [greetingCreatedAt, setGreetingCreatedAt] = useState(() => Date.now())
+    const [greetingCreatedAt, setGreetingCreatedAt] = useState(() => restoredSession?.greetingCreatedAt ?? Date.now())
     const [currentTime, setCurrentTime] = useState(() => Date.now())
 
     useEffect(() => {
@@ -106,11 +115,55 @@ function Home() {
     }
 
     // 응답 대기 중 중복 전송을 막고, 초기화 이전의 늦은 응답을 구별한다.
-    const pendingRequestRef = useRef(false)
+    const pendingRequestRef = useRef(Boolean(restoredSession?.pendingJob))
     const requestIdRef = useRef(0)
+    // 화면의 전송을 같은 대화로 보관하고 초기화하면 새 대화를 시작한다.
+    const conversationIdRef = useRef(restoredSession?.conversationId ?? crypto.randomUUID())
+    const requestControllerRef = useRef<AbortController | null>(null)
+
+    // File 원본·전송 전 첨부·요청 객체는 저장하지 않고 표시 데이터만 JSON으로 보관한다.
+    useEffect(() => {
+        const stored = writeChatSession({
+            version: 1, conversationId: conversationIdRef.current, greetingCreatedAt, messages, pending: isReplying, pendingJob,
+        })
+        setSessionError(stored ? '' : '브라우저에 대화를 보관하지 못했어요. 새로고침하면 최근 내역이 사라질 수 있어요.')
+    }, [messages, greetingCreatedAt, isReplying, pendingJob])
+
+    // StrictMode 재실행이나 화면 해제 후에도 이전 조회 결과가 반영되지 않게 한다.
+    useEffect(() => {
+        if (restoredSession?.pendingJob) resumeJob(restoredSession.pendingJob)
+        return () => { requestIdRef.current += 1; requestControllerRef.current?.abort() }
+    }, [restoredSession])
+
+    function resumeJob(job: PendingChatJob) {
+        requestControllerRef.current?.abort()
+        const controller = new AbortController()
+        requestControllerRef.current = controller
+        const requestId = ++requestIdRef.current
+        pendingRequestRef.current = true
+        setIsReplying(true); setReplyError('')
+        void resumeChatReply(job.jobId, {
+            signal: controller.signal,
+            onProgress: progress => { if (requestId === requestIdRef.current) setAnalysisProgress(progress) },
+        }).then(reply => {
+            if (requestId !== requestIdRef.current) return
+            setMessages(current => appendChatReply(current, { ...reply, createdAt: Date.now() }))
+            setPendingJob(null)
+        }).catch(error => {
+            if (requestId === requestIdRef.current) setReplyError(error instanceof Error ? error.message : '진행 상태를 확인하지 못했어요.')
+        }).finally(() => {
+            if (requestId !== requestIdRef.current) return
+            pendingRequestRef.current = false
+            requestControllerRef.current = null
+            setIsReplying(false); setAnalysisProgress(null)
+        })
+    }
 
     useEffect(() => {
-        return () => { requestIdRef.current += 1 }
+        return () => {
+            requestIdRef.current += 1
+            requestControllerRef.current?.abort()
+        }
     }, [])
 
     // 새 메시지가 추가되면 채팅 영역의 맨 아래로 이동
@@ -136,24 +189,27 @@ function Home() {
     }
 
     // 실제 입력과 첨부만 공통 서비스로 전송하고 비동기 보호를 적용한다.
-    async function sendChatMessage(content: string, filesToSend: File[]) {
+    async function sendChatMessage(content: string, filesToSend: File[], sourceUrl?: string) {
 
         // 글 없이 파일만 선택한 경우에도 전송할 수 있다.
-        if ((!content && filesToSend.length === 0) || pendingRequestRef.current) return
+        if ((!content && filesToSend.length === 0) || pendingRequestRef.current || pendingJob) return
 
         // 사용자가 선택한 파일명과 크기를 그대로 말풍선에 표시한다.
         const attachments = filesToSend.map((file) => ({ id: crypto.randomUUID(), name: file.name, size: file.size }))
         const sentAt = Date.now()
+        const userMessageId = crypto.randomUUID()
 
         // 기존 메시지 배열에 id, content 추가
         setMessages((previousMessages) => [
             ...previousMessages,
-            { id: crypto.randomUUID(), role: 'user', content, attachments, createdAt: sentAt },
+            { id: userMessageId, role: 'user', content, attachments, createdAt: sentAt },
         ])
 
-        // 입력 중인 내용을 빈 문자열로 수정
-        setChatInput('')
-        setPendingFiles([])
+        // 링크 모달에서 보낸 경우에는 기존 입력 글과 첨부를 그대로 둔다.
+        if (!sourceUrl) {
+            setChatInput('')
+            setPendingFiles([])
+        }
 
         // 사용자 말풍선을 추가한 뒤 AI 응답을 기다린다.
         pendingRequestRef.current = true
@@ -162,27 +218,47 @@ function Home() {
         setReplyError('')
         setAnalysisProgress(null)
 
+        const controller = new AbortController()
+        requestControllerRef.current = controller
+        let jobAccepted = false
+
         try {
-            // 초기화·화면 이동 후 도착한 진행 상태도 이전 요청의 응답처럼 무시한다.
-            const onProgress = (progress: ChatProgress) => {
-                if (requestId === requestIdRef.current) setAnalysisProgress(progress)
+            // 파일·링크는 서버 진행을 표시하고 텍스트 전용은 일반 대기를 사용한다.
+            const requestOptions = {
+                conversationId: conversationIdRef.current,
+                signal: controller.signal,
+                onJobStarted: (jobId: string) => {
+                    if (requestId !== requestIdRef.current) return
+                    jobAccepted = true
+                    setPendingJob({ jobId, userMessageId })
+                },
+                onProgress: (progress: ChatProgress) => {
+                    if (requestId === requestIdRef.current) setAnalysisProgress(progress)
+                },
             }
-            const reply = await getChatReply(content, filesToSend, onProgress)
+            const reply = await (sourceUrl ? getLinkReply(sourceUrl, requestOptions) : getChatReply(content, filesToSend, requestOptions))
 
             if (requestId !== requestIdRef.current) return
 
             // AI 메시지는 응답이 실제로 도착한 시각을 저장한다.
             const receivedAt = Date.now()
-            setMessages((previousMessages) => [...previousMessages, { ...reply, createdAt: receivedAt }])
-        } catch {
+            setMessages(current => appendChatReply(current, { ...reply, createdAt: receivedAt }))
+            setPendingJob(null)
+        } catch (error) {
             if (requestId === requestIdRef.current) {
-                setReplyError('답변을 받아오지 못했어요. 메시지를 다시 보내주세요.')
+                setReplyError(error instanceof Error ? error.message : '답변을 받아오지 못했어요. 메시지를 다시 보내주세요.')
+                // 실패한 입력은 다시 보낼 수 있게 복원하되 새로 작성한 글은 덮어쓰지 않는다.
+                if (!jobAccepted && !sourceUrl) {
+                    setChatInput(current => current || content)
+                    setPendingFiles(current => [...filesToSend.map(file => ({ id: crypto.randomUUID(), file })), ...current])
+                }
             }
         } finally {
             if (requestId === requestIdRef.current) {
                 pendingRequestRef.current = false
                 setIsReplying(false)
                 setAnalysisProgress(null)
+                requestControllerRef.current = null
             }
         }
     }
@@ -190,7 +266,13 @@ function Home() {
 
     // 대화를 비우고, 초기화 전에 요청한 응답은 화면에 추가하지 않는다.
     function handleResetChat() {
+        setIsLinkModalOpen(false)
+        setLinkDraft('')
+        setPendingJob(null)
         requestIdRef.current += 1
+        requestControllerRef.current?.abort()
+        requestControllerRef.current = null
+        conversationIdRef.current = crypto.randomUUID()
         pendingRequestRef.current = false
         setMessages([])
         setGreetingCreatedAt(Date.now())
@@ -208,6 +290,11 @@ function Home() {
 
     return (
         <section className="space-y-6">
+            {isLinkModalOpen && <LinkInputModal initialUrl={linkDraft} onClose={() => setIsLinkModalOpen(false)} onSubmit={url => {
+                setLinkDraft(url)
+                setIsLinkModalOpen(false)
+                void sendChatMessage(url, [], url)
+            }} />}
 
             {/* 페이지 제목과 설명 영역 */}
             <div>
@@ -270,7 +357,7 @@ function Home() {
 
                     {/* 한 배열을 순회하며 사용자 말풍선과 AI 카드를 대화 순서대로 표시 */}
                     {messages.map((message) => message.role === 'assistant' ? (
-                        <ChatReplyCard key={message.id} reply={message} now={currentTime} />
+                        <ConnectedChatReplyCard key={message.id} reply={message} now={currentTime} onChange={reply => setMessages(current => current.map(item => item.id === message.id ? { ...reply, id: message.id, createdAt: message.createdAt } : item))} />
                     ) : (
                         <div key={message.id} className="flex justify-end gap-3">
                             {/* 원본처럼 말풍선은 오른쪽에 붙이고 하단 시각과는 4px 간격을 둔다. */}
@@ -324,6 +411,8 @@ function Home() {
                     ))}
 
                     {replyError && <p role="alert" className="text-sm text-red-600">{replyError}</p>}
+                    {pendingJob && !isReplying && <button type="button" onClick={() => resumeJob(pendingJob)} className="text-xs text-brand-primary hover:underline">진행 상태 다시 확인</button>}
+                    {sessionError && <p role="alert" className="text-sm text-red-600">{sessionError}</p>}
 
                 </div>
 
@@ -379,7 +468,7 @@ function Home() {
                             <Paperclip className="w-5 h-5" aria-hidden="true" />
                         </button>
 
-                        <button type="button" className="p-2.5 text-brand-muted hover:text-brand-primary rounded-lg transition" title="링크 추가" aria-label="링크 추가">
+                        <button type="button" onClick={() => setIsLinkModalOpen(true)} disabled={isReplying || Boolean(pendingJob)} className="p-2.5 text-brand-muted hover:text-brand-primary rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed" title="링크 추가" aria-label="링크 추가">
                             <Link className="w-5 h-5" aria-hidden="true" />
                         </button>
 
@@ -402,7 +491,7 @@ function Home() {
                             className="w-full min-w-0 bg-transparent px-3 py-3 text-sm focus:outline-none text-brand-text placeholder-brand-muted"
                         />
 
-                        <button type="submit" disabled={isReplying || (!chatInput.trim() && pendingFiles.length === 0)} className="m-1.5 p-2 bg-brand-primary hover:bg-brand-primaryHover text-white rounded-lg transition flex items-center justify-center shrink-0 disabled:opacity-50 disabled:cursor-not-allowed" aria-label="메시지 전송">
+                        <button type="submit" disabled={isReplying || Boolean(pendingJob) || (!chatInput.trim() && pendingFiles.length === 0)} className="m-1.5 p-2 bg-brand-primary hover:bg-brand-primaryHover text-white rounded-lg transition flex items-center justify-center shrink-0 disabled:opacity-50 disabled:cursor-not-allowed" aria-label="메시지 전송">
                             <Send className="w-4 h-4" aria-hidden="true" />
                         </button>
 

@@ -57,6 +57,15 @@ export type ChatReply = {
     role: 'assistant'
     kind: ChatReplyKind
 
+    // 서버 분석 초안 ID는 이후 기록 저장에 사용한다. 독립 목 카드에는 없다.
+    analysisId?: string
+    conversationId?: string
+    // 같은 탭에서 복원할 카드의 저장·연결 상태. 서버 응답의 분석 내용과 구분한다.
+    recordId?: string
+    activityId?: string
+    // 링크 분석의 실제 입력 URL. 목 분석 내용과 별도로 보존한다.
+    sourceUrl?: string
+
     // AI 말풍선 또는 분석 카드 상단에 표시할 답변 문구
     content: string
 

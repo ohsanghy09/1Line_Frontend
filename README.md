@@ -86,4 +86,5 @@ npm run dev
 
 - [문서 목록](docs/README.md)
 - [화면 참고 HTML](docs/references/1Line_reference.html)
-- [React · TypeScript 구현 가이드라인](docs/references/구현_가이드라인.md)
+- [개발 규칙](docs/개발_규칙.md)
+- [후속 화면 검토사항](docs/후속_화면_검토사항.md)
