@@ -1,4 +1,4 @@
-import type { ChatProgress, ChatReply, ChatServiceStatus } from '../types/chat'
+import type { ActivityProposal, ChatProgress, ChatReply, ChatServiceStatus } from '../types/chat'
 
 // Home은 이 서비스로 로컬 REST API를 호출한다. 분석은 서버의 목 응답이다.
 // 실제 AI 연결 시 서버에서 화면용 ChatReply로 변환하며 화면의 호출 구조는 유지한다.
@@ -100,7 +100,7 @@ export async function request(path: string, init: RequestInit = {}): Promise<unk
     try {
         const response = await fetch(`${apiBase}${path}`, { ...init, signal: init.signal ? AbortSignal.any([init.signal, timeout]) : timeout })
         const data: unknown = await response.json().catch(() => null)
-        if (!response.ok) throw new Error(isObject(data) && typeof data.error === 'string' ? data.error : '서버 요청을 처리하지 못했어요. API 서버 실행 상태를 확인해 주세요.')
+        if (!response.ok) throw Object.assign(new Error(isObject(data) && typeof data.error === 'string' ? data.error : '서버 요청을 처리하지 못했어요. API 서버 실행 상태를 확인해 주세요.'), { status: response.status })
         return data
     } catch (error) {
         if (init.signal?.aborted) throw error
@@ -115,13 +115,39 @@ function isObject(value: unknown): value is Record<string, unknown> {
 }
 
 // 외부 JSON은 타입 선언과 별개로 카드에서 사용하는 필드를 확인한다.
+export function isActivityProposal(value: unknown): value is ActivityProposal {
+    if (!isObject(value) || typeof value.name !== 'string' || !value.name.trim()
+        || !(value.confidence === null || ['high', 'medium', 'low'].includes(String(value.confidence)))) return false
+    if (value.id !== undefined && value.id !== null && (typeof value.id !== 'string' || !value.id.trim())) return false
+    if (value.match !== undefined && !['existing', 'new', 'unresolved'].includes(String(value.match))) return false
+    if (value.match === 'existing' && !value.id || ['new', 'unresolved'].includes(String(value.match)) && value.id != null) return false
+    for (const key of ['category', 'role', 'summary']) {
+        if (value[key] !== undefined && value[key] !== null && (typeof value[key] !== 'string' || !value[key].trim())) return false
+    }
+    if (value.status !== undefined && value.status !== null && !['진행 중', '완료'].includes(String(value.status))) return false
+    if (value.period !== undefined && value.period !== null) {
+        if (!isObject(value.period)) return false
+        for (const key of ['start', 'end']) {
+            const date = value.period[key]
+            if (date === null) continue
+            if (typeof date !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])(?:-(0[1-9]|[12]\d|3[01]))?$/.test(date)) return false
+            const day = date.length === 7 ? `${date}-01` : date
+            const parsed = new Date(`${day}T00:00:00Z`)
+            if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== day) return false
+        }
+        const { start, end } = value.period
+        if (typeof start === 'string' && typeof end === 'string'
+            && (start.slice(0, 7) > end.slice(0, 7) || start.length === 10 && end.length === 10 && start > end)) return false
+    }
+    return true
+}
+
 export function isReply(value: unknown): value is ChatReply {
     if (!isObject(value) || typeof value.id !== 'string' || value.role !== 'assistant' || typeof value.content !== 'string') return false
     if (!['text-analysis', 'file-analysis', 'no-change', 'batch-analysis', 'link-analysis'].includes(String(value.kind))) return false
     if (value.sourceUrl !== undefined && (typeof value.sourceUrl !== 'string' || !isHttpUrl(value.sourceUrl))) return false
     const analysis = value.analysis
-    if (!isObject(analysis) || !isObject(analysis.activity) || typeof analysis.activity.name !== 'string') return false
-    if (analysis.activity.confidence !== null && !['high', 'medium', 'low'].includes(String(analysis.activity.confidence))) return false
+    if (!isObject(analysis) || !isActivityProposal(analysis.activity)) return false
     if (typeof analysis.materialType !== 'string' || typeof analysis.summary !== 'string' || !(analysis.stage === null || typeof analysis.stage === 'string')) return false
     if (analysis.noChangeMessage !== undefined && typeof analysis.noChangeMessage !== 'string') return false
     return Array.isArray(analysis.changes) && analysis.changes.every(change => isObject(change) && typeof change.before === 'string' && typeof change.after === 'string' && typeof change.category === 'string' && Array.isArray(change.evidence) && change.evidence.every(item => typeof item === 'string'))

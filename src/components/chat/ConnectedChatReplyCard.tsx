@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import type { ChatReply } from '../../types/chat'
+import type { ActivitySelection, ChatReply } from '../../types/chat'
 import { getActivities, saveRecord, updateRecord } from '../../services/records'
 import type { ActivityOption } from '../../services/records'
 import ChatReplyCard from './ChatReplyCard'
-import EditCategoryModal from './modals/EditCategoryModal'
+import ActivityReviewModal from './modals/ActivityReviewModal'
 
 // 카드별 수정본·저장 ID를 관리한다. 홈과 독립 미리보기는 같은 저장 흐름을 사용한다.
 export default function ConnectedChatReplyCard({ reply: initial, now, onChange }: {
@@ -13,7 +13,7 @@ export default function ConnectedChatReplyCard({ reply: initial, now, onChange }
     const [recordId, setRecordId] = useState(initial.recordId)
     const [activities, setActivities] = useState<ActivityOption[]>([])
     const [activityId, setActivityId] = useState(initial.activityId ?? '')
-    const [editing, setEditing] = useState(false)
+    const [reviewMode, setReviewMode] = useState<'save' | 'edit' | null>(null)
     const [busy, setBusy] = useState(false)
     const [error, setError] = useState('')
     const [notice, setNotice] = useState('')
@@ -40,7 +40,8 @@ export default function ConnectedChatReplyCard({ reply: initial, now, onChange }
     }
 
     async function loadActivities() {
-        const list = activities.length ? activities : await getActivities()
+        // 다른 카드에서 만든 활동도 확인 창을 열 때 다시 조회한다.
+        const list = await getActivities()
         if (alive.current) setActivities(list)
         return list
     }
@@ -48,52 +49,60 @@ export default function ConnectedChatReplyCard({ reply: initial, now, onChange }
     function save() {
         if (recordId) return
         void perform(async () => {
-            const list = await loadActivities()
+            await loadActivities()
             if (!alive.current) return
-            const target = activityId || list.find(item => item.name === reply.analysis?.activity.name)?.id
-            if (!target) throw new Error('수정에서 연결할 활동을 먼저 선택해 주세요.')
-            const saved = await saveRecord(reply, target)
-            if (!alive.current) return
-            setRecordId(saved.id); setActivityId(saved.activityId)
-            change({ ...saved.reply, recordId: saved.id, activityId: saved.activityId })
-            setNotice('아카이브에 저장했어요.')
+            setReviewMode('save')
         })
     }
 
     function edit() {
         void perform(async () => {
-            const list = await loadActivities()
+            await loadActivities()
             if (!alive.current) return
-            setActivityId(activityId || list.find(item => item.name === reply.analysis?.activity.name)?.id || '')
-            setEditing(true)
+            setReviewMode('edit')
         })
     }
 
-    function submit(target: string, materialType: string) {
+    function submit(selection: ActivitySelection, materialType: string) {
         void perform(async () => {
-            if (recordId) {
-                const saved = await updateRecord(recordId, target, materialType)
-                if (!alive.current) return
-                change({ ...saved.reply, recordId: saved.id, activityId: saved.activityId })
-            } else if (reply.analysis) {
-                const analysis = structuredClone(reply.analysis)
-                analysis.activity.name = activities.find(item => item.id === target)!.name
-                if (analysis.materialType !== materialType) {
-                    analysis.materialType = materialType
-                    analysis.files.forEach(file => { file.materialType = materialType })
-                    if (analysis.groups.length) analysis.groups = [{ materialType, count: analysis.files.length }]
-                }
-                change({ ...reply, activityId: target, content: reply.content.replaceAll(reply.analysis.activity.name, analysis.activity.name), analysis })
+            if (!reply.analysis) return
+            const analysis = structuredClone(reply.analysis)
+            const existing = 'activityId' in selection ? activities.find(item => item.id === selection.activityId) : null
+            if ('activityId' in selection && !existing) throw new Error('연결할 활동을 다시 선택해 주세요.')
+            analysis.activity = 'newActivity' in selection
+                ? { ...selection.newActivity, id: null, match: 'new', confidence: null }
+                : { ...existing!, ...selection.activityUpdates, match: 'existing', confidence: analysis.activity.confidence }
+            if (analysis.materialType !== materialType) {
+                analysis.materialType = materialType
+                analysis.files.forEach(file => { file.materialType = materialType })
+                if (analysis.groups.length) analysis.groups = [{ materialType, count: analysis.files.length }]
             }
-            setActivityId(target); setEditing(false)
-            setNotice(recordId ? '저장된 기록을 수정했어요.' : '분류를 수정했어요. 기록 버튼을 누르면 저장됩니다.')
+            const next = { ...reply, analysis, content: reply.content.replaceAll(reply.analysis.activity.name, analysis.activity.name) }
+            if (recordId) {
+                if (!('activityId' in selection)) throw new Error('저장된 기록은 기존 활동을 선택해 주세요.')
+                const saved = await updateRecord(recordId, selection.activityId, materialType, selection.activityUpdates)
+                if (!alive.current) return
+                setActivityId(saved.activityId)
+                change({ ...saved.reply, recordId: saved.id, activityId: saved.activityId })
+            } else if (reviewMode === 'save') {
+                const saved = await saveRecord(next, selection)
+                if (!alive.current) return
+                setRecordId(saved.id); setActivityId(saved.activityId)
+                change({ ...saved.reply, recordId: saved.id, activityId: saved.activityId })
+            } else {
+                const targetId = 'activityId' in selection ? selection.activityId : ''
+                setActivityId(targetId)
+                change({ ...next, activityId: targetId || undefined })
+            }
+            setReviewMode(null)
+            setNotice(recordId ? '저장된 기록을 수정했어요.' : reviewMode === 'save' ? '아카이브에 저장했어요.' : '확인 내용을 적용했어요. 기록 버튼을 누르면 저장됩니다.')
         })
     }
 
     return <div className="space-y-2">
         <ChatReplyCard reply={reply} now={now} actions={{ busy, saved: Boolean(recordId), onSave: save, onEdit: edit }} />
         {notice && <p role="status" className="text-xs text-brand-primary">{notice}</p>}
-        {error && !editing && <p role="alert" className="text-xs text-red-600">{error}</p>}
-        {editing && <EditCategoryModal activities={activities} activityId={activityId} materialType={reply.analysis?.materialType ?? ''} busy={busy} error={error} onClose={() => { setEditing(false); setError('') }} onSubmit={submit} />}
+        {error && !reviewMode && <p role="alert" className="text-xs text-red-600">{error}</p>}
+        {reviewMode && reply.analysis && <ActivityReviewModal activities={activities} activityId={activityId} proposal={reply.analysis.activity} materialType={reply.analysis.materialType} saved={Boolean(recordId)} saving={reviewMode === 'save'} busy={busy} error={error} onClose={() => { setReviewMode(null); setError('') }} onSubmit={submit} />}
     </div>
 }

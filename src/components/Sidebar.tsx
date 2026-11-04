@@ -2,8 +2,24 @@
 import { NavLink } from "react-router"
 // 원본 HTML과 같은 Lucide 아이콘
 import { Footprints, House, Settings, Sparkles, TrendingUp } from "lucide-react"
+import { useEffect, useState } from 'react'
+import { getActivities } from '../services/records'
 
 function Sidebar() {
+    // 화면 예시의 6개 대신 서버에 존재하는 활동 개수를 표시한다.
+    const [activityCount, setActivityCount] = useState<number | null>(null)
+    useEffect(() => {
+        let isActive = true
+        function refreshActivities() {
+            void getActivities().then(activities => {
+                if (isActive) setActivityCount(activities.length)
+            }).catch(() => { /* 실패 시 고정 예시 숫자를 표시하지 않는다. */ })
+        }
+        refreshActivities()
+        window.addEventListener('1line:activities-changed', refreshActivities)
+        return () => { isActive = false; window.removeEventListener('1line:activities-changed', refreshActivities) }
+    }, [])
+
     return (
         // 본문 옆에 사이드바 태그
         <aside className="w-full md:w-[240px] bg-brand-surface border-r border-brand-border shrink-0 flex flex-col justify-between z-20 md:sticky md:top-0 md:h-screen">
@@ -88,8 +104,7 @@ function Sidebar() {
                     </div>
                     <div>
                         <p className="text-xs font-semibold text-brand-text">김성장 님</p>
-                        {/* 원본의 시각 비교용 예시 문구: 데이터 연동 시 실제 활동 개수로 교체 */}
-                        <p className="text-[10px] text-brand-muted">활동 6개 기록 중</p>
+                        <p className="text-[10px] text-brand-muted">{activityCount === null ? '나의 활동 기록' : `활동 ${activityCount}개 기록 중`}</p>
                     </div>
                 </div>
                 {/* 설정 아이콘: 원본에 별도의 설정 화면이나 클릭 동작은 없음 */}

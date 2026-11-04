@@ -50,6 +50,26 @@ export type AnalyzedFile = {
     previousVersion: string | null
 }
 
+// AI 제안과 사용자가 확인해 저장할 활동 정보. 알 수 없는 값은 null로 유지한다.
+export type ActivityMetadata = {
+    category: string | null
+    status: '진행 중' | '완료' | null
+    role: string | null
+    period: { start: string | null; end: string | null } | null
+    summary: string | null
+}
+
+export type ActivityProposal = Partial<ActivityMetadata> & {
+    name: string
+    confidence: 'high' | 'medium' | 'low' | null
+    id?: string | null
+    match?: 'existing' | 'new' | 'unresolved'
+}
+
+export type ActivitySelection =
+    | { activityId: string; activityUpdates?: ActivityMetadata }
+    | { newActivity: ActivityMetadata & { name: string } }
+
 // 실제 API 응답 형식을 협의하기 전 사용하는 임시 데이터 구조.
 // HTML이나 JSX 대신 값만 전달하므로 목데이터와 API 응답에 같은 화면을 사용할 수 있다.
 export type ChatReply = {
@@ -71,11 +91,7 @@ export type ChatReply = {
 
     // 일반 인사처럼 분석이 없는 응답에서는 null이다.
     analysis: {
-        activity: {
-            name: string
-            // 레퍼런스에서 확신도를 제공한 경우에만 값을 넣는다.
-            confidence: 'high' | 'medium' | 'low' | null
-        }
+        activity: ActivityProposal
         materialType: string
         stage: string | null
         summary: string
