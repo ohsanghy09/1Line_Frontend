@@ -17,10 +17,8 @@ function Footprints() {
     // DB에서 조회한 목록과 요청 상태를 관리한다.
     const [activities, setActivities] = useState<FootprintActivity[]>([])
     const [total, setTotal] = useState(0)
-    const [isComposing, setIsComposing] = useState(false)
     const [isLoading, setIsLoading] = useState(true)
     const [hasLoaded, setHasLoaded] = useState(false)
-    const [debounceSearch, setDebounceSearch] = useState(false)
     const [retryKey, setRetryKey] = useState(0)
     const [error, setError] = useState<string | null>(null)
 
@@ -30,23 +28,20 @@ function Footprints() {
     })
 
     function updateFilters(next: Partial<FootprintFilters>) {
-        // 입력 대기 중에는 기존 목록을 유지한다. 실제 요청 시작 때 로딩으로 전환한다.
-        setIsLoading(false)
+        // 조합 중인 한글을 포함해 입력이 바뀌면 즉시 재조회 상태로 전환한다.
+        setIsLoading(true)
         setError(null)
-        setDebounceSearch(next.search !== undefined && next.search !== filters.search)
         setFilters(current => ({ ...current, ...next }))
     }
 
     function retry() {
         setError(null)
         setIsLoading(true)
-        setDebounceSearch(false)
         setRetryKey(current => current + 1)
     }
 
     useEffect(() => {
-        // 한글 조합은 기다린다. 최초 조회·필터·정렬·재시도에는 입력 대기 시간을 붙이지 않는다.
-        if (isComposing) return
+        // 입력 변경마다 즉시 요청하고, 이전 요청을 취소해 최신 조건의 결과만 반영한다.
         const controller = new AbortController()
         let isActive = true
 
@@ -63,10 +58,9 @@ function Footprints() {
             }
         }
 
-        const timer = debounceSearch ? window.setTimeout(() => { void loadActivities() }, 250) : null
-        if (timer === null) void loadActivities()
-        return () => { isActive = false; if (timer !== null) window.clearTimeout(timer); controller.abort() }
-    }, [filters, isComposing, debounceSearch, retryKey])
+        void loadActivities()
+        return () => { isActive = false; controller.abort() }
+    }, [filters, retryKey])
 
     return (
         <section aria-labelledby="footprints-title" className="space-y-6">
@@ -88,8 +82,6 @@ function Footprints() {
                         aria-describedby="footprints-search-help"
                         value={filters.search}
                         onChange={event => updateFilters({ search: event.target.value })}
-                        onCompositionStart={() => { setIsComposing(true); setIsLoading(false) }}
-                        onCompositionEnd={() => setIsComposing(false)}
                         placeholder="활동명, 파일명, 내용으로 검색..."
                         className="w-full bg-slate-50 border border-brand-border rounded-xl pl-11 pr-4 py-2.5 text-sm text-brand-text focus:outline-none focus:border-brand-primary transition"
                     />

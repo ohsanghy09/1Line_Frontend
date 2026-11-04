@@ -17,6 +17,9 @@ export default function ConnectedChatReplyCard({ reply: initial, now, onChange }
     const [busy, setBusy] = useState(false)
     const [error, setError] = useState('')
     const [notice, setNotice] = useState('')
+    // 화면의 변화 없음 카드 선택 조건과 동일하게 저장·수정 범위를 제한한다.
+    const isNoChange = (reply.kind === 'file-analysis' || reply.kind === 'no-change')
+        && reply.analysis?.files.length === 1 && reply.analysis.changes.length === 0
     const locked = useRef(false)
     const alive = useRef(true)
     useEffect(() => { alive.current = true; return () => { alive.current = false } }, [])
@@ -49,8 +52,23 @@ export default function ConnectedChatReplyCard({ reply: initial, now, onChange }
     function save() {
         if (recordId) return
         void perform(async () => {
-            await loadActivities()
+            const list = await loadActivities()
             if (!alive.current) return
+            if (isNoChange && reply.analysis) {
+                // 카드에서 확정한 연결 활동과 자료 유형으로 바로 저장하며 활동 메타정보는 변경하지 않는다.
+                const proposal = reply.analysis.activity
+                const targetId = activityId || (proposal.match === 'existing' ? proposal.id
+                    : !proposal.match ? list.find(item => item.name === proposal.name)?.id : '')
+                if (!targetId || !list.some(item => item.id === targetId)) {
+                    throw new Error('수정 버튼에서 연결할 활동을 선택한 뒤 저장해 주세요.')
+                }
+                const saved = await saveRecord(reply, { activityId: targetId })
+                if (!alive.current) return
+                setRecordId(saved.id); setActivityId(saved.activityId)
+                change({ ...saved.reply, recordId: saved.id, activityId: saved.activityId })
+                setNotice('아카이브에 저장했어요.')
+                return
+            }
             setReviewMode('save')
         })
     }
@@ -95,7 +113,7 @@ export default function ConnectedChatReplyCard({ reply: initial, now, onChange }
                 change({ ...next, activityId: targetId || undefined })
             }
             setReviewMode(null)
-            setNotice(recordId ? '저장된 기록을 수정했어요.' : reviewMode === 'save' ? '아카이브에 저장했어요.' : '확인 내용을 적용했어요. 기록 버튼을 누르면 저장됩니다.')
+            setNotice(recordId ? '저장된 기록을 수정했어요.' : reviewMode === 'save' ? '아카이브에 저장했어요.' : isNoChange ? '활동과 자료 유형을 수정했어요. 아카이브 저장 버튼을 누르면 저장됩니다.' : '확인 내용을 적용했어요. 기록 버튼을 누르면 저장됩니다.')
         })
     }
 
@@ -103,6 +121,6 @@ export default function ConnectedChatReplyCard({ reply: initial, now, onChange }
         <ChatReplyCard reply={reply} now={now} actions={{ busy, saved: Boolean(recordId), onSave: save, onEdit: edit }} />
         {notice && <p role="status" className="text-xs text-brand-primary">{notice}</p>}
         {error && !reviewMode && <p role="alert" className="text-xs text-red-600">{error}</p>}
-        {reviewMode && reply.analysis && <ActivityReviewModal activities={activities} activityId={activityId} proposal={reply.analysis.activity} materialType={reply.analysis.materialType} saved={Boolean(recordId)} saving={reviewMode === 'save'} busy={busy} error={error} onClose={() => { setReviewMode(null); setError('') }} onSubmit={submit} />}
+        {reviewMode && reply.analysis && <ActivityReviewModal activities={activities} activityId={activityId} proposal={reply.analysis.activity} materialType={reply.analysis.materialType} classificationOnly={isNoChange} saved={Boolean(recordId)} saving={reviewMode === 'save'} busy={busy} error={error} onClose={() => { setReviewMode(null); setError('') }} onSubmit={submit} />}
     </div>
 }
