@@ -39,6 +39,7 @@ docs/
   journey/
     README.md          # 다음 작업 인수인계·현재 상태·Growth Journey 구현 계획
     현재_구현_상태.md  # 기본 화면 완료 범위·목 데이터·검증·다음 작업
+    성장_분석_API.md   # 개발 API 계약·실제 백엔드/AI 연결 순서
   references/         # 기준 HTML, 기능명세서, 캡처
 ```
 
