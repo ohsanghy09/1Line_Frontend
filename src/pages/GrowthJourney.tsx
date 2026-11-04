@@ -8,6 +8,7 @@ import { filterJourneyEvents } from '../utils/journey'
 function GrowthJourney() {
     const [journey, setJourney] = useState<GrowthJourneyData | null>(null)
     const [error, setError] = useState<string | null>(null)
+    const [retryKey, setRetryKey] = useState(0)
     const [typeFilter, setTypeFilter] = useState('all')
     const [axisFilter, setAxisFilter] = useState('all')
     const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set())
@@ -35,7 +36,7 @@ function GrowthJourney() {
             if (active && !controller.signal.aborted) setError(error instanceof Error ? error.message : '성장 기록을 불러오지 못했어요.')
         })
         return () => { active = false; controller.abort() }
-    }, [])
+    }, [retryKey])
 
     return (
         <section aria-labelledby="journey-title" className="space-y-6">
@@ -44,7 +45,10 @@ function GrowthJourney() {
                 <p className="text-sm text-brand-muted mt-1">시간에 따라 내가 어떻게 달라졌는지 확인해보세요.</p>
             </header>
 
-            {error ? <p role="alert" className="p-8 bg-white border border-brand-border rounded-2xl text-sm text-brand-muted">{error}</p> : !journey ? (
+            {error ? <div role="alert" className="p-8 bg-white border border-brand-border rounded-2xl text-sm text-brand-muted space-y-3">
+                <p>{error}</p>
+                <button type="button" onClick={() => { setError(null); setJourney(null); setRetryKey(current => current + 1) }} className="px-4 py-2 bg-brand-primary text-white rounded-xl font-medium hover:bg-brand-primaryHover focus-visible:outline-2 focus-visible:outline-brand-primary focus-visible:outline-offset-2">다시 불러오기</button>
+            </div> : !journey ? (
                 <p role="status" className="p-8 text-center text-sm text-brand-muted">성장 기록을 불러오고 있어요.</p>
             ) : <>
                 {/* 전체 성장 흐름과 첫 경험 배지는 응답으로 표시한다. */}
@@ -54,7 +58,6 @@ function GrowthJourney() {
                             <span className="text-xs font-bold tracking-wider text-brand-primary uppercase flex items-center gap-1.5">
                                 <Sparkles aria-hidden="true" className="w-4 h-4 shrink-0" /> 최근 성장 흐름 AI 분석
                             </span>
-                            {journey.source === 'mock' && <span className="text-[10px] font-medium text-brand-muted bg-white border border-brand-border rounded-full px-2 py-0.5">예시 데이터</span>}
                         </div>
                         <h3 id="journey-summary-title" className="text-lg font-bold text-brand-text wrap-anywhere">{journey.summary.title}</h3>
                         <p className="text-xs text-brand-muted leading-relaxed wrap-anywhere">{journey.summary.description}</p>
@@ -82,9 +85,10 @@ function GrowthJourney() {
                 {journey.events.length === 0 ? <p role="status" className="p-8 text-center text-xs text-brand-muted bg-white border border-brand-border rounded-2xl">아직 성장 기록이 없어요.</p> : events.length === 0 ? (
                     <p role="status" className="p-8 text-center text-xs text-brand-muted bg-white border border-brand-border rounded-2xl">선택한 조건에 맞는 성장 이벤트가 없어요.</p>
                 ) : (
-                    <ol aria-label="성장 이벤트" className="relative pl-6 space-y-8 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-brand-border">
-                        {events.map(event => <li key={event.id} className="relative">
-                            <span aria-hidden="true" className="absolute -left-[21px] top-1.5 w-4 h-4 rounded-full border-2 border-brand-primary bg-white" />
+                    <ol aria-label="성장 이벤트" className="relative space-y-8 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-brand-border before:pointer-events-none">
+                        {events.map(event => <li key={event.id} className="relative group pl-6">
+                            {/* 선과 원을 같은 왼쪽 기준으로 배치하고 원을 선 위에 표시한다. */}
+                            <span aria-hidden="true" className="absolute left-[3px] top-1.5 z-10 block w-4 h-4 rounded-full border-2 border-brand-primary bg-white group-hover:bg-brand-primary transition-colors" />
                             <JourneyEventCard event={event} typeOptions={journey.typeOptions} axisOptions={journey.axisOptions} expanded={expandedIds.has(event.id)} onToggle={() => toggleEvent(event.id)} />
                         </li>)}
                     </ol>

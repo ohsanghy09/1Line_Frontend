@@ -2,6 +2,8 @@
 
 작성: 2026-11-04. 다음 대화에서 작업을 이어가기 위한 인수인계 문서다. 기본 화면에 이어 성장 유형·분야 필터와 이벤트 상세 펼침까지 구현했다. 브라우저 동작 확인은 사용자 담당이며 아직 완료 보고를 받지 않았다. [현재 구현 상태](현재_구현_상태.md)를 먼저 확인한다. 아래 단계별 계획은 후속 작업의 참고이며 전체 구현 지시가 아니다.
 
+성장 분석의 화면용 응답 기준과 다음 구현 순서는 [성장 분석 API](성장_분석_API.md)에 정리했다. GET `/api/journey`와 프론트 HTTP 연결·오류 재시도를 구현했다. 응답은 서버 목 분석이며 DB/실제 AI 분석과 구분한다. 다음 제안 범위는 실제 저장 기록의 분석 문맥 구성이다.
+
 ## 최신 사용자 요청과 직전 작업
 
 사용자는 나의 발자국을 현재 범위에서 마무리하고 다음 활동으로 Growth Journey 화면을 구현하기로 했다. 이 문서에 있는 계획 전체를 한 번에 구현하라는 뜻은 아니다. 다음 사용자 요청에 맞춰 한 기능씩 진행하고, 이미 완료한 나의 발자국·홈을 다시 만들지 않는다.
@@ -25,13 +27,13 @@
 | 파일 | 현재 상태·확인 목적 |
 | --- | --- |
 | [GrowthJourney.tsx](../../src/pages/GrowthJourney.tsx) | 요약·경험 배지·AND 필터·이벤트 ID별 펼침 상태와 목 이벤트 Timeline. |
-| [journey 타입](../../src/types/journey.ts), [서비스](../../src/services/journey.ts), [목 응답](../../src/mocks/journey/index.ts) | 화면용 임시 계약·비동기 조회 경계·원본 예시 데이터. 실제 API/DB 연결 없음. |
+| [journey 타입](../../src/types/journey.ts), [서비스](../../src/services/journey.ts), [서버 목 응답](../../api-server/src/mock-journey.js) | 화면용 임시 계약·HTTP 조회/검증·원본 예시 데이터. DB/실제 AI 연결 없음. |
 | [App.tsx](../../src/App.tsx) | MainPage 아래 `/journey` 경로가 이미 있다. 라우터를 새로 만들지 않는다. |
 | [Sidebar.tsx](../../src/components/Sidebar.tsx) | Growth Journey 메뉴가 `/journey`로 연결돼 있다. |
 | [MainPage.tsx](../../src/pages/MainPage.tsx), [index.css](../../src/index.css) | 공통 본문 너비·여백·테마를 재사용한다. |
 | [ProjectTimeline.tsx](../../src/pages/ProjectTimeline.tsx) | 활동 하나의 변화 과정. Journey와 같은 화면/데이터로 간주하지 않는다. |
 | [footprints 서비스](../../src/services/footprints.ts) | 기존 활동·자료·이벤트 조회 경계와 링크 대상 ID 참고. |
-| [개발 서버 README](../../api-server/README.md), [app.js](../../api-server/src/app.js) | 기존 API 확인. Journey 전용 조회 API는 아직 없다. |
+| [개발 서버 README](../../api-server/README.md), [app.js](../../api-server/src/app.js), [journey.js](../../api-server/src/journey.js) | GET /api/journey 목 응답 조회·서버 스키마 검증. |
 | [database.js](../../api-server/src/database.js) | activities·records·timeline_events 등 기존 저장 구조. Journey 전용 저장 테이블은 없다. |
 
 현재 timeline_events에는 기록별 change_json·전환점 플래그·생성 시각이 있지만 사용자 전체의 성장 유형·성장 분야·최근 성장 흐름·첫 경험 배지가 확정돼 있지 않다. 여러 활동의 Timeline 이벤트를 단순 합쳐 AI 성장 분석 결과라고 표시하지 않는다.
@@ -57,7 +59,7 @@
 
 다음 구현 요청이 별도 범위를 지정하지 않으면 원본의 Growth Journey 화면을 React로 옮기는 것부터 시작한다. 기존 페이지·공통 레이아웃을 유지하고 필요할 때만 `src/components/journey/`에 요약·이벤트 컴포넌트를 분리한다.
 
-현재 `src/types/journey.ts`, `src/services/journey.ts`, `src/mocks/journey/`를 구성했다. 정식 API 계약은 아니며, 실제 연결 시 서비스에서 변환한다. 화면은 서비스 함수를 통해 타입이 있는 응답을 받고, 요약·배지·성장 판단을 JSX에 고정하지 않는다. 목 응답과 실제 저장 데이터의 경계를 코드와 기능 문서에 명시한다. 기존 사용자 DB에는 화면 확인용 예시를 삽입하지 않는다.
+현재 `src/types/journey.ts`, `src/services/journey.ts`, `api-server/src/mock-journey.js`를 구성했다. 프론트 목 fixture는 제거하고 서버 목 공급자로 이동했다. 정식 AI 공급자 계약은 아니며, 실제 연결 시 서비스에서 변환한다. 화면은 서비스 함수를 통해 타입이 있는 응답을 받고, 요약·배지·성장 판단을 JSX에 고정하지 않는다. 목 응답과 실제 저장 데이터의 경계를 코드와 기능 문서에 명시한다. 기존 사용자 DB에는 화면 확인용 예시를 삽입하지 않는다.
 
 검토할 응답 필드: 전체 성장 요약과 배지, 이벤트의 안정적인 id·시각·활동 ID/이름·성장 유형·분야·제목·설명, 선택적인 Before/After와 근거 자료. 활동 ID나 근거 자료 ID가 없으면 이름만으로 실제 링크를 추측하지 않는다. 날짜는 원본의 월 단위 정밀도를 임의로 일 단위까지 채우지 않는다. 이는 설계 제안이며 정식 서버 계약이 아니다.
 

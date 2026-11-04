@@ -1,0 +1,91 @@
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { stripTypeScriptTypes } from 'node:module'
+import test from 'node:test'
+import { createServer } from 'vite'
+import { createApp } from '../api-server/src/app.js'
+import { openDatabase } from '../api-server/src/database.js'
+import { createMockJourney } from '../api-server/src/mock-journey.js'
+
+test('Journey 서비스 → Vite 프록시 → API와 오류·취소·응답 계약', async t => {
+    const db = openDatabase(':memory:')
+    const api = createApp(db).listen(0, '127.0.0.1')
+    await new Promise(resolve => api.once('listening', resolve))
+    const originalFetch = globalThis.fetch
+    let vite
+    try {
+        vite = await createServer({ server: { host: '127.0.0.1', port: 0, proxy: { '/api': `http://127.0.0.1:${api.address().port}` } } })
+        await vite.listen()
+        const base = `http://127.0.0.1:${vite.httpServer.address().port}`
+        const proxyFetch = (url, init) => originalFetch(new URL(url, base), init)
+        globalThis.fetch = proxyFetch
+        const url = code => `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`
+        const source = path => stripTypeScriptTypes(readFileSync(new URL(path, import.meta.url), 'utf8'))
+        const chatUrl = url(source('../src/services/chat.ts'))
+        const service = await import(url(source('../src/services/journey.ts').replace("from './chat'", `from '${chatUrl}'`)))
+        const { filterJourneyEvents } = await import(url(source('../src/utils/journey.ts')))
+
+        await t.test('서버 예시 표시·날짜순·비교 근거·AND 필터를 유지한다', async () => {
+            const data = await service.getGrowthJourney()
+            assert.deepEqual(data, createMockJourney())
+            assert.equal(data.source, 'mock')
+            assert.equal(filterJourneyEvents(data.events, 'ability', 'planning').length, 2)
+            assert.equal(filterJourneyEvents(data.events, 'ability', 'technology').length, 0)
+            assert.deepEqual(data.events.at(-1).comparison.evidence, ['회의록', '역할분담표'])
+        })
+        await t.test('빈 응답 허용·안정 정렬·원본 배열 보존', async () => {
+            const raw = createMockJourney()
+            raw.events.reverse()
+            raw.events[1].occurredAt = raw.events[0].occurredAt
+            const order = raw.events.map(event => event.id)
+            globalThis.fetch = async () => ({ ok: true, json: async () => raw })
+            const sorted = await service.getGrowthJourney()
+            assert.deepEqual(sorted.events.slice(-2).map(event => event.id), order.slice(0, 2))
+            assert.deepEqual(raw.events.map(event => event.id), order)
+            const empty = createMockJourney(); empty.events = []; empty.badges = []
+            globalThis.fetch = async () => Response.json(empty)
+            assert.deepEqual((await service.getGrowthJourney()).events, [])
+        })
+        await t.test('손상된 응답·잘못된 월·중복 ID·선택지와 비교를 거절한다', async () => {
+            for (const mutate of [
+                data => { data.source = 'unknown' },
+                data => { data.events[0].occurredAt = '2026-00' },
+                data => { data.events[0].activity.id = 1 },
+                data => { data.events[1].id = data.events[0].id },
+                data => { data.events[0].type = 'unknown' },
+                data => { data.axisOptions.shift() },
+                data => { data.events[0].comparison = null },
+                data => { data.events[0].comparison = { before: '', after: 'PM', evidence: [] } },
+            ]) {
+                const raw = createMockJourney(); mutate(raw)
+                globalThis.fetch = async () => Response.json(raw)
+                await assert.rejects(service.getGrowthJourney(), /응답 형식/)
+            }
+            globalThis.fetch = async () => Response.json(null)
+            await assert.rejects(service.getGrowthJourney(), /응답 형식/)
+        })
+        await t.test('서버 오류·연결 실패를 목 성공으로 숨기지 않고 재호출로 회복한다', async () => {
+            globalThis.fetch = async () => Response.json({ error: '조회 실패' }, { status: 500 })
+            await assert.rejects(service.getGrowthJourney(), /조회 실패/)
+            globalThis.fetch = async () => { throw new TypeError('offline') }
+            await assert.rejects(service.getGrowthJourney(), /연결하지 못했어요/)
+            globalThis.fetch = proxyFetch
+            assert.equal((await service.getGrowthJourney()).events.length, 5)
+        })
+        await t.test('이미 취소됐거나 진행 중 취소된 요청을 거절한다', async () => {
+            await assert.rejects(service.getGrowthJourney(AbortSignal.abort()), { name: 'AbortError' })
+            const controller = new AbortController()
+            globalThis.fetch = (_url, init) => new Promise((_resolve, reject) => {
+                init.signal.addEventListener('abort', () => reject(init.signal.reason), { once: true })
+            })
+            const pending = service.getGrowthJourney(controller.signal)
+            controller.abort()
+            await assert.rejects(pending, { name: 'AbortError' })
+        })
+    } finally {
+        globalThis.fetch = originalFetch
+        await vite?.close()
+        await new Promise(resolve => api.close(resolve))
+        db.close()
+    }
+})

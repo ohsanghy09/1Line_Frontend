@@ -1,7 +1,5 @@
-import type { GrowthJourneyData } from '../../types/journey'
-
-// 원본 HTML의 화면 확인용 예시다. 실제 DB 활동·AI 분석 결과와 연결하지 않는다.
-export const mockGrowthJourney: GrowthJourneyData = {
+﻿// 원본 HTML의 화면 확인용 예시다. 실제 DB 활동·AI 분석 결과와 연결하지 않는다.
+const mockGrowthJourney = {
     source: 'mock',
     summary: {
         title: '서비스 기획 경험 → 사용자 중심 기획 → MVP 기준 설정 → PM 역할 확장',
@@ -43,6 +41,12 @@ export const mockGrowthJourney: GrowthJourneyData = {
             activity: { id: null, name: 'Scent Orbit' }, type: 'ability', axis: 'planning',
             title: '사용자 관점 기획 범위 확장',
             description: '개발 중심 기획에서 벗어나 실제 타겟 유저 인터뷰 결과를 반영한 와이어프레임 설계.',
+            // 상세 펼침 확인용 예시다. 실제 DB 자료나 파일 ID와 연결하지 않는다.
+            comparison: {
+                before: '개발 중심의 기능 기획',
+                after: '사용자 인터뷰를 반영한 기획',
+                evidence: ['인터뷰 기록', '와이어프레임'],
+            },
         },
         {
             id: 'planning-transfer', occurredAt: '2026-03',
@@ -61,8 +65,12 @@ export const mockGrowthJourney: GrowthJourneyData = {
             activity: { id: null, name: '1호선톤' }, type: 'ability', axis: 'planning',
             title: 'PM 역할 수행 및 팀 프로세스 수립',
             description: '이전 프로젝트에서는 기획서 작성에 집중했지만, 이번 1호선톤에서는 팀 전체의 데드라인과 개발자-디자이너 간 이슈 싱크업을 주도함.',
-            // 다음 단계의 상세 펼침에 사용할 원본 근거이며 실제 파일 ID 연결은 없다.
+            // 상세 펼침에 사용할 원본 근거이며 실제 파일 ID 연결은 없다.
             comparison: { before: '기획 담당', after: 'PM + 기획', evidence: ['회의록', '역할분담표'] },
         },
     ],
 }
+
+// 매 요청에 독립된 예시 응답을 제공한다. 실제 DB와 AI는 사용하지 않는다.
+export function createMockJourney() { return structuredClone(mockGrowthJourney) }
+

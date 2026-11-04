@@ -27,7 +27,8 @@ export default function JourneyEventCard({ event, typeOptions, axisOptions, expa
         <span className="block text-xs text-brand-muted leading-relaxed wrap-anywhere">{event.description}</span>
     </>
 
-    return <article className={`bg-white rounded-2xl border border-brand-border shadow-soft ${hasComparison ? 'hover:border-brand-primary hover:shadow-cardHover transition' : ''}`}>
+    // 원본처럼 모든 카드에 호버 효과를 적용하되 상세 조작은 비교 정보가 있을 때만 제공한다.
+    return <article className="bg-white rounded-2xl border border-brand-border shadow-soft group-hover:border-brand-primary group-hover:shadow-cardHover focus-within:border-brand-primary transition cursor-pointer">
         {hasComparison ? (
             <button type="button" aria-expanded={expanded} aria-controls={detailId} onClick={onToggle} className="block w-full p-5 space-y-3 text-left rounded-2xl cursor-pointer focus-visible:outline-2 focus-visible:outline-brand-primary focus-visible:outline-offset-2">
                 {content}

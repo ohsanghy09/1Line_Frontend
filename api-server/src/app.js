@@ -10,6 +10,7 @@ import { readArchive, readArchiveFile } from './archive.js'
 import { activityInformation, analysisContext, resolveActivity, touchActivities } from './activities.js'
 import { readHomeRecent } from './home.js'
 import { searchArchive } from './archive-search.js'
+import { readJourney } from './journey.js'
 
 export function createApp(db, { origin = 'http://localhost:5173' } = {}) {
   const app = express()
@@ -36,6 +37,8 @@ export function createApp(db, { origin = 'http://localhost:5173' } = {}) {
   app.get('/api/health', (_req, res) => res.json({ status: 'ready', label: '기록 정리 준비됨', analysisProvider: 'mock' }))
   app.get('/api/activities', (_req, res) => res.json(analysisContext(db).activities))
   app.get('/api/home/recent', (_req, res) => res.json(readHomeRecent(db)))
+  // HTTP 연결을 위한 목 분석 조회. 실제 AI·DB 성장 분석은 후속 단계다.
+  app.get('/api/journey', (_req, res) => res.json(readJourney()))
 
   // 기존 활동 선택 API와 분리해 아카이브 화면에 필요한 DB 조회 계약을 제공한다.
   app.get('/api/archive/activities', (req, res) => res.json(searchArchive(db, archiveQuerySchema.parse(req.query))))
