@@ -8,7 +8,7 @@ function MainPage() {
 
 
         // 화면 전체
-        <div className="bg-brand-bg text-brand-text font-sans antialiased min-h-screen flex flex-col md:flex-row overflow-x-hidden">
+        <div className="bg-brand-bg text-brand-text font-sans antialiased min-h-screen flex flex-col md:flex-row overflow-x-clip">
             
             {/* 사이드바 */}
             <Sidebar />
