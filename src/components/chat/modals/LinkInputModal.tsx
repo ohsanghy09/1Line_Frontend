@@ -9,6 +9,7 @@ export default function LinkInputModal({ initialUrl, onClose, onSubmit }: { init
     const [error, setError] = useState('')
     const dialogRef = useRef<HTMLDialogElement>(null)
     const titleId = useId()
+    const errorId = useId()
     useEffect(() => {
         const dialog = dialogRef.current
         const previous = document.activeElement as HTMLElement | null
@@ -17,7 +18,8 @@ export default function LinkInputModal({ initialUrl, onClose, onSubmit }: { init
     }, [])
     return createPortal(
         <dialog ref={dialogRef} aria-labelledby={titleId} onCancel={event => { event.preventDefault(); onClose() }} className="m-auto w-[calc(100%_-_2rem)] max-w-md max-h-[calc(100dvh_-_2rem)] overflow-y-auto bg-brand-surface text-brand-text rounded-2xl border border-brand-border shadow-xl p-6 backdrop:bg-slate-900/40 backdrop:backdrop-blur-xs">
-            <form className="space-y-4" onSubmit={event => {
+            {/* 브라우저 기본 경고 대신 입력창 아래에서 URL 오류를 안내한다. */}
+            <form noValidate className="space-y-4" onSubmit={event => {
                 event.preventDefault()
                 if (!isHttpUrl(url.trim())) { setError('HTTP 또는 HTTPS 링크를 입력해 주세요.'); return }
                 onSubmit(url.trim())
@@ -27,8 +29,10 @@ export default function LinkInputModal({ initialUrl, onClose, onSubmit }: { init
                     <button type="button" onClick={onClose} aria-label="링크 모달 닫기" className="text-brand-muted hover:text-brand-text"><X className="w-5 h-5" /></button>
                 </div>
                 <p className="text-xs text-brand-muted">GitHub repository 또는 ChatGPT 공유 링크를 붙여넣어주세요.</p>
-                <input autoFocus required type="url" maxLength={4096} value={url} onChange={event => { setUrl(event.target.value); setError('') }} aria-label="추가할 링크 URL" placeholder="https://github.com/username/project 또는 https://chatgpt.com/share/..." className="w-full border border-brand-border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-brand-primary" />
-                {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
+                <div className="space-y-1.5">
+                    <input autoFocus required type="url" maxLength={4096} value={url} onChange={event => { setUrl(event.target.value); setError('') }} aria-label="추가할 링크 URL" aria-invalid={Boolean(error)} aria-describedby={error ? errorId : undefined} placeholder="https://github.com/username/project 또는 https://chatgpt.com/share/..." className={`w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none ${error ? 'border-red-300 focus:border-red-300' : 'border-brand-border focus:border-brand-primary'}`} />
+                    {error && <p id={errorId} role="alert" className="pl-2 text-xs text-red-400">{error}</p>}
+                </div>
                 <div className="flex justify-end space-x-2 pt-2">
                     <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border border-brand-border text-xs font-medium text-slate-700 hover:bg-slate-50">취소</button>
                     <button type="submit" disabled={!url.trim()} className="px-4 py-2 rounded-xl bg-brand-primary text-white text-xs font-medium hover:bg-brand-primaryHover disabled:opacity-50">분석</button>
