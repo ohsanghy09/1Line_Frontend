@@ -1,6 +1,6 @@
 # Growth Journey 작업 안내·구현 계획
 
-작성: 2026-11-04. 다음 대화에서 작업을 이어가기 위한 인수인계 문서다. 사용자 요청으로 작업 순서 3번 기본 화면까지 구현했다. [현재 구현 상태](현재_구현_상태.md)를 먼저 확인한다. 아래 단계별 계획은 후속 작업의 참고이며 전체 구현 지시가 아니다.
+작성: 2026-11-04. 다음 대화에서 작업을 이어가기 위한 인수인계 문서다. 기본 화면에 이어 성장 유형·분야 필터와 이벤트 상세 펼침까지 구현했다. 브라우저 동작 확인은 사용자 담당이며 아직 완료 보고를 받지 않았다. [현재 구현 상태](현재_구현_상태.md)를 먼저 확인한다. 아래 단계별 계획은 후속 작업의 참고이며 전체 구현 지시가 아니다.
 
 ## 최신 사용자 요청과 직전 작업
 
@@ -24,7 +24,7 @@
 
 | 파일 | 현재 상태·확인 목적 |
 | --- | --- |
-| [GrowthJourney.tsx](../../src/pages/GrowthJourney.tsx) | 요약·경험 배지·비활성 필터 UI·목 이벤트 Timeline 기본 화면. |
+| [GrowthJourney.tsx](../../src/pages/GrowthJourney.tsx) | 요약·경험 배지·AND 필터·이벤트 ID별 펼침 상태와 목 이벤트 Timeline. |
 | [journey 타입](../../src/types/journey.ts), [서비스](../../src/services/journey.ts), [목 응답](../../src/mocks/journey/index.ts) | 화면용 임시 계약·비동기 조회 경계·원본 예시 데이터. 실제 API/DB 연결 없음. |
 | [App.tsx](../../src/App.tsx) | MainPage 아래 `/journey` 경로가 이미 있다. 라우터를 새로 만들지 않는다. |
 | [Sidebar.tsx](../../src/components/Sidebar.tsx) | Growth Journey 메뉴가 `/journey`로 연결돼 있다. |
