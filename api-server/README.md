@@ -38,6 +38,7 @@ npm.cmd run dev
 | 메서드·경로 | 요청·결과 |
 | --- | --- |
 | GET `/api/health` | 준비 상태, `analysisProvider: mock` |
+| GET `/api/journey` | 성장 요약·배지·선택지·이벤트의 목 응답. DB/실제 AI 분석 없음. [계약·검증](../docs/journey/성장_분석_API.md) |
 | GET `/api/activities` | 초기 활동 5개 |
 | GET `/api/home/recent` | 최근 변경 활동 3개 + 최초 저장순 자료 3개. [시간 기준·갱신](../docs/chat/구현_기능/최근_활동_기록.md) |
 | GET `/api/archive/activities` | q/category/status/sort 검색, `{ items, total }`. [검색 범위·계약](../docs/footprints/검색_API.md), 파일 내부 본문 제외 |
