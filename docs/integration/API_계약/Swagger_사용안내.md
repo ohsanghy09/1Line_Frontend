@@ -37,7 +37,7 @@ npm.cmd run preview
 ## 문서 선택·공유
 
 - **백엔드 · 현재 개발 서버:** 현재 경로·메서드·요청·응답·오류. Request body, Responses, Schemas에서 확인한다.
-- **AI · 모델 미정 / 입력·출력:** 기존 HomeAnalysisRequest·GrowthAnalysisRequest 제안과 ChatReply·Journey 응답을 Schemas에서 확인한다. 모델·공급자·인증·호출 주체·실행 경로는 미정이다.
+- **AI · 모델 미정 / 입력·출력:** 기존 HomeAnalysisRequest·GrowthAnalysisRequest 제안과 ChatReply·Journey 응답을 Schemas에서 확인한다. 모델·공급자·인증·실행 경로는 미정이다. 2026-11-06 홈은 프론트→AI 서비스, Journey 분석은 백엔드·AI 담당으로 방향을 확정했다. Swagger 생성 코드의 호출 주체 설명은 아직 이전 초안이므로 최신 방향은 [API 문서 안내](문서_안내.md)를 따른다. 이번에는 실행 코드와 계약값을 변경하지 않았다.
 
 상단 선택창에서 문서를 고른다. OpenAPI 원본은 같은 프론트 도메인의 `/swagger/openapi/backend.json`, `/swagger/openapi/ai.json`이다. 배포 후 이 주소 또는 Swagger 주소를 담당자에게 공유한다. 별도 문서 터널이나 내 컴퓨터의 상시 실행은 필요 없다.
 
