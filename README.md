@@ -63,6 +63,8 @@ npm run dev
 
 터미널에 표시된 로컬 주소로 접속합니다.
 
+API 명세는 같은 프론트 주소의 `/swagger/`로 직접 접속합니다. 개발·프로덕션 빌드 전에 Swagger 정적 파일이 자동 생성되며 Vercel 배포에도 포함됩니다. [Swagger 사용 안내](docs/integration/API_계약/Swagger_사용안내.md)를 참고하세요.
+
 ## 주요 명령어
 
 | 명령어 | 설명 |

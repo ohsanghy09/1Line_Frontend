@@ -13,6 +13,8 @@
 
 ## 실행
 
+Swagger 문서는 프론트의 `/swagger/`에서 제공한다. 루트 `npm.cmd run dev`·`npm.cmd run build`에 정적 생성이 포함되며 Vercel 프론트 배포와 함께 올린다. 기존 `npm.cmd --prefix api-server run docs`의 3002 독립 서버는 선택적으로 유지한다. AI 모델은 미정이며 기존 계약값을 유지한다. [Swagger 사용 안내](../docs/integration/API_계약/Swagger_사용안내.md) 참고.
+
 프로젝트 루트에서 실행한다.
 
 ```powershell
