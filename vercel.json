@@ -1,0 +1,12 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "routes": [
+    { "src": "/swagger", "status": 307, "headers": { "Location": "/swagger/" } },
+    { "handle": "filesystem" },
+    { "src": "/swagger/.*", "status": 404 },
+    { "src": "/.*", "dest": "/index.html" }
+  ]
+}
