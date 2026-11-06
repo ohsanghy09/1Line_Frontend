@@ -8,7 +8,7 @@ import unittest
 from fastapi.testclient import TestClient
 
 from app.analysis import AnalysisError
-from app.journey import JourneyAnalysis, journey_context, validate_journey
+from app.journey import JourneyAnalysis, journey_context, normalize_journey_options, validate_journey
 from app.main import create_app
 import test_database
 
@@ -53,7 +53,7 @@ class JourneyTests(unittest.TestCase):
             self.assertEqual(response.json()["recordCount"], 1)
             self.assertEqual(response.json()["result"]["events"], [])
             self.assertEqual(response.json()["result"]["axisOptions"], [{"value": "all", "label": "전체 분야"}])
-            self.assertEqual(response.json()["promptVersion"], "journey-v3")
+            self.assertEqual(response.json()["promptVersion"], "journey-v4")
             arguments = provider.await_args.kwargs
             self.assertIn("record-1", arguments["input"])
             self.assertIn("comparison=null", arguments["instructions"])
@@ -146,3 +146,64 @@ class JourneyTests(unittest.TestCase):
             data.update(axisOptions=axes, events=events, typeOptions=[{"value": "learning", "label": "학습", "icon": "📚"}] if events else [])
             with self.assertRaises(AnalysisError):
                 validate_journey(JourneyAnalysis.model_validate(data), context)
+
+    def classification_result(self):
+        data = self.result().model_dump()
+        event = {"activityId": "line1-hackathon", "type": "learning", "axis": "education", "title": "학습", "description": "기록 기반",
+                 "comparison": None, "evidence": [{"recordId": "record-1", "quote": "기능 6개를 기획했습니다."}]}
+        data.update(events=[event, {**event, "type": "applied", "axis": "teaching"}],
+                    typeOptions=[{"value": "learning", "label": "학습 적용", "icon": "📚"},
+                                 {"value": "learning", "label": "학습 적용", "icon": "📚"},
+                                 {"value": "applied", "label": " 학습　 적용 ", "icon": "🧩"},
+                                 {"value": "unused", "label": "성과", "icon": "🏆"}],
+                    axisOptions=[{"value": "education", "label": "교육"}, {"value": "teaching", "label": " 교육 "},
+                                 {"value": "unused", "label": "문학"}])
+        return JourneyAnalysis.model_validate(data)
+
+    def test_normalization_merges_exact_labels_and_removes_unused_without_changing_evidence(self):
+        self.add_record()
+        original = self.classification_result()
+        result = normalize_journey_options(original)
+        validate_journey(result, journey_context(self.database))
+        self.assertEqual([option.value for option in result.typeOptions], ['learning'])
+        self.assertEqual([option.value for option in result.axisOptions], ['education'])
+        self.assertEqual([event.type for event in result.events], ['learning', 'learning'])
+        self.assertEqual([event.axis for event in result.events], ['education', 'education'])
+        self.assertEqual([event.evidence for event in result.events], [event.evidence for event in original.events])
+        self.assertEqual(original.events[1].type, 'applied')
+        result = self.result()
+        result.typeOptions = original.typeOptions
+        result.axisOptions = original.axisOptions
+        empty = normalize_journey_options(result)
+        self.assertEqual(empty.typeOptions, [])
+        self.assertEqual(empty.axisOptions, [])
+
+    def test_normalization_rejects_unknown_references_and_conflicting_ids_without_guessing(self):
+        for field in ['type', 'axis']:
+            result = self.classification_result()
+            setattr(result.events[0], field, 'unknown')
+            with self.assertRaisesRegex(AnalysisError, 'invalid_journey'):
+                normalize_journey_options(result)
+            result = self.classification_result()
+            options = result.typeOptions if field == 'type' else result.axisOptions
+            conflicting = options[0].model_copy(update={'label': '전혀 다른 분류'})
+            options.append(conflicting)
+            with self.assertRaisesRegex(AnalysisError, 'invalid_journey'):
+                normalize_journey_options(result)
+
+    def test_route_normalizes_classifications_in_one_model_call_and_still_checks_evidence(self):
+        self.add_record()
+        result = self.classification_result()
+        config = self.config.model_copy(update={'openai_model': 'test-provider'})
+        with patch('app.journey.structured_response', new_callable=AsyncMock, return_value=result) as provider, TestClient(create_app(config)) as client:
+            response = client.post('/api/analyze/journey')
+            self.assertEqual(response.status_code, 200, response.text)
+            data = response.json()['result']
+            self.assertEqual(len(data['typeOptions']), 2)  # 전체 + 학습 적용
+            self.assertEqual(len(data['axisOptions']), 2)
+            self.assertEqual(len(data['events']), 2)
+            provider.assert_awaited_once()
+        result.summary.evidence[0].quote = '존재하지 않는 근거'
+        with patch('app.journey.structured_response', new_callable=AsyncMock, return_value=result) as provider, TestClient(create_app(config)) as client:
+            self.assertEqual(client.post('/api/analyze/journey').status_code, 502)
+            provider.assert_awaited_once()

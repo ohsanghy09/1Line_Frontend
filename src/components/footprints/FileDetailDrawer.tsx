@@ -1,8 +1,9 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router'
-import { ArrowRight, GitCommitHorizontal, X } from 'lucide-react'
-import { getFootprintFile } from '../../services/footprints'
+import { ArrowRight, GitCommitHorizontal, Trash2, X } from 'lucide-react'
+import { deleteFootprintMaterial, getFootprintFile } from '../../services/footprints'
+import DeleteConfirmation from './DeleteConfirmation'
 import type { FootprintFileDetail } from '../../types/footprints'
 
 function FileDetailDrawer({ activityId, fileId, onClose }: { activityId: string; fileId: string; onClose: () => void }) {
@@ -12,6 +13,7 @@ function FileDetailDrawer({ activityId, fileId, onClose }: { activityId: string;
     const [detail, setDetail] = useState<FootprintFileDetail | null>(null)
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    const [confirmDelete, setConfirmDelete] = useState(false)
 
     useEffect(() => {
         // native dialog가 배경 비활성화와 초점 제한을 담당한다. 닫으면 호출한 자료 버튼으로 복귀한다.
@@ -49,7 +51,7 @@ function FileDetailDrawer({ activityId, fileId, onClose }: { activityId: string;
         <dialog
             ref={dialogRef}
             aria-labelledby={titleId}
-            onCancel={event => { event.preventDefault(); onClose() }}
+            onCancel={event => { if (event.target === event.currentTarget) { event.preventDefault(); onClose() } }}
             onClick={event => {
                 // dialog 바깥의 원본 오버레이 클릭만 닫기로 처리한다.
                 if (event.target !== event.currentTarget) return
@@ -60,9 +62,12 @@ function FileDetailDrawer({ activityId, fileId, onClose }: { activityId: string;
         >
             <div className="p-5 border-b border-brand-border flex items-start justify-between gap-3 bg-slate-50/50 shrink-0">
                 <h3 id={titleId} className="font-bold text-base wrap-anywhere">{detail?.file.name ?? '자료 상세 정보'}</h3>
-                <button ref={closeRef} type="button" onClick={onClose} aria-label="자료 상세 닫기" className="p-1 rounded-lg text-brand-muted hover:bg-slate-200 shrink-0">
-                    <X aria-hidden="true" className="w-5 h-5" />
-                </button>
+                <div className="flex items-center gap-1 shrink-0">
+                    {detail && !isLoading && !error && <button type="button" onClick={() => setConfirmDelete(true)} aria-label="자료 삭제" className="cursor-pointer rounded-lg p-1 text-red-600 transition-colors hover:bg-red-100 hover:text-red-700 focus-visible:outline-2 focus-visible:outline-red-400 focus-visible:outline-offset-2"><Trash2 aria-hidden="true" className="h-5 w-5" /></button>}
+                    <button ref={closeRef} type="button" onClick={onClose} aria-label="자료 상세 닫기" className="p-1 rounded-lg text-brand-muted hover:bg-slate-200 shrink-0">
+                        <X aria-hidden="true" className="w-5 h-5" />
+                    </button>
+                </div>
             </div>
             <div className="p-6 flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-5">
                 {isLoading ? (
@@ -107,6 +112,12 @@ function FileDetailDrawer({ activityId, fileId, onClose }: { activityId: string;
                                 Project Timeline에서 보기 <ArrowRight aria-hidden="true" className="w-4 h-4 shrink-0" />
                             </Link>
                         </div>
+                        {confirmDelete && <DeleteConfirmation title="자료 삭제"
+                            description={`‘${detail.file.name}’ 자료를 삭제할까요? 마지막 자료라면 연결된 기록과 타임라인도 삭제해요. 같은 기록에 다른 파일이 남으면 재분석한 뒤 삭제하며, 실패하면 기존 자료를 유지해요. 삭제한 자료는 복구할 수 없어요.`}
+                            onClose={() => setConfirmDelete(false)} onDelete={async () => {
+                                await deleteFootprintMaterial(activityId, fileId)
+                                onClose()
+                            }} />}
                     </>
                 )}
             </div>

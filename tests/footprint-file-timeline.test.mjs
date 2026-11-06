@@ -142,6 +142,17 @@ test('프론트 아카이브 서비스 → Vite 프록시 → REST API → SQLit
             assert.deepEqual(updated.folders, [])
         })
 
+        await t.test('삭제 서비스는 자료와 활동을 실제 삭제하고 잘못된 활동명은 거절한다', async () => {
+            await service.deleteFootprintMaterial('computer-vision', fileId)
+            assert.equal(await service.getFootprintFile('computer-vision', fileId), null)
+            assert.equal((await service.getFootprintActivity('computer-vision')).materialsCount, 0)
+            await assert.rejects(service.deleteFootprintActivity('computer-vision', '틀린 활동명'), /활동명/)
+            const activity = await service.getFootprintActivity('computer-vision')
+            await service.deleteFootprintActivity('computer-vision', activity.title)
+            assert.equal(await service.getFootprintActivity('computer-vision'), null)
+            assert.ok((await home.getHomeRecent()).records.every(item => item.id !== fileId))
+        })
+
         await t.test('서버 오류·연결 실패·잘못된 응답은 목 데이터로 대체하지 않는다', async () => {
             try {
                 globalThis.fetch = async () => new Response(JSON.stringify({ error: '서버 오류' }), { status: 500 })

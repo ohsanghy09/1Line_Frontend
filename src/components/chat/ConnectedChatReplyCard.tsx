@@ -5,6 +5,7 @@ import type { ActivityOption } from '../../services/records'
 import ChatReplyCard from './ChatReplyCard'
 import ActivityReviewModal from './modals/ActivityReviewModal'
 import ActivityAnalysisStatus from '../ActivityAnalysisStatus'
+import { isReply, request } from '../../services/chat'
 
 // 카드별 수정본·저장 ID를 관리한다. 홈과 독립 미리보기는 같은 저장 흐름을 사용한다.
 export default function ConnectedChatReplyCard({ reply: initial, now, onChange }: {
@@ -29,6 +30,31 @@ export default function ConnectedChatReplyCard({ reply: initial, now, onChange }
     const locked = useRef(false)
     const alive = useRef(true)
     useEffect(() => { alive.current = true; return () => { alive.current = false } }, [])
+    // 브라우저에 남은 과거 카드도 DB 삭제/재분석 결과를 확인한 뒤 표시한다.
+    useEffect(() => {
+        if (!recordId) return
+        const controller = new AbortController()
+        async function refresh() {
+            try {
+                const value = await request(`/records/${encodeURIComponent(recordId!)}`, { signal: controller.signal })
+                if (!controller.signal.aborted && value && typeof value === 'object' && 'reply' in value && isReply(value.reply) && 'activityId' in value && typeof value.activityId === 'string') {
+                    const updated = value.reply
+                    const target = value.activityId
+                    setReply(current => ({ ...updated, createdAt: current.createdAt, recordId, activityId: target }))
+                    setActivityId(target)
+                }
+            } catch (error) {
+                if (!controller.signal.aborted && error && typeof error === 'object' && 'status' in error && error.status === 404) {
+                    setReply(current => ({ id: current.id, role: 'assistant', kind: 'general', analysis: null,
+                        content: `${current.content}\n\n이 기록은 삭제했어요.`, createdAt: current.createdAt }))
+                    setRecordId(undefined); setActivityId(''); setReviewMode(null)
+                }
+            }
+        }
+        void refresh()
+        window.addEventListener('1line:records-changed', refresh)
+        return () => { controller.abort(); window.removeEventListener('1line:records-changed', refresh) }
+    }, [recordId])
 
     function change(next: ChatReply) {
         const updated = { ...reply, ...next }

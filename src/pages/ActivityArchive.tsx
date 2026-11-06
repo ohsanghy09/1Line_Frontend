@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router'
-import { ArrowLeft, Folder, GitCommitHorizontal, Sparkles } from 'lucide-react'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
+import { ArrowLeft, Folder, GitCommitHorizontal, MoreHorizontal, Sparkles, Trash2 } from 'lucide-react'
 import ActivityFolders from '../components/footprints/ActivityFolders'
 import FileDetailDrawer from '../components/footprints/FileDetailDrawer'
-import { getFootprintActivity } from '../services/footprints'
+import { deleteFootprintActivity, getFootprintActivity } from '../services/footprints'
+import DeleteConfirmation from '../components/footprints/DeleteConfirmation'
 import type { FootprintActivityDetail } from '../types/footprints'
 import ActivityAnalysisStatus from '../components/ActivityAnalysisStatus'
 
@@ -14,6 +15,8 @@ function ActivityArchive() {
 }
 
 function ActivityArchiveContent({ activityId }: { activityId: string }) {
+    const navigate = useNavigate()
+    const [confirmDelete, setConfirmDelete] = useState(false)
     // 자료 ID를 URL에 보관해 Timeline의 근거 자료 링크와 직접 접근도 지원한다.
     const [searchParams, setSearchParams] = useSearchParams()
     const selectedFileId = searchParams.get('file')
@@ -89,7 +92,13 @@ function ActivityArchiveContent({ activityId }: { activityId: string }) {
                                 <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-brand-primarySoft text-brand-primary">{activity.category}</span>
                                 <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${activity.status === '진행 중' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>{activity.status}</span>
                             </div>
-                            <p className="text-xs text-brand-muted font-medium">역할: {activity.role} ({activity.period})</p>
+                            <div className="flex items-center gap-3">
+                                <p className="text-xs text-brand-muted font-medium">역할: {activity.role} ({activity.period})</p>
+                                <details className="relative">
+                                    <summary aria-label="활동 더보기" className="list-none cursor-pointer rounded-lg p-1.5 hover:bg-slate-100"><MoreHorizontal aria-hidden="true" className="h-5 w-5" /></summary>
+                                    <button type="button" onClick={() => setConfirmDelete(true)} className="absolute right-0 z-10 mt-1 flex w-32 cursor-pointer items-center gap-2 rounded-xl border border-brand-border bg-white p-3 text-xs text-red-600 shadow-lg transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700 focus-visible:outline-2 focus-visible:outline-red-400 focus-visible:outline-offset-2"><Trash2 aria-hidden="true" className="h-4 w-4" />활동 삭제</button>
+                                </details>
+                            </div>
                         </div>
                         <div className="p-3.5 bg-indigo-50/50 border border-indigo-100 rounded-xl text-xs space-y-1">
                             <h3 className="font-bold text-brand-primary flex items-center gap-1">
@@ -107,6 +116,12 @@ function ActivityArchiveContent({ activityId }: { activityId: string }) {
                         <ActivityFolders folders={activity.folders} onSelectFile={selectFile} />
                     </section>
                     {selectedFileId !== null && <FileDetailDrawer key={selectedFileId} activityId={activityId} fileId={selectedFileId} onClose={() => selectFile(null)} />}
+                    {confirmDelete && <DeleteConfirmation title="활동 전체 삭제" confirmation={activity.title}
+                        description={`이 활동의 자료 ${activity.materialsCount}개와 기록 ${activity.recordsCount ?? activity.materialsCount}개, 타임라인과 활동 분석 정보를 모두 삭제해요. 삭제한 데이터는 복구할 수 없어요. 성장 분석은 남은 기록으로 다시 갱신해야 해요.`}
+                        onClose={() => setConfirmDelete(false)} onDelete={async () => {
+                            await deleteFootprintActivity(activityId, activity.title)
+                            navigate('/archive', { replace: true })
+                        }} />}
                 </>
             )}
         </section>

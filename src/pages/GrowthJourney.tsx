@@ -96,7 +96,10 @@ function GrowthJourney() {
                     </button>
                 </div>
                 {generating && <p role="status" className="text-sm text-brand-muted">저장된 기록으로 성장 흐름을 분석하고 있어요.</p>}
-                {generationError && <p role="alert" className="text-sm text-brand-muted">{generationError}</p>}
+                {generationError && <div role="alert" className="space-y-1 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                    <p className="font-semibold">분석을 갱신하지 못했어요. 표시된 결과는 마지막으로 저장된 분석이에요.</p>
+                    <p>{generationError}</p>
+                </div>}
                 {/* 전체 성장 흐름과 첫 경험 배지는 응답으로 표시한다. */}
                 <section aria-labelledby="journey-summary-title" className="bg-linear-to-r from-brand-primarySoft via-white to-brand-secondarySoft p-6 rounded-2xl border border-brand-border shadow-soft">
                     <div className="space-y-2">

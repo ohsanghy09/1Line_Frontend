@@ -16,6 +16,7 @@ from .schemas import DatabaseContext, TextAnalysisRequest, TextAnalysisResponse
 from .chat import ChatPipeline
 from .journey import journey_router
 from .activity_metadata import activity_metadata_router
+from .material_delete import material_delete_router
 
 
 class OpenAIConfiguration(BaseModel):
@@ -99,6 +100,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(pipeline.router())
     application.include_router(journey_router(database, config))
     application.include_router(activity_metadata_router(database, config))
+    application.include_router(material_delete_router(database, config))
     return application
 
 

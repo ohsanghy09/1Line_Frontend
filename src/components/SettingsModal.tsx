@@ -74,7 +74,7 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
                     {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
                     <div className="flex justify-end gap-2">
                         <button type="button" disabled={isDeleting} onClick={onClose} className="rounded-xl border border-brand-border px-4 py-2 text-xs font-medium disabled:opacity-50">취소</button>
-                        <button type="submit" disabled={isDeleting} className="flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50">
+                        <button type="submit" disabled={isDeleting} className="flex cursor-pointer items-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-xs font-semibold text-white transition-colors enabled:hover:bg-red-700 focus-visible:outline-2 focus-visible:outline-red-400 focus-visible:outline-offset-2 disabled:cursor-wait disabled:opacity-50">
                             {isDeleting && <LoaderCircle aria-hidden="true" className="h-4 w-4 animate-spin motion-reduce:animate-none" />}
                             {isDeleting ? '삭제 중…' : '전체 데이터 삭제'}
                         </button>

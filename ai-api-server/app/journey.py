@@ -14,7 +14,7 @@ from .analysis import AnalysisError, structured_response
 from .database import DatabaseError
 from .schemas import StrictModel, Text, Identifier, Change
 
-PROMPT_VERSION = "journey-v3"
+PROMPT_VERSION = "journey-v4"
 
 
 class Evidence(StrictModel):
@@ -189,12 +189,53 @@ def journey_context(database):
     return context
 
 
+def normalize_journey_options(result):
+    """이벤트/근거는 유지하고 정확히 같은 라벨의 별칭과 미사용 선택지만 정리한다."""
+    result = result.model_copy(deep=True)
+
+    def normalize(field, options, label):
+        used = {getattr(event, field) for event in result.events}
+        by_id, by_label, aliases, selected = {}, {}, {}, []
+        for option in options:
+            if option.value not in used:
+                continue
+            name = ' '.join(unicodedata.normalize('NFKC', option.label).split())
+            key = name.casefold()
+            if option.value == 'all' or not key or key in {'전체', '전체 분야', '전체분야'}:
+                raise AnalysisError(502, 'invalid_journey', f'성장 {label}에 사용할 수 없는 분류명이 있어요.')
+            if field == 'type' and not option.icon.strip():
+                raise AnalysisError(502, 'invalid_journey', '성장 유형의 아이콘이 비어 있어요.')
+            if option.value in by_id:
+                if by_id[option.value] != key:
+                    raise AnalysisError(502, 'invalid_journey', f'성장 {label}의 같은 식별자에 서로 다른 분류명이 있어요.')
+                continue
+            by_id[option.value] = key
+            if key in by_label:
+                aliases[option.value] = by_label[key]
+            else:
+                option.label = name
+                if field == 'type':
+                    option.icon = option.icon.strip()
+                by_label[key] = option.value
+                aliases[option.value] = option.value
+                selected.append(option)
+        if used - aliases.keys():
+            raise AnalysisError(502, 'invalid_journey', f'성장 이벤트가 등록되지 않은 {label}을 참조해요. 다시 분석해 주세요.')
+        for event in result.events:
+            setattr(event, field, aliases[getattr(event, field)])
+        return selected
+
+    result.typeOptions = normalize('type', result.typeOptions, '유형')
+    result.axisOptions = normalize('axis', result.axisOptions, '분야')
+    return result
+
+
 def validate_journey(result, context):
     """모델이 반환한 ID와 인용문을 실제 확정 기록으로 재검증한다."""
     records = {record["id"]: record for record in context["records"]}
     # AI가 새 분류를 만들 수 있지만 이벤트 참조·중복·미사용 분류는 검증한다.
     types = [option.value for option in result.typeOptions]
-    labels = [unicodedata.normalize("NFKC", option.label).strip().casefold() for option in result.typeOptions]
+    labels = [' '.join(unicodedata.normalize("NFKC", option.label).split()).casefold() for option in result.typeOptions]
     if ("all" in types or len(set(types)) != len(types) or len(set(labels)) != len(labels)
             or not all(labels) or any(not option.icon.strip() for option in result.typeOptions)
             or set(types) != {event.type for event in result.events}):
@@ -232,6 +273,7 @@ async def analyze_journey(database, config):
         raise AnalysisError(422, "journey_records_missing", "홈에서 기록을 저장한 뒤 성장 분석을 실행해 주세요.")
     prompt = Path(__file__).with_name("prompts").joinpath("journey.md").read_text(encoding="utf-8")
     result = await structured_response(config, instructions=prompt, input=json.dumps(context, ensure_ascii=False), schema=JourneyAnalysis)
+    result = normalize_journey_options(result)
     validate_journey(result, context)
     records = {record["id"]: record for record in context["records"]}
     events = []

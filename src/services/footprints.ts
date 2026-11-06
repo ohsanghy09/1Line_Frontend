@@ -92,3 +92,21 @@ export async function getFootprintFile(activityId: string, fileId: string): Prom
         || !Array.isArray(data.versionHistory) || !data.versionHistory.every(item => object(item) && typeof item.fileId === 'string' && typeof item.version === 'string')) throw new Error('자료 상세 응답 형식이 올바르지 않습니다.')
     return { activityId, file: fileView(data.file), events: data.events.map(eventView), versionHistory: data.versionHistory }
 }
+
+async function remove(path: string, confirmation?: string): Promise<void> {
+    const result = await request(path, { method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirmation }) }, undefined, 165_000)
+    if (!object(result) || result.deleted !== true) throw new Error('삭제 결과를 확인하지 못했어요. 새로고침 후 확인해 주세요.')
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('1line:activities-changed'))
+        window.dispatchEvent(new Event('1line:records-changed'))
+    }
+}
+
+export function deleteFootprintActivity(id: string, confirmation: string): Promise<void> {
+    return remove(`/archive/activities/${encodeURIComponent(id)}`, confirmation)
+}
+
+export function deleteFootprintMaterial(activityId: string, fileId: string): Promise<void> {
+    return remove(`/archive/activities/${encodeURIComponent(activityId)}/materials/${encodeURIComponent(fileId)}`)
+}

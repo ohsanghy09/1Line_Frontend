@@ -11,6 +11,7 @@ import { searchArchive } from './archive-search.js'
 import { readJourney, generateJourney } from './journey.js'
 import { createActivityMetadataQueue, readActivityAnalysis } from './activity-metadata.js'
 import { applyActivityChatUpdate, chatUpdateRequest } from './activity-chat-update.js'
+import { deleteActivity, deleteMaterial } from './archive-delete.js'
 
 export function createApp(db, { origin = 'http://localhost:5173', aiBaseUrl, autoActivityAnalysis = false, activityAnalysisOptions = {} } = {}) {
   const app = express()
@@ -98,6 +99,32 @@ export function createApp(db, { origin = 'http://localhost:5173', aiBaseUrl, aut
     const result = readArchiveFile(db, req.params.id, req.params.fileId)
     if (!result) throw fail(404, '이 활동에서 자료를 찾을 수 없습니다.')
     res.json(result)
+  })
+  const deletingRecords = new Set()
+  const checkDeletion = () => {
+    if (db.prepare("SELECT id FROM ai_chat_jobs WHERE status IN ('queued', 'running') LIMIT 1").get()) {
+      throw fail(409, '채팅 분석이 진행 중이에요. 분석이 끝난 뒤 다시 삭제해 주세요.')
+    }
+  }
+  app.delete('/api/archive/activities/:id', (req, res) => {
+    checkDeletion()
+    deleteActivity(db, req.params.id, req.body?.confirmation)
+    activityMetadata.cancelPending(req.params.id)
+    res.json({ deleted: true })
+  })
+  app.delete('/api/archive/activities/:id/materials/:fileId', async (req, res) => {
+    checkDeletion()
+    const detail = readArchiveFile(db, req.params.id, req.params.fileId)
+    if (!detail) throw fail(404, '이 활동에서 자료를 찾을 수 없어요.')
+    const recordId = detail.file.recordId
+    if (deletingRecords.has(recordId)) throw fail(409, '이 기록의 자료를 삭제하고 있어요. 잠시 후 다시 확인해 주세요.')
+    deletingRecords.add(recordId)
+    try {
+      await deleteMaterial(db, req.params.id, req.params.fileId, { aiBaseUrl, syncEvents })
+      activityMetadata.cancelPending(req.params.id)
+      if (autoActivityAnalysis && db.prepare('SELECT id FROM records WHERE activity_id = ? LIMIT 1').get(req.params.id)) activityMetadata.schedule(req.params.id)
+      res.json({ deleted: true })
+    } finally { deletingRecords.delete(recordId) }
   })
 
   app.get('/api/conversations/:id/messages', (req, res) => {
