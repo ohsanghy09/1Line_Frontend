@@ -62,7 +62,7 @@ export default function ActivityReviewModal({ activities, activityId, proposal, 
 
     function submit() {
         setLocalError('')
-        // 변화 없음 카드에서는 연결 활동과 자료 유형만 수정하고 활동 전체 정보는 보내지 않는다.
+        // 카드의 수정 동작에서는 연결 활동과 자료 유형만 보내고 활동 전체 정보는 변경하지 않는다.
         if (classificationOnly) {
             if (!selectedActivity || !type.trim()) { setLocalError('연결할 활동과 자료 유형을 확인해 주세요.'); return }
             onSubmit({ activityId: selectedActivity.id }, type.trim())
