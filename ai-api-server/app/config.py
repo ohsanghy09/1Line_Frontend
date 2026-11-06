@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     openai_model: str | None = None
     openai_timeout_seconds: float = Field(default=45, ge=1, le=120)
     ai_cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    # 상대 경로는 현재 터미널이 아닌 ai-api-server 폴더를 기준으로 해석한다.
+    ai_db_path: Path = Path("../api-server/data/1line.db")
+    ai_db_timeout_seconds: float = Field(default=5, ge=0.1, le=30)
 
     @field_validator("openai_api_key", "openai_model", mode="before")
     @classmethod
@@ -31,6 +34,13 @@ class Settings(BaseSettings):
     @property
     def cors_origins(self) -> list[str]:
         return [origin.strip() for origin in self.ai_cors_origins.split(",") if origin.strip()]
+
+    @property
+    def database_path(self) -> Path:
+        path = self.ai_db_path.expanduser()
+        if not path.is_absolute():
+            path = Path(__file__).resolve().parents[1] / path
+        return path.resolve()
 
 
 @lru_cache

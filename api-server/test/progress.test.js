@@ -17,7 +17,7 @@ test('목 진행 경계값과 시각 역전', () => {
 
 test('비동기 접수·진행·완료·실패·저장 제한', async () => {
   const db = openDatabase(':memory:')
-  const server = createApp(db).listen(0, '127.0.0.1')
+  const server = createApp(db, { testMockAnalysis: true }).listen(0, '127.0.0.1')
   await new Promise(resolve => server.once('listening', resolve))
   const base = `http://127.0.0.1:${server.address().port}/api`
   try {

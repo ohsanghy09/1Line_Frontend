@@ -8,9 +8,12 @@ import { createApp } from '../api-server/src/app.js'
 
 test('프론트 아카이브 서비스 → Vite 프록시 → REST API → SQLite', async t => {
     const db = openDatabase(':memory:')
-    const api = createApp(db).listen(0, '127.0.0.1')
+    const api = createApp(db, { testMockAnalysis: true }).listen(0, '127.0.0.1')
     await new Promise(resolve => api.once('listening', resolve))
-    const vite = await createServer({ server: { host: '127.0.0.1', port: 0, proxy: { '/api': `http://127.0.0.1:${api.address().port}` } } })
+    const vite = await createServer({ server: { host: '127.0.0.1', port: 0, proxy: {
+        '/api': `http://127.0.0.1:${api.address().port}`,
+        '/ai-api': { target: `http://127.0.0.1:${api.address().port}`, rewrite: path => path.replace(/^\/ai-api/, '/api') },
+    } } })
     const originalFetch = globalThis.fetch
     try {
         await vite.listen()

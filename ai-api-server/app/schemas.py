@@ -49,7 +49,21 @@ class AnalysisContext(StrictModel):
 
 class TextAnalysisRequest(StrictModel):
     input: TextInput
-    context: AnalysisContext = Field(default_factory=AnalysisContext)
+    # 생략하면 서버가 공유 DB에서 조회한다. 명시한 context는 독립 분석 검증용이다.
+    context: AnalysisContext | None = None
+
+
+class ContextSelection(StrictModel):
+    activitiesTotal: int
+    activitiesIncluded: int
+    recordsTotal: int
+    recordsIncluded: int
+    truncated: bool
+
+
+class DatabaseContext(StrictModel):
+    context: AnalysisContext
+    selection: ContextSelection
 
 
 class ActivityDecision(StrictModel):
@@ -82,4 +96,7 @@ class TextAnalysisResponse(StrictModel):
     # analysisId는 영속 분석 저장 단계에서 추가한다. 요청 ID를 저장 ID로 사용하지 않는다.
     activityPersisted: Literal[False] = False
     analysisPersisted: Literal[False] = False
+    contextSource: Literal["database", "request"]
+    # DB의 일부만 문맥으로 사용했다면 전체를 비교한 것으로 표시하지 않는다.
+    contextSelection: ContextSelection | None = None
     analysis: TextAnalysis

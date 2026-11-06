@@ -32,6 +32,12 @@ export function openDatabase(path) {
       id TEXT PRIMARY KEY, analysis_id TEXT NOT NULL UNIQUE REFERENCES analyses(id),
       started_at INTEGER NOT NULL, error TEXT
     );
+    CREATE TABLE IF NOT EXISTS ai_chat_jobs (
+      id TEXT PRIMARY KEY, request_key TEXT NOT NULL UNIQUE, fingerprint TEXT NOT NULL,
+      analysis_id TEXT NOT NULL UNIQUE REFERENCES analyses(id), kind TEXT NOT NULL,
+      status TEXT NOT NULL, phase TEXT NOT NULL, error TEXT, input_json TEXT NOT NULL,
+      created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+    );
   `)
   // 기존 DB의 활동·기록·원본을 보존하며 상세 메타정보 자리만 추가한다.
   const activityColumns = new Set(db.prepare('PRAGMA table_info(activities)').all().map(column => column.name))

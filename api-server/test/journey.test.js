@@ -7,7 +7,7 @@ import { journeySchema } from '../src/journey.js'
 
 test('Journey HTTP 조회는 독립된 목 응답을 반환하고 기존 DB를 변경하지 않는다', async () => {
   const db = openDatabase(':memory:')
-  const server = createApp(db).listen(0, '127.0.0.1')
+  const server = createApp(db, { testMockAnalysis: true }).listen(0, '127.0.0.1')
   try {
     await new Promise(resolve => server.once('listening', resolve))
     const snapshot = () => ['activities', 'analyses', 'records', 'files', 'timeline_events', 'analysis_jobs']

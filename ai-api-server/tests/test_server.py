@@ -1,6 +1,7 @@
 """외부 호출 없이 설정 상태·비밀값 비노출·API 문서·CORS를 검증한다."""
 
 import unittest
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
@@ -11,7 +12,8 @@ from app.main import create_app
 def settings(**values: object) -> Settings:
     # 사용자 .env나 OS의 실제 키를 테스트에 사용하지 않는다.
     defaults = dict(openai_api_key=None, openai_model=None,
-                    ai_cors_origins="http://localhost:5173")
+                    ai_cors_origins="http://localhost:5173",
+                    ai_db_path=Path(__file__).parent / "unittest-missing.db")
     return Settings(_env_file=None, **(defaults | values))
 
 
@@ -46,7 +48,7 @@ class ServerTests(unittest.TestCase):
             self.assertEqual(client.get("/docs").status_code, 200)
             schema = client.get("/openapi.json").json()
             self.assertIn("/api/health", schema["paths"])
-            self.assertNotIn("/api/chat", schema["paths"])
+            self.assertIn("/api/chat", schema["paths"])
 
     def test_cors_allows_only_configured_origin(self):
         with TestClient(create_app(settings())) as client:

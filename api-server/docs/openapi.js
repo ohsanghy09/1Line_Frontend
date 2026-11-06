@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { readFileSync } from 'node:fs'
 import { activityMetadata, archiveQuerySchema, editSchema, linkSchema, replySchema, saveSchema } from '../src/validation.js'
 import { journeySchema } from '../src/journey.js'
 import { createMockReply, createMockLinkReply } from '../src/mock-reply.js'
@@ -119,7 +120,7 @@ export const backendSpec = {
 const materialContext = obj({ id: str(), recordId: str(), activityId: str(), name: str(), materialType: str(), content: str(), sourceUrl: str() }, ['id', 'recordId', 'activityId', 'name'])
 const recordContext = obj({ id: str(), activityId: str(), message: str(), summary: str(), materials: arr(ref('MaterialContext')) }, ['id', 'activityId'])
 const activityContext = obj({ id: str(), name: str(), ...metadata.properties }, ['id', 'name'])
-export const aiSpec = {
+const aiContractDraft = {
   openapi: '3.1.0',
   info: { title: '1Line AI 입력·출력 · 모델 미정', version: '0.1.0-draft', description: 'AI 모델·공급자·주소·인증·호출 주체는 미정입니다. 기존 AI_API_계약.md의 값과 현재 화면용 결과를 그대로 문서화합니다. 아래 Schemas에서 요청·응답을 확인하세요. 미구현 경로를 만들어 확정 API처럼 표시하지 않으므로 실행할 operation은 없습니다. HomeAnalysisRequest·GrowthAnalysisRequest는 기존 요청 제안, ChatReply·Journey는 현재 화면용 응답입니다. 파일 내용 전달·문맥·분류 등 기존 미확정 항목은 그대로 남깁니다.' },
   paths: {},
@@ -130,4 +131,23 @@ export const aiSpec = {
     ActivityContext: activityContext, RecordContext: recordContext, MaterialContext: materialContext,
     ChatReply: schemas.ChatReply, Journey: schemas.Journey,
   } },
+}
+
+// 실제 FastAPI 스키마 스냅샷을 사용한다. 생성은 ai-api-server/scripts/export_openapi.py.
+const liveAiSpec = JSON.parse(readFileSync(new URL('./ai-openapi.json', import.meta.url), 'utf8'))
+export const aiSpec = {
+  ...liveAiSpec,
+  info: { ...liveAiSpec.info, title: '1Line AI API · FastAPI / OpenAI',
+    description: '홈 텍스트·파일·링크의 실제 분석과 초안·원본 보관 API입니다. 신규 활동 생성은 AI 서버, 기록 확정 저장은 백엔드가 담당합니다. 분석 프롬프트는 ai-api-server/app/prompts/home.md입니다. GrowthAnalysisRequest·Journey는 후속 성장 분석 계약이며 현재 홈 실행 API와 구분합니다.' },
+  components: { schemas: { ...aiContractDraft.components.schemas, ...liveAiSpec.components.schemas } },
+}
+backendSpec.info.description = '기록·자료 저장·수정·조회 API입니다. 실제 홈 분석은 FastAPI에서 처리합니다. 이전 백엔드 분석 접수는 기본 410이며 테스트 전용 합성 입력에서만 활성화됩니다. Growth Journey는 별도 후속 범위입니다.'
+backendSpec.paths['/api/health'].get.responses[200].content['application/json'].schema.properties.analysisProvider = { const: 'external' }
+schemas.ChatReply.description = '실제 홈 카드 응답과 저장 검증 구조. 생성 완료된 신규 활동도 실제 ID와 match=existing으로 반환합니다. new/unresolved 후보는 ID가 없습니다.'
+for (const route of ['/api/chat', '/api/chat/links']) {
+  const operation = backendSpec.paths[route].post
+  operation.deprecated = true
+  operation.summary = '이전 분석 접수 — FastAPI로 이관'
+  operation.description = '실제 개발 서버에서는 410을 반환합니다. AI 문서의 같은 경로를 사용하세요. 이전 목 계약은 회귀 테스트 전용입니다.'
+  operation.responses = { 410: response(ref('Error'), '분석 접수는 FastAPI로 이관') }
 }

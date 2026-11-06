@@ -1,7 +1,6 @@
 import type { ActivityProposal, ChatProgress, ChatReply, ChatServiceStatus } from '../types/chat'
 
-// Home은 이 서비스로 로컬 REST API를 호출한다. 분석은 서버의 목 응답이다.
-// 실제 AI 연결 시 서버에서 화면용 ChatReply로 변환하며 화면의 호출 구조는 유지한다.
+// 홈 분석은 FastAPI, 기록 저장·조회는 기존 백엔드로 요청한다.
 type ChatRequestOptions = { conversationId?: string; signal?: AbortSignal; onProgress?: (progress: ChatProgress) => void; onJobStarted?: (jobId: string) => void }
 
 export function isHttpUrl(value: string): boolean {
@@ -15,9 +14,9 @@ export async function getLinkReply(url: string, options: ChatRequestOptions = {}
     options.signal?.throwIfAborted()
     const sourceUrl = url.trim()
     if (!isHttpUrl(sourceUrl)) throw new Error('HTTP 또는 HTTPS 링크를 입력해 주세요.')
-    const data = await request('/chat/links', {
+    const data = await aiRequest('/chat/links', {
         method: 'POST', signal: options.signal, headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: sourceUrl, conversationId: options.conversationId }),
+        body: JSON.stringify({ url: sourceUrl, conversationId: options.conversationId, requestId: crypto.randomUUID() }),
     })
     return resolveChatReply(data, options)
 }
@@ -29,16 +28,19 @@ export async function getChatReply(message: string, files: File[] = [], options:
     // multipart 경계와 Content-Type은 브라우저가 설정한다.
     const body = new FormData()
     body.set('message', message)
+    body.set('requestId', crypto.randomUUID())
     if (options.conversationId) body.set('conversationId', options.conversationId)
     files.forEach(file => body.append('files', file))
-    const data = await request('/chat', { method: 'POST', body, signal: options.signal, headers: files.length ? { Prefer: 'respond-async' } : undefined })
+    const data = await aiRequest('/chat', { method: 'POST', body, signal: options.signal,
+        headers: files.length ? { Prefer: 'respond-async' } : undefined })
     return resolveChatReply(data, options)
 }
 
 // 재진입 시 파일을 재전송하지 않고 기존 작업만 조회한다.
 export async function resumeChatReply(jobId: string, options: ChatRequestOptions = {}): Promise<ChatReply> {
     options.signal?.throwIfAborted()
-    const data = await request(`/chat/jobs/${encodeURIComponent(jobId)}`, { signal: options.signal })
+    // 기존 세션에 남아 있는 이전 백엔드 작업은 그 서버에서만 조회한다.
+    const data = await (jobId.startsWith('ai-') ? aiRequest : request)(`/chat/jobs/${encodeURIComponent(jobId)}`, { signal: options.signal })
     if (!isObject(data) || data.jobId !== jobId) throw new Error('진행 응답의 작업 ID가 일치하지 않습니다.')
     return resolveChatReply(data, options)
 }
@@ -49,18 +51,21 @@ async function resolveChatReply(initial: unknown, options: ChatRequestOptions): 
         const jobId = data.jobId
         options.onJobStarted?.(jobId)
         // 개별 HTTP 제한과 별개로 전체 폴링도 제한하며 초기화 시 대기까지 취소한다.
-        const timeout = AbortSignal.timeout(30_000)
+        const timeout = AbortSignal.timeout(120_000)
         const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout
         try {
             while (true) {
                 signal.throwIfAborted()
                 if (!isObject(data) || data.jobId !== jobId) throw new Error('진행 응답 형식이 올바르지 않습니다.')
-                if (data.status === 'failed') throw new Error(typeof data.error === 'string' ? data.error : '파일 분석을 완료하지 못했어요.')
+                if (data.status === 'failed') throw Object.assign(
+                    new Error(typeof data.error === 'string' ? data.error : '분석을 완료하지 못했어요.'),
+                    { terminalChatJob: true, jobId, code: typeof data.code === 'string' ? data.code : undefined },
+                )
                 if (data.status === 'completed') { data = data.result; break }
                 if (data.status !== 'running' || !isProgress(data.progress)) throw new Error('진행 응답 형식이 올바르지 않습니다.')
                 options.onProgress?.(data.progress)
                 await waitForPoll(signal)
-                data = await request(`/chat/jobs/${encodeURIComponent(jobId)}`, { signal })
+                data = await (jobId.startsWith('ai-') ? aiRequest : request)(`/chat/jobs/${encodeURIComponent(jobId)}`, { signal })
             }
         } catch (error) {
             if (timeout.aborted && !options.signal?.aborted) throw new Error('진행 상태 확인 시간이 초과됐어요. 서버에는 작업이 보관되어 있습니다.')
@@ -85,20 +90,25 @@ function waitForPoll(signal: AbortSignal): Promise<void> {
     })
 }
 
-// 로컬 서버 상태를 조회한다. 실제 AI API의 가용성을 의미하지 않는다.
+// 키·모델·DB 설정 상태를 조회한다. 이 요청 자체는 모델을 호출하지 않는다.
 export async function getChatServiceStatus(): Promise<ChatServiceStatus> {
-    const data = await request('/health')
+    const data = await aiRequest('/chat/health')
     if (!isObject(data) || !['ready', 'unavailable'].includes(String(data.status)) || typeof data.label !== 'string') throw new Error('상태 응답 형식이 올바르지 않습니다.')
     return { status: data.status as ChatServiceStatus['status'], label: data.label }
 }
 
 // 기본 /api는 Vite 프록시를 사용한다. 배포 환경에서는 API 기본 주소를 지정한다.
 const apiBase = (import.meta.env?.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
+const aiBase = (import.meta.env?.VITE_AI_API_BASE_URL || '/ai-api').replace(/\/$/, '')
 
-export async function request(path: string, init: RequestInit = {}): Promise<unknown> {
+function aiRequest(path: string, init: RequestInit = {}): Promise<unknown> {
+    return request(path, init, aiBase)
+}
+
+export async function request(path: string, init: RequestInit = {}, base = apiBase): Promise<unknown> {
     const timeout = AbortSignal.timeout(30_000)
     try {
-        const response = await fetch(`${apiBase}${path}`, { ...init, signal: init.signal ? AbortSignal.any([init.signal, timeout]) : timeout })
+        const response = await fetch(`${base}${path}`, { ...init, signal: init.signal ? AbortSignal.any([init.signal, timeout]) : timeout })
         const data: unknown = await response.json().catch(() => null)
         if (!response.ok) throw Object.assign(new Error(isObject(data) && typeof data.error === 'string' ? data.error : '서버 요청을 처리하지 못했어요. API 서버 실행 상태를 확인해 주세요.'), { status: response.status })
         return data
@@ -112,6 +122,11 @@ export async function request(path: string, init: RequestInit = {}): Promise<unk
 
 function isObject(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null
+}
+
+// 확정 실패는 재조회해도 성공으로 바뀌지 않는다. 통신 실패·시간 초과와 구분한다.
+export function isTerminalChatFailure(error: unknown): boolean {
+    return isObject(error) && error.terminalChatJob === true
 }
 
 // 외부 JSON은 타입 선언과 별개로 카드에서 사용하는 필드를 확인한다.

@@ -12,7 +12,7 @@ import { readHomeRecent } from './home.js'
 import { searchArchive } from './archive-search.js'
 import { readJourney } from './journey.js'
 
-export function createApp(db, { origin = 'http://localhost:5173' } = {}) {
+export function createApp(db, { origin = 'http://localhost:5173', testMockAnalysis = false } = {}) {
   const app = express()
   app.use(cors({ origin }))
   app.use(express.json({ limit: '1mb' }))
@@ -34,7 +34,12 @@ export function createApp(db, { origin = 'http://localhost:5173' } = {}) {
     for (const change of reply.analysis.changes) db.prepare('INSERT INTO timeline_events VALUES (?, ?, ?, 0, ?)').run(randomUUID(), id, JSON.stringify(change), now)
   }
 
-  app.get('/api/health', (_req, res) => res.json({ status: 'ready', label: '기록 정리 준비됨', analysisProvider: 'mock' }))
+  app.get('/api/health', (_req, res) => res.json({ status: 'ready', label: '기록 저장·조회 준비됨', analysisProvider: testMockAnalysis ? 'mock' : 'external' }))
+  // 기존 저장 회귀 검사의 합성 입력 전용이다. 실제 개발 서버에는 목 분석 접수를 열지 않는다.
+  app.post(['/api/chat', '/api/chat/links'], (_req, res, next) => {
+    if (testMockAnalysis) return next()
+    res.status(410).json({ error: '분석 요청은 FastAPI AI 서버로 전송해 주세요.' })
+  })
   app.get('/api/activities', (_req, res) => res.json(analysisContext(db).activities))
   app.get('/api/home/recent', (_req, res) => res.json(readHomeRecent(db)))
   // HTTP 연결을 위한 목 분석 조회. 실제 AI·DB 성장 분석은 후속 단계다.
@@ -106,7 +111,8 @@ export function createApp(db, { origin = 'http://localhost:5173' } = {}) {
     } })
   })
   app.get('/api/conversations/:id/messages', (req, res) => {
-    const rows = db.prepare('SELECT * FROM analyses WHERE conversation_id = ? ORDER BY created_at, rowid').all(req.params.id)
+    const rows = db.prepare(`SELECT * FROM analyses WHERE conversation_id = ? AND NOT EXISTS
+      (SELECT 1 FROM ai_chat_jobs WHERE analysis_id = analyses.id AND status != 'completed') ORDER BY created_at, rowid`).all(req.params.id)
     res.json(rows.map(row => ({ analysisId: row.id, message: row.message, reply: JSON.parse(row.reply), createdAt: row.created_at, attachments: db.prepare('SELECT id, name, size FROM files WHERE analysis_id = ?').all(row.id) })))
   })
   app.get('/api/files/:id', (req, res) => {
@@ -124,6 +130,8 @@ export function createApp(db, { origin = 'http://localhost:5173' } = {}) {
     if (input.analysisId) {
       const draft = db.prepare('SELECT * FROM analyses WHERE id = ?').get(input.analysisId)
       if (!draft) throw fail(404, '분석 초안을 찾을 수 없습니다.')
+      const aiJob = db.prepare('SELECT status FROM ai_chat_jobs WHERE analysis_id = ?').get(input.analysisId)
+      if (aiJob && aiJob.status !== 'completed') throw fail(409, '실제 AI 분석이 완료된 뒤 기록해 주세요.')
       const job = db.prepare('SELECT * FROM analysis_jobs WHERE analysis_id = ?').get(input.analysisId)
       if (job && (job.error || jobProgress(job.started_at).status !== 'completed')) throw fail(409, '분석이 완료된 뒤 기록해 주세요.')
       if (db.prepare('SELECT id FROM records WHERE analysis_id = ?').get(input.analysisId)) throw fail(409, '이미 기록한 분석입니다.')

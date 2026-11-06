@@ -1,5 +1,9 @@
 # AI API 요청·응답 계약
 
+최신 홈 계약: 실제 실행은 FastAPI POST `/api/chat`(multipart), POST `/api/chat/links`(JSON), GET `/api/chat/jobs/{job_id}`다. 작업 ID를 반환하고 실제 모델 결과를 카드·DB 초안으로 변환한다. 신규 활동 생성·원본 보관도 연결했다. [홈 실제 AI 연동 명세](../../../ai-api-server/docs/홈_실제_AI_연동.md)를 우선하며 Swagger는 FastAPI에서 내보낸 ai-openapi.json을 사용한다. `/api/analyze/text`는 저장 없는 독립 진단 API다. 아래의 전체 화면용 요구사항과 과거 미구현 기록은 현재 홈 계약과 구분한다.
+
+최신 DB 연결: FastAPI가 백엔드와 같은 SQLite를 직접 조회한다. `/api/analyze/text`는 context 생략/null이면 DB의 활동·확정 기록을 사용하고, `/api/context`는 모델 호출 없이 해당 문맥과 포함 범위를 반환한다. [DB 연결 계약](../../../ai-api-server/docs/DB_직접_연결.md)을 참고한다. 신규 활동·분석 저장은 아직 미구현이며 아래의 ‘DB 조회 없음’은 이전 텍스트 연결 시점 기록이다.
+
 작성일: 2026-11-05. 상태: 화면용 요구사항과 요청 초안. [호출 구조·협의사항](문서_안내.md)을 먼저 읽는다.
 
 2026-11-06 실제 개발 구현: FastAPI `POST /api/analyze/text`에서 OpenAI `gpt-5.6-sol` 텍스트 분석을 연결하고 실제 호출 1회를 확인했다. 현재 개발 요청·응답·오류는 [텍스트 분석 API](../../../ai-api-server/docs/텍스트_분석_API.md)를 따른다. 요청 문맥만 분석하며 DB 조회·신규 활동 생성·영속 분석 ID·프론트 연결은 아직 없다. 아래 전체 홈 분석 계약과 `ChatReply`는 후속 연결 요구사항이며 현재 FastAPI 응답과 구분한다. 기존 정적 Swagger는 아직 이 엔드포인트를 반영하지 않았고 FastAPI `/docs`·`/openapi.json`에서 현재 명세를 제공한다.

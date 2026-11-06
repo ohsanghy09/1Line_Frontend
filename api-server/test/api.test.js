@@ -10,7 +10,7 @@ test('원본·대화 보관, 기록·중복 방지·수정·Timeline·DB 재시�
   const dir = mkdtempSync(join(tmpdir(), '1line-api-test-'))
   const path = join(dir, 'test.db')
   let db = openDatabase(path)
-  const server = createApp(db).listen(0, '127.0.0.1')
+  const server = createApp(db, { testMockAnalysis: true }).listen(0, '127.0.0.1')
   await new Promise(resolve => server.once('listening', resolve))
   const base = `http://127.0.0.1:${server.address().port}/api`
   const json = (method, body) => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })

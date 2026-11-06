@@ -10,7 +10,7 @@ import { createMockLinkReply } from '../src/mock-reply.js'
 
 test('아카이브는 확정한 실제 자료만 집계하고 분류·활동·변화 수정과 함께 갱신한다', async () => {
   const db = openDatabase(':memory:')
-  const server = createApp(db).listen(0, '127.0.0.1')
+  const server = createApp(db, { testMockAnalysis: true }).listen(0, '127.0.0.1')
   await new Promise(resolve => server.once('listening', resolve))
   const base = `http://127.0.0.1:${server.address().port}/api`
   const get = async path => (await fetch(base + path)).json()

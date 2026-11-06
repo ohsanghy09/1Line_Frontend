@@ -100,6 +100,8 @@ class AnalysisRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.json()["activityPersisted"])
         self.assertFalse(response.json()["analysisPersisted"])
+        self.assertEqual(response.json()["contextSource"], "request")
+        self.assertIsNone(response.json()["contextSelection"])
         self.assertNotIn("analysisId", response.json())
         self.assertNotIn("test-secret", response.text)
 

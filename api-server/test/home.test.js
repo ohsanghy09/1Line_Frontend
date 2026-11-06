@@ -6,7 +6,7 @@ import { createMockReply } from '../src/mock-reply.js'
 
 test('홈 최근 활동·자료는 서로 다른 시간 기준과 실제 ID를 사용한다', async () => {
   const db = openDatabase(':memory:')
-  const server = createApp(db).listen(0, '127.0.0.1')
+  const server = createApp(db, { testMockAnalysis: true }).listen(0, '127.0.0.1')
   await new Promise(resolve => server.once('listening', resolve))
   const base = `http://127.0.0.1:${server.address().port}/api`
   const get = async path => {

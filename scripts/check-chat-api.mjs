@@ -7,9 +7,9 @@ import { createApp } from '../api-server/src/app.js'
 
 // 프론트 서비스를 그대로 변환해 Vite 프록시 → 실제 API → SQLite까지 확인한다.
 const db = openDatabase(':memory:')
-const api = createApp(db).listen(0, '127.0.0.1')
+const api = createApp(db, { testMockAnalysis: true }).listen(0, '127.0.0.1')
 await new Promise(resolve => api.once('listening', resolve))
-const vite = await createServer({ server: { host: '127.0.0.1', port: 0, proxy: { '/api': `http://127.0.0.1:${api.address().port}` } } })
+const vite = await createServer({ server: { host: '127.0.0.1', port: 0, proxy: { '/api': `http://127.0.0.1:${api.address().port}`, '/ai-api': { target: `http://127.0.0.1:${api.address().port}`, rewrite: path => path.replace(/^\/ai-api/, '/api').replace('/chat/health', '/health') } } } })
 const originalFetch = globalThis.fetch
 try {
     await vite.listen()

@@ -16,7 +16,7 @@ test('백엔드 명세는 현재 API의 모든 경로·메서드를 포함한다
   assert.deepEqual(documented, actual)
 })
 
-test('각 명세의 참조·필수 경로값이 유효하고 AI 실행 경로는 확정하지 않는다', () => {
+test('각 명세의 참조·필수 경로값과 실제 AI 실행 경로가 유효하다', () => {
   for (const spec of [backendSpec, aiSpec]) {
     function visit(value) {
       if (!value || typeof value !== 'object') return
@@ -36,8 +36,10 @@ test('각 명세의 참조·필수 경로값이 유효하고 AI 실행 경로는
       }
     }
   }
-  assert.deepEqual(aiSpec.paths, {})
-  assert.equal(aiSpec.servers, undefined)
+  assert.ok(aiSpec.paths['/api/chat'].post)
+  assert.ok(aiSpec.paths['/api/chat/links'].post)
+  assert.ok(aiSpec.paths['/api/chat/jobs/{job_id}'].get)
+  assert.equal(aiSpec.servers[0].url, 'http://127.0.0.1:8000')
 })
 
 test('문서 예시는 기존 분석·Journey 검증과 생성 JSON Schema를 만족한다', () => {

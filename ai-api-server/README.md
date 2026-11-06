@@ -1,8 +1,10 @@
 # AI API 개발 서버
 
-프로젝트 최상위 `api-server/`와 같은 위치에서 관리하는 Python·FastAPI 기반 AI 개발 서버 영역이다. 실제 OpenAI API를 사용하여 입력 분석과 활동 매칭·신규 활동 생성을 구현할 예정이다.
+다음 작업 진입점: [현재 작업 인수인계](../docs/integration/현재_작업_인수인계.md). 실제 화면 시나리오 확인 단계이며 연결 오류·재전송 수정과 바탕화면 자료 위치를 포함한다.
 
-현재 기본 서버·상태 확인 API와 실제 OpenAI 텍스트 분석 API를 구현했다. Python 3.15.2에서 `gpt-5.6-sol` 실제 호출을 확인했다. 활동·분석 DB 저장과 프론트 연동은 후속 작업이다.
+프로젝트 최상위 `api-server/`와 같은 위치에서 관리하는 Python·FastAPI 기반 AI 개발 서버다. 실제 OpenAI API를 사용하여 입력 분석과 활동 매칭·신규 활동 생성을 수행한다.
+
+현재 홈의 텍스트·파일·다중 파일·링크를 실제 OpenAI 분석으로 전환했고 신규 활동 생성·분석 초안·원본 보관·백엔드 기록 저장까지 연결했다. 최신 동작과 실행·검증은 [홈 실제 AI 연동](docs/홈_실제_AI_연동.md)을 먼저 읽는다. 아래 `/api/analyze/text`는 저장하지 않는 별도 분석 진단 API다.
 
 ## 설치와 실행 — Windows PowerShell
 
@@ -30,20 +32,29 @@ Copy-Item .env.example .env
 | OPENAI_MODEL | 예시는 비어 있음. 현재 선택한 모델 ID는 `gpt-5.6-sol` |
 | OPENAI_TIMEOUT_SECONDS | 45초. 1~120초 설정 가능, 자동 재시도 없음 |
 | AI_CORS_ORIGINS | `http://localhost:5173,http://127.0.0.1:5173`. 허용 프론트 주소를 쉼표로 구분 |
+| AI_DB_PATH | `../api-server/data/1line.db`. 상대 경로는 AI 서버 폴더 기준이며 백엔드가 사용하는 파일과 같아야 함 |
+| AI_DB_TIMEOUT_SECONDS | 5초. SQLite 잠금 대기 시간, 0.1~30초 |
+
+기본 DB 경로라면 `.env`에 DB 설정을 추가하지 않아도 된다. 다른 DB를 사용하는 경우 백엔드 `DB_PATH`와 AI 서버 `AI_DB_PATH`가 같은 실제 파일을 가리키도록 맞춘다. DB 생성·스키마 마이그레이션은 백엔드가 담당하므로, 처음 구성한 PC에서는 프로젝트 루트에서 `npm.cmd --prefix api-server run dev`를 먼저 실행한다. AI 서버는 없는 파일에 빈 DB를 생성하지 않는다.
 
 서버를 실행한다. 가상환경 활성화나 PowerShell 실행 정책 변경은 필요 없다.
 
 ```powershell
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+.\dev.cmd
 ```
 
-중지는 `Ctrl+C`다. 8000번 포트가 사용 중이면 `--port`로 다른 포트를 지정한다. 기존 백엔드(3001)·문서 서버(3002)와 분리했다. 프론트 요청 경로·프록시는 이번에 변경하지 않았다.
+[dev.cmd](dev.cmd)는 AI 서버 폴더로 이동한 뒤 가상환경의 Uvicorn을 실행한다. 기본 주소는 127.0.0.1:8000이며 app 폴더의 코드 변경 시 자동 재시작한다. 가상환경이 없으면 생성·설치 명령을 안내한다. 추가 Uvicorn 인자도 전달할 수 있다(예: `.\dev.cmd --help`). `.env` 설정을 변경하면 서버를 직접 재시작한다.
+
+중지는 `Ctrl+C`다. 기본 프론트 프록시는 AI 8000, 백엔드 3001을 사용한다. 포트를 바꾸면 Vite 프록시나 VITE_AI_API_BASE_URL도 맞춘다. 백엔드를 재시작하여 ai_chat_jobs 스키마를 준비한 후 AI와 프론트를 실행한다.
 
 - 상태 확인: http://127.0.0.1:8000/api/health
+- DB 활동·기록 문맥 확인: http://127.0.0.1:8000/api/context (OpenAI 호출 없음)
 - Swagger UI: http://127.0.0.1:8000/docs
 - OpenAPI JSON: http://127.0.0.1:8000/openapi.json
 
-Swagger UI의 브라우저 렌더링은 외부 CDN 리소스 접근이 필요하다. `/openapi.json`은 서버 자체에서 제공한다. 기존 프론트 `/swagger/` 정적 문서는 아직 AI 서버 명세와 연결하지 않았다.
+연결 오류 진단: http://127.0.0.1:8000/api/chat/health?checkConnection=true . 실행 중인 AI 서버가 OpenAI에 HTTPS로 도달하는지만 검사하며 키를 전송하거나 모델을 호출하지 않는다. 키 없는 요청이므로 httpStatus 401도 connectionStatus=reachable이면 정상적인 네트워크 도달이다. 기본 ‘AI 분석 설정 준비됨’은 설정·DB 검사 결과이며 실제 모델 호출 성공 보장이 아니다. 자세한 오류와 재전송은 [연동 문서](docs/홈_실제_AI_연동.md)의 연결 오류 진단을 따른다.
+
+Swagger UI의 브라우저 렌더링은 외부 CDN 리소스 접근이 필요하다. `/openapi.json`은 서버 자체에서 제공한다. 프론트 `/swagger/`는 FastAPI 명세 스냅샷을 포함한다. 갱신 방법은 최신 연동 문서를 따른다.
 
 ## 상태 확인 응답
 
@@ -51,6 +62,7 @@ Swagger UI의 브라우저 렌더링은 외부 CDN 리소스 접근이 필요하
 {
   "status": "ok",
   "service": "ai-api-server",
+  "database": { "status": "connected", "code": null },
   "openai": {
     "apiKeyConfigured": false,
     "modelConfigured": false,
@@ -61,21 +73,19 @@ Swagger UI의 브라우저 렌더링은 외부 CDN 리소스 접근이 필요하
 
 `status: ok`는 서버가 요청에 응답한다는 의미다. 키·모델이 없어도 200으로 응답한다. 설정 여부는 값 존재만 확인하며 키 유효성·모델 사용 가능 여부·실제 OpenAI 연결 성공을 보장하지 않는다. 상태 확인은 외부 요청이나 비용을 발생시키지 않고, 이전 분석의 연결 성공 상태도 보관하지 않는다.
 
+database.status는 실제 연결·스키마 검사 결과다. DB가 없거나 접근하지 못하면 `unavailable`과 오류 코드를 반환한다. 이 경우에도 서버 자체 상태 확인은 200이며 DB 문맥 조회·DB 기반 분석은 503으로 실패한다.
+
 ## 실제 텍스트 분석
 
 Swagger의 `POST /api/analyze/text`에서 아래 JSON을 실행한다. 실제 OpenAI 요청이 발생한다. 프론트 홈은 아직 이 API에 연결하지 않았다.
 
 ```json
 {
-  "input": { "kind": "text", "message": "1호선톤 회의록을 정리했습니다. 별도의 기획 변경은 없었습니다." },
-  "context": {
-    "activities": [{ "id": "example-activity-1", "name": "1호선톤" }],
-    "records": []
-  }
+  "input": { "kind": "text", "message": "1호선톤 회의록을 정리했습니다. 별도의 기획 변경은 없었습니다." }
 }
 ```
 
-`context`는 생략할 수 있다. 이번 단계는 요청에 제공한 개발용 문맥만 분석하며 DB에서 실제 활동을 조회하지 않는다. 응답은 `requestId`, `analysisProvider`, `model`, `activityPersisted: false`, `analysisPersisted: false`, `analysis`다. 신규 활동 판단이 나와도 DB 생성은 아직 하지 않으며, `requestId`를 백엔드 저장용 `analysisId`로 사용하면 안 된다.
+`context` 생략/null이면 DB의 활동·확정 기록을 조회한다. 명시적으로 context를 전달하면 이전 합성 입력 검증처럼 요청 문맥만 사용한다. 응답의 contextSource는 database/request이며 DB 조회 개수·일부 조회 여부는 contextSelection으로 확인한다. 신규 활동 판단이 나와도 이번 단계에서는 생성하지 않고 activityPersisted/analysisPersisted는 false다. requestId를 백엔드 저장용 analysisId로 사용하면 안 된다.
 
 상세 요청·응답·오류와 검증 범위는 [텍스트 분석 API](docs/텍스트_분석_API.md)에 정리했다.
 
@@ -100,6 +110,6 @@ AI 서버 폴더에서 실행한다.
 
 1. [AI 서버 작업 계획](docs/작업_계획.md)을 읽는다.
 2. [전체 연동 작업 계획](../docs/integration/개발서버_분리_연동_작업계획.md)과 기존 백엔드·AI 계약을 대조한다.
-3. 기본 서버와 실제 텍스트 분석 연결은 완료했다. 다음은 활동 DB 연결·분석 보관 → 백엔드·프론트 연동 순서로 진행한다.
+3. 홈 실제 연동은 검증했다. 다음은 실제 브라우저 조작과 지원 문서 형식별 품질 확인이며 Growth Journey 실제 분석은 별도 단계다.
 
-API 키는 서버 환경변수로 관리한다. 키를 프론트·문서·저장소에 포함하지 않는다. 모델과 DB 연결 상세는 구현 전 확인하며 기존 사용자 DB는 보존한다.
+API 키는 서버 환경변수로 관리한다. 키를 프론트·문서·저장소에 포함하지 않는다. 현재 모델은 gpt-5.6-sol, DB는 백엔드와 같은 로컬 SQLite다. AI는 신규 활동·분석 초안과 원본을 보관하고 기록 확정 저장은 사용자 버튼에서 백엔드에 요청한다.

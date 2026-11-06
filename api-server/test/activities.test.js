@@ -11,7 +11,7 @@ const proposed = { name: '새로운 컴퓨터비전 연구', category: '프로�
 
 async function withServer(work) {
   const db = openDatabase(':memory:')
-  const server = createApp(db).listen(0, '127.0.0.1')
+  const server = createApp(db, { testMockAnalysis: true }).listen(0, '127.0.0.1')
   await new Promise(resolve => server.once('listening', resolve))
   const base = `http://127.0.0.1:${server.address().port}/api`
   const send = async (path, body, method = 'POST') => {

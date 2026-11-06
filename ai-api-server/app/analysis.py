@@ -8,6 +8,7 @@ from pydantic import ValidationError
 
 from .config import Settings
 from .schemas import TextAnalysis, TextAnalysisRequest
+from .network import connection_issue
 
 INSTRUCTIONS = """
 당신은 사용자의 경험을 정리하는 Growth Archive 분석기입니다. 한국어로 분석하세요.
@@ -23,6 +24,37 @@ changes는 명확한 Before/After와 의미 있는 변화 근거가 있을 때�
 evidence의 각 항목은 입력 또는 연결 활동 기록의 message/summary에서 연속된 원문을 그대로 인용하세요.
 다른 활동의 과거 기록을 변화 근거로 사용하지 마세요. 실제 분석 근거가 부족하면 changes=[]입니다.
 """.strip()
+
+
+async def structured_response(config: Settings, *, instructions: str, input, schema):
+    """홈·성장 분석에서도 같은 인증·출력·실패 검증 경계를 재사용한다."""
+    if not config.openai_api_key or not config.openai_model:
+        raise AnalysisError(503, "not_configured", "서버의 OpenAI 키와 모델 설정을 확인해 주세요.")
+    try:
+        async with AsyncOpenAI(api_key=config.openai_api_key.get_secret_value(),
+                               timeout=config.openai_timeout_seconds, max_retries=0) as client:
+            response = await client.responses.parse(
+                model=config.openai_model, instructions=instructions, input=input,
+                text_format=schema, reasoning={"effort": "low"}, max_output_tokens=8192, store=False)
+    except APITimeoutError:
+        raise AnalysisError(504, "openai_timeout", "분석 응답 시간이 초과됐어요. 다시 시도해 주세요.") from None
+    except AuthenticationError:
+        raise AnalysisError(502, "openai_authentication", "서버의 OpenAI 인증 설정을 확인해 주세요.") from None
+    except RateLimitError:
+        raise AnalysisError(429, "openai_rate_limit", "OpenAI 사용 한도 또는 요청 제한을 확인해 주세요.") from None
+    except APIConnectionError as error:
+        code, message = connection_issue(error)
+        raise AnalysisError(502, code, message) from None
+    except APIStatusError:
+        raise AnalysisError(502, "openai_request_failed", "OpenAI 요청에 실패했어요. 모델·권한·입력 형식을 확인해 주세요.") from None
+    except (APIResponseValidationError, ValidationError, ValueError):
+        raise AnalysisError(502, "invalid_analysis", "분석 응답 형식을 확인하지 못했어요.") from None
+    if any(getattr(part, "type", None) == "refusal"
+           for item in response.output for part in getattr(item, "content", [])):
+        raise AnalysisError(422, "analysis_refused", "이 입력에 대한 분석 결과를 제공할 수 없어요.")
+    if response.status != "completed" or not isinstance(response.output_parsed, schema):
+        raise AnalysisError(502, "analysis_incomplete", "분석 응답이 완료되지 않았어요.")
+    return response.output_parsed
 
 
 class AnalysisError(Exception):
@@ -58,6 +90,8 @@ def validate_analysis(result: TextAnalysis, payload: TextAnalysisRequest) -> Tex
 async def analyze_text(payload: TextAnalysisRequest, config: Settings) -> TextAnalysis:
     if not config.openai_api_key or not config.openai_model:
         raise AnalysisError(503, "not_configured", "서버의 OpenAI 키와 모델 설정을 확인해 주세요.")
+    if payload.context is None:
+        raise AnalysisError(503, "context_missing", "분석 문맥이 준비되지 않았어요.")
     try:
         # 요청별 클라이언트를 닫고 자동 재호출 없이 명시적인 제한 시간으로 처리한다.
         async with AsyncOpenAI(
@@ -80,8 +114,9 @@ async def analyze_text(payload: TextAnalysisRequest, config: Settings) -> TextAn
         raise AnalysisError(502, "openai_authentication", "서버의 OpenAI 인증 설정을 확인해 주세요.") from None
     except RateLimitError:
         raise AnalysisError(429, "openai_rate_limit", "OpenAI 사용 한도 또는 요청 제한을 확인해 주세요.") from None
-    except APIConnectionError:
-        raise AnalysisError(502, "openai_connection", "OpenAI 서버에 연결하지 못했어요.") from None
+    except APIConnectionError as error:
+        code, message = connection_issue(error)
+        raise AnalysisError(502, code, message) from None
     except APIStatusError:
         raise AnalysisError(502, "openai_request_failed", "OpenAI 요청에 실패했어요. 모델과 사용 권한·설정을 확인해 주세요.") from None
     except (APIResponseValidationError, ValidationError, ValueError):

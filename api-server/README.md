@@ -1,5 +1,9 @@
 # 개발용 REST API 서버
 
+최신 홈 흐름: 분석은 별도 FastAPI에서 실제 OpenAI로 수행하며 이 서버는 기록 확정 저장·수정·조회를 담당한다. 백엔드 POST `/api/chat`·`/api/chat/links`는 기본 410이다. 시작 시 ai_chat_jobs 테이블을 기존 DB에 추가하며 완료되지 않은 실제 작업은 기록 저장을 막는다. [홈 실제 AI 연동](../ai-api-server/docs/홈_실제_AI_연동.md)의 실행·API·검증을 먼저 읽는다. 아래 목 분석 설명은 이전 계약·회귀 검사 배경이며 실제 홈 fallback이 아니다.
+
+2026-11-06 AI 개발 서버 연동: Python FastAPI 서버가 기본 `data/1line.db`에 직접 연결해 활동·확정 기록·원본 파일을 읽을 수 있다. DB 생성·스키마 마이그레이션은 이 백엔드에서 유지한다. 사용자 지정 DB_PATH를 사용하면 AI_DB_PATH도 같은 실제 파일로 맞춘다. [직접 연결 안내](../ai-api-server/docs/DB_직접_연결.md) 참고. AI 서버의 신규 활동 생성·분석 저장과 프론트 호출 전환은 아직 미구현이다.
+
 최종 정리: 2026-11-04. Node.js 24·Express·CORS·Multer·Zod·Node 내장 SQLite를 사용한다. 홈의 텍스트·파일·링크 접수, 준비 상태·진행 조회와 홈/미리보기 카드 저장·수정을 연결했다. 분석과 진행은 서버 목 응답이며 실제 AI·웹 수집은 하지 않는다.
 
 나의 발자국 목록·상세·자료 Drawer·Project Timeline도 확정 기록의 실제 DB 조회에 연결했다. [DB 연동과 조회 계약](../docs/footprints/DB_연동.md), [현재 화면 동작](../docs/footprints/현재_구현_상태.md)을 참고한다. 기존 DB는 활동 메타정보 컬럼을 추가하는 방식으로 보존한다.

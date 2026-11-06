@@ -5,3 +5,4 @@ openai
 pydantic-settings
 # 로컬 API 검증용 TestClient에서 사용한다.
 httpx
+python-multipart
