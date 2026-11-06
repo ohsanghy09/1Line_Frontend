@@ -3,9 +3,9 @@
 from dataclasses import dataclass
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
-from .schemas import AnalysisContext, Identifier, StrictModel, Text, TextAnalysis
+from .schemas import ActivityDecision, AnalysisContext, Identifier, StrictModel, Text, TextAnalysis
 
 
 class FileDecision(StrictModel):
@@ -13,7 +13,21 @@ class FileDecision(StrictModel):
     materialType: Text
 
 
+class HomeActivityDecision(ActivityDecision):
+    # 활동 종류는 자료 유형과 별개이며, 판단 근거가 없으면 null이다.
+    category: Identifier | None = None
+
+    @model_validator(mode="after")
+    def validate_category(self):
+        if self.category in {"all", "전체"}:
+            raise ValueError("전체는 활동 유형으로 사용할 수 없습니다.")
+        if self.match == "unresolved" and self.category is not None:
+            raise ValueError("미확정 활동은 유형을 지정할 수 없습니다.")
+        return self
+
+
 class HomeAnalysis(TextAnalysis):
+    activity: HomeActivityDecision
     files: list[FileDecision] = Field(max_length=10)
 
 

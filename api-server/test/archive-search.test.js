@@ -42,6 +42,14 @@ test('검색 API는 확정 이름·입력·요약을 검색하고 파일 BLOB �
     }
     assert.deepEqual((await search('저장 요약 전용')).items.map(item => item.id), ['computer-vision'])
     assert.equal((await search('')).items.length, 5)
+    // 고정 목록 밖의 분류도 자동 노출되고 검색 결과가 없어도 유형 목록은 유지된다.
+    db.prepare('UPDATE activities SET category = ? WHERE id = ?').run('독서 모임', 'computer-vision')
+    const categories = (await search('')).categories
+    assert.ok(categories.includes('독서 모임'))
+    assert.equal(categories.filter(value => value === '프로젝트').length, 1)
+    assert.deepEqual((await search('없는 검색어', { category: '독서 모임', status: '완료' })).categories, categories)
+    assert.deepEqual((await search('', { category: '독서 모임' })).items.map(item => item.id), ['computer-vision'])
+    db.prepare('UPDATE activities SET category = ? WHERE id = ?').run('전공수업', 'computer-vision')
     assert.equal((await search('    ')).items.length, 5)
     for (const q of ['PDF본문에만있는비밀키워드', '두번째파일내부전용', '%', "' OR 1=1 --"]) assert.deepEqual((await search(q)).items, [])
     assert.deepEqual((await search('Research', { category: '프로젝트', status: '진행 중' })).items.map(item => item.id), ['line1-hackathon'])

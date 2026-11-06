@@ -4,18 +4,12 @@ import { Link } from 'react-router'
 import { searchFootprintActivities } from '../services/footprints'
 import type { FootprintActivity, FootprintFilters } from '../types/footprints'
 
-// 원본의 유형 선택지만 유지한다. 그 외 유형도 전체 목록에서는 조회된다.
-const categoryOptions = [
-    { value: 'all', label: '전체' },
-    { value: '해커톤', label: '해커톤' },
-    { value: '전공수업', label: '수업' },
-    { value: '프로젝트', label: '프로젝트' },
-    { value: '공모전', label: '공모전' },
-]
-
 function Footprints() {
     // DB에서 조회한 목록과 요청 상태를 관리한다.
     const [activities, setActivities] = useState<FootprintActivity[]>([])
+    // AI 분석으로 저장된 활동 유형을 서버에서 받으며 전체는 화면에서 추가한다.
+    const [categories, setCategories] = useState<string[]>([])
+    const categoryOptions = [{ value: 'all', label: '전체' }, ...categories.map(category => ({ value: category, label: category }))]
     const [total, setTotal] = useState(0)
     const [isLoading, setIsLoading] = useState(true)
     const [hasLoaded, setHasLoaded] = useState(false)
@@ -50,7 +44,11 @@ function Footprints() {
             setError(null)
             try {
                 const response = await searchFootprintActivities(filters, controller.signal)
-                if (isActive) { setActivities(response.items); setTotal(response.total); setHasLoaded(true) }
+                if (isActive) {
+                    setActivities(response.items); setTotal(response.total); setCategories(response.categories); setHasLoaded(true)
+                    // 다른 화면에서 분류가 변경되어 선택지가 사라지면 전체로 복귀한다.
+                    if (filters.category !== 'all' && !response.categories.includes(filters.category)) setFilters(current => ({ ...current, category: 'all' }))
+                }
             } catch (error) {
                 if (isActive && !controller.signal.aborted) setError(error instanceof Error ? error.message : '활동 목록을 불러오지 못했어요.')
             } finally {

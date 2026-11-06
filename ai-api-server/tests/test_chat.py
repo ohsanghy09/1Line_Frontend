@@ -38,7 +38,7 @@ class ChatTests(unittest.TestCase):
         new = values["message"].startswith("새 활동")
         return HomeAnalysis.model_validate({
             "activity": {"match": "new" if new else "existing", "id": None if new else "line1-hackathon",
-                         "name": "새 프로젝트" if new else "1호선톤", "confidence": "high"},
+                         "name": "새 프로젝트" if new else "1호선톤", "confidence": "high", "category": "독서 모임"},
             "materialType": "회의록", "stage": None, "summary": "실제 입력에 대한 합성 검사 응답", "changes": [],
             "files": [{"id": file.id, "materialType": "회의록"} for file in values["files"]],
         })
@@ -67,12 +67,34 @@ class ChatTests(unittest.TestCase):
             self.assertIsNone(result["reply"]["analysis"]["stage"])
             self.assertTrue(result["reply"]["analysis"]["activity"]["id"])
             self.assertEqual(result["reply"]["analysis"]["activity"]["match"], "existing")
+            self.assertEqual(result["reply"]["analysis"]["activity"]["category"], "독서 모임")
             self.assertEqual(client.post("/api/chat", data={**data, "message": "다른 입력"}).status_code, 409)
         self.assertEqual(model.call_count, 1)
         with closing(sqlite3.connect(self.path)) as connection:
+            self.assertEqual(connection.execute("SELECT category FROM activities WHERE name = '새 프로젝트'").fetchone()[0], "독서 모임")
             self.assertEqual(connection.execute("SELECT COUNT(*) FROM activities").fetchone()[0], 6)
             self.assertEqual(connection.execute("SELECT COUNT(*) FROM analyses").fetchone()[0], 1)
             self.assertEqual(connection.execute("SELECT COUNT(*) FROM records").fetchone()[0], 0)
+
+    def test_existing_category_is_preserved(self):
+        with closing(sqlite3.connect(self.path)) as connection:
+            connection.execute("UPDATE activities SET category = '해커톤' WHERE id = 'line1-hackathon'")
+            connection.commit()
+        with patch("app.chat.analyze_home", side_effect=self.model), TestClient(create_app(self.config)) as client:
+            accepted = client.post("/api/chat", data={"message": "기존 활동 기록"})
+            completed = self.completed(client, accepted.json()["jobId"])
+            self.assertEqual(completed["status"], "completed")
+            self.assertEqual(completed["result"]["reply"]["analysis"]["activity"]["category"], "해커톤")
+
+    def test_invalid_activity_category_is_rejected(self):
+        from pydantic import ValidationError
+        from app.home_schemas import HomeActivityDecision
+        base = {"match": "new", "id": None, "name": "활동", "confidence": None}
+        for category in ["all", "전체", "x" * 201]:
+            with self.assertRaises(ValidationError):
+                HomeActivityDecision.model_validate({**base, "category": category})
+        with self.assertRaises(ValidationError):
+            HomeActivityDecision.model_validate({**base, "match": "unresolved", "category": "독서 모임"})
 
     def test_file_and_batch_preserve_original_ids_and_bytes(self):
         with patch("app.chat.analyze_home", side_effect=self.model), TestClient(create_app(self.config)) as client:

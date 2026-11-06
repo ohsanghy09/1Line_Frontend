@@ -353,6 +353,19 @@
             "minLength": 1,
             "title": "Name"
           },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
           "summary": {
             "anyOf": [
               {

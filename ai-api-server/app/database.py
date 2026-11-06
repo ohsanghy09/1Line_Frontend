@@ -32,7 +32,7 @@ class DatabaseFile:
 
 # 조회에 필요한 최소 스키마만 검사하고 기존 스키마를 수정하지 않는다.
 REQUIRED_COLUMNS = {
-    "activities": {"id", "name", "summary", "updated_at"},
+    "activities": {"id", "name", "category", "summary", "updated_at"},
     "records": {"id", "activity_id", "message", "reply", "created_at"},
     "analyses": {"id"},
     "files": {"id", "analysis_id", "name", "mime_type", "size", "content"},
@@ -89,7 +89,7 @@ class SharedDatabase:
             activities_total = connection.execute("SELECT COUNT(*) FROM activities").fetchone()[0]
             records_total = connection.execute("SELECT COUNT(*) FROM records").fetchone()[0]
             activities = [dict(row) for row in connection.execute(
-                "SELECT id, name, summary FROM activities ORDER BY updated_at DESC, rowid DESC LIMIT 50")]
+                "SELECT id, name, category, summary FROM activities ORDER BY updated_at DESC, rowid DESC LIMIT 50")]
             ids = [activity["id"] for activity in activities]
             records = []
             if ids:
@@ -202,13 +202,17 @@ class SharedDatabase:
                 if connection.execute("SELECT id FROM activities WHERE name = ?", (decision["name"],)).fetchone():
                     raise DatabaseError("activity_conflict", "같은 이름의 활동이 생겼어요. 최신 활동 문맥으로 다시 분석해 주세요.")
                 decision["id"] = str(uuid4())
-                connection.execute("INSERT INTO activities (id, name, updated_at) VALUES (?, ?, ?)",
-                                   (decision["id"], decision["name"], self.now()))
+                connection.execute("INSERT INTO activities (id, name, category, updated_at) VALUES (?, ?, ?, ?)",
+                                   (decision["id"], decision["name"], decision.get("category"), self.now()))
                 decision["match"] = "existing"
             if decision["match"] == "existing":
                 activity = connection.execute("SELECT * FROM activities WHERE id = ?", (decision["id"],)).fetchone()
                 if not activity:
                     raise DatabaseError("activity_missing", "분석 중 연결 활동이 삭제됐어요. 다시 분석해 주세요.")
+                # 기존 분류를 보존하고 미분류 활동만 실제 분석 결과로 채운다.
+                if not activity["category"] and decision.get("category"):
+                    connection.execute("UPDATE activities SET category = ? WHERE id = ?", (decision["category"], decision["id"]))
+                    activity = connection.execute("SELECT * FROM activities WHERE id = ?", (decision["id"],)).fetchone()
                 decision.update({key: activity[key] for key in ["name", "category", "role", "summary"]})
                 decision["status"] = activity["status"] if activity["status"] in {"진행 중", "완료"} else None
                 decision["period"] = ({"start": activity["start_date"], "end": activity["end_date"]}

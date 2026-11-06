@@ -62,11 +62,12 @@ export async function getFootprintActivities(): Promise<FootprintActivity[]> {
 }
 
 // 정식 서버로 교체할 때도 검색 조건과 응답을 이 경계에서 변환한다.
-export async function searchFootprintActivities(filters: FootprintFilters, signal?: AbortSignal): Promise<{ items: FootprintActivity[]; total: number }> {
+export async function searchFootprintActivities(filters: FootprintFilters, signal?: AbortSignal): Promise<{ items: FootprintActivity[]; total: number; categories: string[] }> {
     const query = new URLSearchParams({ q: filters.search, category: filters.category, status: filters.status, sort: filters.sort })
     const data = await request(`/archive/activities?${query}`, { signal })
     if (!object(data) || !Array.isArray(data.items) || !data.items.every(isActivity) || !count(data.total) || data.total < data.items.length) throw new Error('활동 목록 응답 형식이 올바르지 않습니다.')
-    return { items: data.items.map(activityView), total: data.total }
+    if (!strings(data.categories) || data.categories.some(category => !category.trim() || category === 'all') || new Set(data.categories).size !== data.categories.length) throw new Error('활동 유형 응답 형식이 올바르지 않습니다.')
+    return { items: data.items.map(activityView), total: data.total, categories: data.categories }
 }
 
 export async function getFootprintActivity(id: string): Promise<FootprintActivityDetail | null> {

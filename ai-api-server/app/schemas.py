@@ -20,6 +20,7 @@ class TextInput(StrictModel):
 class ActivityContext(StrictModel):
     id: Identifier
     name: Text
+    category: Identifier | None = None
     summary: Text | None = None
 
 

@@ -25,5 +25,7 @@ export function searchArchive(db, query) {
   })
   const items = selectArchiveActivities(activities, { search: query.q, category: query.category, status: query.status, sort: query.sort })
     .map(({ searchTexts: _searchTexts, ...activity }) => activity)
-  return { items, total: activities.length }
+  // 검색·유형·상태 조건과 무관한 전체 유형을 반환해 필터 선택지를 유지한다.
+  const categories = [...new Set(activities.map(activity => activity.category))].sort((a, b) => a.localeCompare(b, 'ko'))
+  return { items, total: activities.length, categories }
 }
