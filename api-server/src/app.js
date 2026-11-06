@@ -44,6 +44,19 @@ export function createApp(db, { origin = 'http://localhost:5173', aiBaseUrl } = 
   app.get('/api/home/recent', (_req, res) => res.json(readHomeRecent(db)))
   // 조회는 저장 결과만 반환한다. 실제 모델은 사용자의 분석 요청에서만 호출한다.
   let journeyRunning = false
+  // 진행 중 분석의 결과가 삭제 직후 다시 저장되지 않도록 같은 트랜잭션에서 검사한다.
+  app.post('/api/settings/reset-data', (req, res) => {
+    if (req.body?.confirmation !== '전체 삭제') throw fail(400, '확인 문구를 정확히 입력해 주세요.')
+    transaction(db, () => {
+      if (journeyRunning || db.prepare("SELECT id FROM ai_chat_jobs WHERE status IN ('queued', 'running') LIMIT 1").get()) {
+        throw fail(409, 'AI 분석이 진행 중이에요. 분석이 끝난 뒤 다시 삭제해 주세요.')
+      }
+      for (const table of ['timeline_events', 'records', 'files', 'analysis_jobs', 'ai_chat_jobs', 'journey_analyses', 'analyses', 'activities']) {
+        db.exec(`DELETE FROM ${table}`)
+      }
+    })
+    res.json({ deleted: true })
+  })
   app.get('/api/journey', (_req, res) => res.json(readJourney(db)))
   app.post('/api/journey/analyze', async (_req, res) => {
     if (journeyRunning) throw fail(409, '성장 분석이 진행 중이에요. 잠시 후 다시 조회해 주세요.')

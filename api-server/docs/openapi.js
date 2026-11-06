@@ -86,6 +86,7 @@ export const backendSpec = {
   servers: [{ url: 'http://127.0.0.1:3001', description: '현재 로컬 개발 API (별도 실행)' }],
   tags: ['상태', '활동', '홈', '분석 접수·목 응답', '기록', '아카이브', '성장 분석 조회', '보조 API'].map(name => ({ name })),
   paths: {
+    '/api/settings/reset-data': { post: operation('보조 API', 'resetData', '전체 데이터 삭제', obj({ deleted: { const: true } }), { description: '확인 문구 전체 삭제를 받아 8개 테이블 데이터를 트랜잭션으로 삭제. 스키마 유지. 홈·성장 분석 진행 중에는 409. 브라우저 세션 정리는 프론트 담당.', requestBody: { required: true, content: media(obj({ confirmation: { type: 'string', const: '전체 삭제' } })) }, errors: [400, 409, 500] }) },
     '/api/health': { get: operation('상태', 'health', '개발 서버 준비 상태', obj({ status: { const: 'ready' }, label: str(), analysisProvider: { const: 'mock' } }), { description: 'ready는 고정 응답이며 실제 AI 상태 확인이 아닙니다.' }) },
     '/api/activities': { get: operation('활동', 'activities', '활동 선택지 조회', arr(ref('ActivityOption'))) },
     '/api/home/recent': { get: operation('홈', 'recent', '최근 활동·자료 조회', ref('HomeRecent'), { description: '각 최대 3개. 활동은 변경순, 자료는 최초 확정 저장순. 다중 파일은 같은 recordId가 반복될 수 있습니다.' }) },
