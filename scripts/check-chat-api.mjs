@@ -29,8 +29,9 @@ try {
     const progressUpdates = []
     const fileReply = await service.getChatReply('', [new File(['file bytes'], '회의록.txt')], { conversationId: 'frontend-test', onProgress: progress => progressUpdates.push(progress) })
     assert.ok(progressUpdates.some(progress => progress.steps.length === 1))
-    assert.ok(progressUpdates.some(progress => progress.steps.length === 4))
-    assert.equal(progressUpdates.at(-1).steps.filter(step => step.status === 'completed').length, 3)
+    // 폴링 사이에 단계가 지나갈 수 있다. 정확한 시간 경계는 백엔드 progress 검사에서 검증한다.
+    assert.ok(progressUpdates.every(progress => progress.steps.length >= 1 && progress.steps.length <= 4))
+    assert.ok(progressUpdates.every((progress, index) => index === 0 || progress.steps.length >= progressUpdates[index - 1].steps.length))
     assert.equal(fileReply.kind, 'no-change')
     assert.equal(fileReply.analysis.files[0].name, '회의록.txt')
     const batch = await service.getChatReply('자료 두 개', [new File(['a'], 'a.txt'), new File(['b'], 'b.txt')])
@@ -99,10 +100,56 @@ try {
     assert.equal(completedAgain.analysisId, resumed.analysisId)
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM analyses').get().n, beforeInterrupted + 1)
     await assert.rejects(service.resumeChatReply('missing-job'), /작업을 찾을 수/)
+    const general = { id: 'general-response', role: 'assistant', kind: 'general', content: '안녕하세요!', analysis: null }
+    let textRequests = 0, textProgress = 0
+    globalThis.fetch = async (_url, init) => {
+        textRequests++
+        assert.equal(init.method, 'POST')
+        assert.equal(init.headers.Prefer, 'respond-sync')
+        return new Response(JSON.stringify({ jobId: 'ai-general', status: 'completed', result: { analysisId: 'general-draft', conversationId: 'general', reply: general } }))
+    }
+    assert.equal((await service.getChatReply('안녕', [], { onProgress: () => textProgress++ })).kind, 'general')
+    assert.equal(textRequests, 1)
+    assert.equal(textProgress, 0)
+    assert.equal(service.isReply({ ...general, analysis: fileReply.analysis }), false)
+    // 모델이 해석한 수정은 백엔드에서 한 번 적용하고 일반 말풍선만 반환한다.
+    const editId = 'chat-edit-service'
+    const editReply = { id: 'edit-reply', role: 'assistant', kind: 'activity-update', analysis: null, content: '수정 중',
+        update: { activityId: 'computer-vision', activityName: '컴퓨터비전', updates: [{ field: 'role', value: '팀장' }] } }
+    const editTime = new Date().toISOString()
+    db.prepare('INSERT INTO analyses VALUES (?, ?, ?, ?, ?)').run(editId, 'edit-conversation', '역할을 팀장으로 바꿔줘', JSON.stringify(editReply), editTime)
+    db.prepare("INSERT INTO ai_chat_jobs VALUES ('ai-edit', 'edit-key', 'edit-fingerprint', ?, 'chat', 'completed', 'completed', NULL, '{}', ?, ?)").run(editId, editTime, editTime)
+    const recordCountBeforeEdit = db.prepare('SELECT COUNT(*) AS n FROM records').get().n
+    let editAiRequests = 0, editBackendRequests = 0
+    globalThis.fetch = async (url, init) => {
+        if (String(url).startsWith('/ai-api/')) {
+            editAiRequests++
+            const latest = JSON.parse(db.prepare('SELECT reply FROM analyses WHERE id = ?').get(editId).reply)
+            return new Response(JSON.stringify({ jobId: 'ai-edit', status: 'completed', result: { analysisId: editId, conversationId: 'edit-conversation', reply: latest } }))
+        }
+        editBackendRequests++
+        return originalFetch(new URL(url, base), init)
+    }
+    const editedByChat = await service.getChatReply('역할을 팀장으로 바꿔줘')
+    assert.equal(editedByChat.kind, 'general')
+    assert.equal(editedByChat.analysis, null)
+    assert.equal(editedByChat.updatedActivityId, 'computer-vision')
+    assert.equal(db.prepare("SELECT role FROM activities WHERE id = 'computer-vision'").get().role, '팀장')
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM records').get().n, recordCountBeforeEdit)
+    assert.equal(editAiRequests, 1)
+    assert.equal(editBackendRequests, 1)
+    db.prepare("UPDATE activities SET role = '이후 변경' WHERE id = 'computer-vision'").run()
+    await service.resumeChatReply('ai-edit')
+    assert.equal(editBackendRequests, 1)
+    assert.equal(db.prepare("SELECT role FROM activities WHERE id = 'computer-vision'").get().role, '이후 변경')
+    globalThis.fetch = async url => String(url).startsWith('/ai-api/')
+        ? new Response(JSON.stringify({ analysisId: editId, conversationId: 'edit-conversation', reply: editReply }))
+        : new Response(JSON.stringify({ error: '수정 요청 거절' }), { status: 400 })
+    await assert.rejects(service.getChatReply('잘못된 수정'), error => service.isTerminalChatFailure(error))
     globalThis.fetch = async () => new Response(JSON.stringify({ jobId: 'failed-job', status: 'failed', error: '분석 작업 실패' }))
     await assert.rejects(service.getChatReply('실패 응답'), /분석 작업 실패/)
     globalThis.fetch = async () => new Response(JSON.stringify({ jobId: 'bad-progress', status: 'running', progress: { title: '확인 중', steps: [] } }))
-    await assert.rejects(service.getChatReply('잘못된 진행'), /진행 응답 형식/)
+    await assert.rejects(service.getChatReply('잘못된 진행'), /텍스트 응답이 완료되지/)
     globalThis.fetch = async () => new Response(JSON.stringify({ error: '요청 거부' }), { status: 400 })
     await assert.rejects(service.getChatReply('오류'), /요청 거부/)
     globalThis.fetch = async () => new Response('{}')

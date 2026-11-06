@@ -32,7 +32,12 @@ export async function getChatReply(message: string, files: File[] = [], options:
     if (options.conversationId) body.set('conversationId', options.conversationId)
     files.forEach(file => body.append('files', file))
     const data = await aiRequest('/chat', { method: 'POST', body, signal: options.signal,
-        headers: files.length ? { Prefer: 'respond-async' } : undefined })
+        headers: { Prefer: files.length ? 'respond-async' : 'respond-sync' } }, files.length ? 30_000 : 150_000)
+    // 텍스트 완료 응답에는 진행 콜백·폴링을 사용하지 않는다.
+    if (!files.length) {
+        if (isObject(data) && typeof data.jobId === 'string' && !['completed', 'failed'].includes(String(data.status))) throw new Error('텍스트 응답이 완료되지 않았어요. AI 서버를 최신 버전으로 재시작해 주세요.')
+        return resolveChatReply(data, { ...options, onProgress: undefined })
+    }
     return resolveChatReply(data, options)
 }
 
@@ -72,7 +77,19 @@ async function resolveChatReply(initial: unknown, options: ChatRequestOptions): 
             throw error
         }
     }
+    if (isObject(data) && typeof data.analysisId === 'string' && isObject(data.reply) && data.reply.kind === 'activity-update') {
+        // AI가 만든 SQL/값을 클라이언트에서 실행하지 않고 서버에 보관된 완료 요청 ID만 전달한다.
+        try {
+            data = await request('/activities/apply-chat-update', { method: 'POST', signal: options.signal,
+                headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ analysisId: data.analysisId }) })
+        } catch (error) {
+            // 확정 거절은 대기를 해제해 사용자가 다시 말할 수 있게 한다. 통신 실패는 작업 재조회로 확인한다.
+            if (isObject(error) && [400, 404, 409, 422].includes(Number(error.status))) throw Object.assign(error, { terminalChatJob: true })
+            throw error
+        }
+    }
     if (!isObject(data) || typeof data.analysisId !== 'string' || typeof data.conversationId !== 'string' || !isReply(data.reply)) throw new Error('서버 응답 형식을 확인할 수 없어요. 서버에서 처리됐을 수 있으니 확인해 주세요.')
+    if (data.reply.updatedActivityId && typeof window !== 'undefined') window.dispatchEvent(new Event('1line:activities-changed'))
     return { ...data.reply, analysisId: data.analysisId, conversationId: data.conversationId }
 }
 
@@ -101,8 +118,8 @@ export async function getChatServiceStatus(): Promise<ChatServiceStatus> {
 const apiBase = (import.meta.env?.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
 const aiBase = (import.meta.env?.VITE_AI_API_BASE_URL || '/ai-api').replace(/\/$/, '')
 
-function aiRequest(path: string, init: RequestInit = {}): Promise<unknown> {
-    return request(path, init, aiBase)
+function aiRequest(path: string, init: RequestInit = {}, timeoutMs = 30_000): Promise<unknown> {
+    return request(path, init, aiBase, timeoutMs)
 }
 
 export async function request(path: string, init: RequestInit = {}, base = apiBase, timeoutMs = 30_000): Promise<unknown> {
@@ -159,6 +176,9 @@ export function isActivityProposal(value: unknown): value is ActivityProposal {
 
 export function isReply(value: unknown): value is ChatReply {
     if (!isObject(value) || typeof value.id !== 'string' || value.role !== 'assistant' || typeof value.content !== 'string') return false
+    if (value.activityCreated !== undefined && typeof value.activityCreated !== 'boolean') return false
+    if (value.updatedActivityId !== undefined && (typeof value.updatedActivityId !== 'string' || !value.updatedActivityId)) return false
+    if (value.kind === 'general') return value.analysis === null
     if (!['text-analysis', 'file-analysis', 'no-change', 'batch-analysis', 'link-analysis'].includes(String(value.kind))) return false
     if (value.sourceUrl !== undefined && (typeof value.sourceUrl !== 'string' || !isHttpUrl(value.sourceUrl))) return false
     const analysis = value.analysis

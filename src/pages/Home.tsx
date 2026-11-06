@@ -144,7 +144,7 @@ function Home() {
         setIsReplying(true); setReplyError('')
         void resumeChatReply(job.jobId, {
             signal: controller.signal,
-            onProgress: progress => { if (requestId === requestIdRef.current) setAnalysisProgress(progress) },
+            onProgress: progress => { if (requestId === requestIdRef.current && job.showProgress !== false) setAnalysisProgress(progress) },
         }).then(reply => {
             if (requestId !== requestIdRef.current) return
             setMessages(current => appendChatReply(current, { ...reply, createdAt: Date.now() }))
@@ -227,17 +227,17 @@ function Home() {
         let jobAccepted = false
 
         try {
-            // 실제 AI 작업 ID와 진행을 보관해 텍스트·파일·링크 모두 재조회할 수 있게 한다.
+            // 파일·링크는 접수 즉시 작업 ID를 보관한다. 텍스트는 한 요청의 최종 결과를 기다린다.
             const requestOptions = {
                 conversationId: conversationIdRef.current,
                 signal: controller.signal,
                 onJobStarted: (jobId: string) => {
                     if (requestId !== requestIdRef.current) return
                     jobAccepted = true
-                    setPendingJob({ jobId, userMessageId })
+                    setPendingJob({ jobId, userMessageId, showProgress: Boolean(filesToSend.length || sourceUrl) })
                 },
                 onProgress: (progress: ChatProgress) => {
-                    if (requestId === requestIdRef.current) setAnalysisProgress(progress)
+                    if (requestId === requestIdRef.current && (filesToSend.length > 0 || sourceUrl)) setAnalysisProgress(progress)
                 },
             }
             const reply = await (sourceUrl ? getLinkReply(sourceUrl, requestOptions) : getChatReply(content, filesToSend, requestOptions))

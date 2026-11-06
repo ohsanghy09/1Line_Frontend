@@ -148,10 +148,48 @@
         ],
         "summary": "Chat",
         "operationId": "chat_api_chat_post",
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponse"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Prefer: respond-sync인 파일 없는 텍스트의 최종 결과. 모델은 한 번만 호출한다.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "Prefer",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "respond-sync",
+                "respond-async"
+              ]
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "multipart/form-data": {
               "schema": {
+                "type": "object",
                 "properties": {
                   "message": {
                     "type": "string",
@@ -166,27 +204,13 @@
                     "maxLength": 200
                   },
                   "files": {
+                    "type": "array",
+                    "maxItems": 10,
                     "items": {
                       "type": "string",
                       "format": "binary"
-                    },
-                    "type": "array",
-                    "maxItems": 10
+                    }
                   }
-                },
-                "type": "object"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "202": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/JobResponse"
                 }
               }
             }

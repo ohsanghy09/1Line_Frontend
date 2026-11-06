@@ -21,6 +21,19 @@ function Footprints() {
         search: '', category: 'all', status: 'all', sort: 'recent',
     })
 
+    // 분석 중인 활동이 있을 때만 목록을 재조회한다. 조회는 모델을 호출하지 않는다.
+    useEffect(() => {
+        if (!activities.some(activity => ['queued', 'running'].includes(activity.metadataAnalysis?.status ?? ''))) return
+        const timer = setTimeout(() => setRetryKey(current => current + 1), 1500)
+        return () => clearTimeout(timer)
+    }, [activities])
+
+    useEffect(() => {
+        const refresh = () => setRetryKey(current => current + 1)
+        window.addEventListener('1line:activities-changed', refresh)
+        return () => window.removeEventListener('1line:activities-changed', refresh)
+    }, [])
+
     function updateFilters(next: Partial<FootprintFilters>) {
         // 조합 중인 한글을 포함해 입력이 바뀌면 즉시 재조회 상태로 전환한다.
         setIsLoading(true)

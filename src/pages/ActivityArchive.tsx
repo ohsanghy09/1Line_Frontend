@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { ArrowLeft, Folder, GitCommitHorizontal, Sparkles } from 'lucide-react'
 import ActivityFolders from '../components/footprints/ActivityFolders'
 import FileDetailDrawer from '../components/footprints/FileDetailDrawer'
 import { getFootprintActivity } from '../services/footprints'
 import type { FootprintActivityDetail } from '../types/footprints'
+import ActivityAnalysisStatus from '../components/ActivityAnalysisStatus'
 
 // URL에서 활동을 바꾸면 조회·펼침 상태도 해당 활동 기준으로 새로 시작한다.
 function ActivityArchive() {
@@ -27,24 +28,29 @@ function ActivityArchiveContent({ activityId }: { activityId: string }) {
     const [activity, setActivity] = useState<FootprintActivityDetail | null>(null)
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    const requestId = useRef(0)
+    const isActive = useRef(false)
 
     useEffect(() => {
         // 빠르게 다른 활동으로 이동하거나 페이지를 떠나면 이전 응답은 무시한다.
-        let isActive = true
+        isActive.current = true
 
         async function loadActivity() {
+            const currentId = ++requestId.current
             try {
                 const response = await getFootprintActivity(activityId)
-                if (isActive) setActivity(response)
+                if (isActive.current && currentId === requestId.current) { setActivity(response); setError(null) }
             } catch {
-                if (isActive) setError('활동 정보를 불러오지 못했어요. 잠시 후 다시 방문해주세요.')
+                if (isActive.current && currentId === requestId.current) setError('활동 정보를 불러오지 못했어요. 잠시 후 다시 방문해주세요.')
             } finally {
-                if (isActive) setIsLoading(false)
+                if (isActive.current && currentId === requestId.current) setIsLoading(false)
             }
         }
 
         void loadActivity()
-        return () => { isActive = false }
+        const refresh = () => { void loadActivity() }
+        window.addEventListener('1line:activities-changed', refresh)
+        return () => { isActive.current = false; window.removeEventListener('1line:activities-changed', refresh) }
     }, [activityId])
 
     return (
@@ -90,6 +96,7 @@ function ActivityArchiveContent({ activityId }: { activityId: string }) {
                                 <Sparkles aria-hidden="true" className="w-3.5 h-3.5" /> AI 활동 요약
                             </h3>
                             <p className="text-slate-700 leading-relaxed wrap-anywhere">{activity.summary}</p>
+                            {(activity.recordsCount ?? activity.materialsCount) > 0 && <ActivityAnalysisStatus activityId={activityId} />}
                         </div>
                     </header>
 

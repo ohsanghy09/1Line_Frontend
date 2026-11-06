@@ -9,7 +9,8 @@ import { stripTypeScriptTypes } from 'node:module'
 import { createServer } from 'vite'
 import { openDatabase } from '../api-server/src/database.js'
 
-// 수동 통합 검사: 임시 DB·합성 자료를 실제 모델로 분석한다. 기본 2회, --extended/--journey는 추가 호출이다.
+// 수동 통합 검사: 임시 DB·합성 자료를 실제 모델로 분석한다. 홈 요청과 확정 저장 뒤 활동 정보 종합도 유료 호출한다.
+// --extended/--journey는 추가 모델 호출이 발생한다. 자동 검사에서 실행하지 않는다.
 const root = fileURLToPath(new URL('../', import.meta.url))
 const directory = await mkdtemp(path.join(tmpdir(), '1line-live-ai-'))
 const databasePath = path.join(directory, 'test.db')
@@ -41,6 +42,19 @@ async function ready(url, child) {
         await new Promise(resolve => setTimeout(resolve, 100))
     }
     throw new Error('검증용 서버 시작 대기 초과')
+}
+
+async function waitForActivityMetadata(id) {
+    const deadline = Date.now() + 160000
+    while (Date.now() < deadline) {
+        const response = await fetch(`/api/activities/${encodeURIComponent(id)}/analysis`)
+        assert.equal(response.status, 200)
+        const state = await response.json()
+        if (state.status === 'failed') throw new Error(state.error)
+        if (state.status === 'ready' && !state.stale) return
+        await new Promise(resolve => setTimeout(resolve, 250))
+    }
+    throw new Error('활동 전체 정보 분석 대기 초과')
 }
 try {
     const backendPort = await freePort()
@@ -74,14 +88,19 @@ try {
     })
     assert.ok(first.analysisId)
     assert.ok(firstJob.startsWith('ai-'))
-    const activityId = first.analysis.activity.id
-    assert.ok(activityId)
+    assert.equal(first.analysis.activity.match, 'new')
+    assert.equal(first.analysis.activity.id, null)
+    assert.ok(!(await records.getActivities()).some(activity => activity.name === first.analysis.activity.name))
+    const firstSaved = await records.saveRecord(first, { newActivity: {
+        name: first.analysis.activity.name, category: first.analysis.activity.category ?? null,
+        status: null, role: null, period: null, summary: null,
+    } })
+    const activityId = firstSaved.activityId
+    await waitForActivityMetadata(activityId)
     assert.ok((await records.getActivities()).some(activity => activity.id === activityId))
-    const firstSaved = await records.saveRecord(first, activityId)
-    assert.equal(firstSaved.activityId, activityId)
     await assert.rejects(records.saveRecord(first, activityId), /이미 기록/)
     assert.equal((await chat.resumeChatReply(firstJob)).analysisId, first.analysisId)
-    console.log('PASS: 실제 모델 → 활동 생성/연결 → 분석 초안 → 프론트 서비스 → 백엔드 확정 저장·중복 방지·작업 복원')
+    console.log('PASS: 실제 모델 → 신규 활동 제안(미생성) → 사용자 확정 → 활동·기록 동시 저장·중복 방지·작업 복원')
 
     const content = process.argv.includes('--journey')
         ? `${first.analysis.activity.name} 진행 회고입니다. 처음 준비할 때는 독서 토론 진행 경험이 없어 질문을 즉석에서 정했습니다. 이번에는 토론 진행법을 학습하고 사전 질문지를 직접 설계해 6명의 토론을 진행했습니다. 발언 순서와 시간을 조율해 이전 60분 걸리던 토론을 30분에 마쳤고 참여자 전원이 한 번 이상 의견을 냈습니다. 새로 배운 진행 방법을 실제 모임에 적용한 경험입니다.`
@@ -92,6 +111,8 @@ try {
     assert.equal(fileReply.analysis.files[0].name, '실제본문_회의록.txt')
     const saved = await records.saveRecord(fileReply, activityId)
     const changed = await records.updateRecord(saved.id, activityId, '검증 회의록')
+    // 활동 정보 갱신이 Journey 원본 해시를 바꾸므로 종합 완료 뒤 성장 분석을 검증한다.
+    await waitForActivityMetadata(activityId)
     assert.equal(changed.reply.analysis.materialType, '검증 회의록')
     const detail = await (await fetch(`/api/archive/activities/${activityId}`)).json()
     const fileId = detail.folders.flatMap(folder => folder.files).find(file => file.originalFileId)?.originalFileId
@@ -149,6 +170,7 @@ try {
         await records.saveRecord(link, activityId)
         console.log('PASS: 다중 파일 실제 분석·그룹 합계·저장, 공개 링크 실제 본문 수집·분석·저장')
     }
+    await waitForActivityMetadata(activityId)
     console.log('PASS: 임시 DB 기반 개발 환경 통합 검증 완료. 기존 사용자 DB 변경 없음.')
 } catch (error) {
     // data: 모듈의 긴 소스 URL이나 키를 포함할 수 있는 원본 공급자 로그는 출력하지 않는다.

@@ -9,9 +9,13 @@ import { activityInformation, analysisContext, resolveActivity, touchActivities 
 import { readHomeRecent } from './home.js'
 import { searchArchive } from './archive-search.js'
 import { readJourney, generateJourney } from './journey.js'
+import { createActivityMetadataQueue, readActivityAnalysis } from './activity-metadata.js'
+import { applyActivityChatUpdate, chatUpdateRequest } from './activity-chat-update.js'
 
-export function createApp(db, { origin = 'http://localhost:5173', aiBaseUrl } = {}) {
+export function createApp(db, { origin = 'http://localhost:5173', aiBaseUrl, autoActivityAnalysis = false, activityAnalysisOptions = {} } = {}) {
   const app = express()
+  const activityMetadata = createActivityMetadataQueue(db, { aiBaseUrl, ...activityAnalysisOptions })
+  app.locals.activityMetadata = activityMetadata
   app.use(cors({ origin }))
   app.use(express.json({ limit: '1mb' }))
   const fail = (status, message) => Object.assign(new Error(message), { status })
@@ -41,6 +45,12 @@ export function createApp(db, { origin = 'http://localhost:5173', aiBaseUrl } = 
   })
   app.get('/api/chat/jobs/:id', (_req, res) => res.status(410).json({ error: '분석 진행은 FastAPI AI 서버에서 조회해 주세요.' }))
   app.get('/api/activities', (_req, res) => res.json(analysisContext(db).activities))
+  app.post('/api/activities/apply-chat-update', (req, res) => {
+    const input = chatUpdateRequest.parse(req.body)
+    const { changed, ...result } = applyActivityChatUpdate(db, input.analysisId)
+    if (changed) activityMetadata.cancelPending(result.reply.updatedActivityId)
+    res.json(result)
+  })
   app.get('/api/home/recent', (_req, res) => res.json(readHomeRecent(db)))
   // 조회는 저장 결과만 반환한다. 실제 모델은 사용자의 분석 요청에서만 호출한다.
   let journeyRunning = false
@@ -48,7 +58,7 @@ export function createApp(db, { origin = 'http://localhost:5173', aiBaseUrl } = 
   app.post('/api/settings/reset-data', (req, res) => {
     if (req.body?.confirmation !== '전체 삭제') throw fail(400, '확인 문구를 정확히 입력해 주세요.')
     transaction(db, () => {
-      if (journeyRunning || db.prepare("SELECT id FROM ai_chat_jobs WHERE status IN ('queued', 'running') LIMIT 1").get()) {
+      if (journeyRunning || activityMetadata.hasActive() || db.prepare("SELECT id FROM ai_chat_jobs WHERE status IN ('queued', 'running') LIMIT 1").get()) {
         throw fail(409, 'AI 분석이 진행 중이에요. 분석이 끝난 뒤 다시 삭제해 주세요.')
       }
       for (const table of ['timeline_events', 'records', 'files', 'analysis_jobs', 'ai_chat_jobs', 'journey_analyses', 'analyses', 'activities']) {
@@ -58,6 +68,17 @@ export function createApp(db, { origin = 'http://localhost:5173', aiBaseUrl } = 
     res.json({ deleted: true })
   })
   app.get('/api/journey', (_req, res) => res.json(readJourney(db)))
+  app.get('/api/activities/:id/analysis', (req, res) => {
+    activity(req.params.id)
+    res.json(readActivityAnalysis(db, req.params.id))
+  })
+  app.post('/api/activities/:id/analyze', (req, res) => {
+    activity(req.params.id)
+    if (!db.prepare('SELECT id FROM records WHERE activity_id = ? LIMIT 1').get(req.params.id)) throw fail(422, '저장된 자료가 있는 활동만 분석할 수 있어요.')
+    const state = readActivityAnalysis(db, req.params.id)
+    if (!['queued', 'running'].includes(state.status) && !activityMetadata.schedule(req.params.id)) throw fail(503, '활동 정보 분석을 접수하지 못했어요. 잠시 후 다시 시도해 주세요.')
+    res.status(202).json(readActivityAnalysis(db, req.params.id))
+  })
   app.post('/api/journey/analyze', async (_req, res) => {
     if (journeyRunning) throw fail(409, '성장 분석이 진행 중이에요. 잠시 후 다시 조회해 주세요.')
     if (!db.prepare('SELECT id FROM records LIMIT 1').get()) throw fail(422, '홈에서 기록을 저장한 뒤 성장 분석을 실행해 주세요.')
@@ -117,12 +138,16 @@ export function createApp(db, { origin = 'http://localhost:5173', aiBaseUrl } = 
     transaction(db, () => {
       const target = resolveActivity(db, input, activity, fail)
       reply.content = reply.content.replaceAll(reply.analysis.activity.name, target.name)
+      reply.activityCreated = Boolean(input.newActivity)
+      if (input.newActivity) reply.content = `${target.name} 활동에 자료를 기록했어요.`
       reply.analysis.activity = { ...activityInformation(target), match: 'existing', confidence: reply.analysis.activity.confidence }
       db.prepare('INSERT INTO records VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, target.id, input.analysisId ?? null, message, JSON.stringify(reply), now, now)
       syncEvents(id, reply, now)
       touchActivities(db, [target.id], now)
     })
-    res.status(201).json(record(id))
+    const saved = record(id)
+    if (autoActivityAnalysis) activityMetadata.schedule(saved.activityId)
+    res.status(201).json(saved)
   })
   app.get('/api/records/:id', (req, res) => res.json(record(req.params.id)))
   app.get('/api/activities/:id/records', (req, res) => {
@@ -147,12 +172,15 @@ export function createApp(db, { origin = 'http://localhost:5173', aiBaseUrl } = 
     transaction(db, () => {
       const target = resolveActivity(db, { activityId: input.activityId ?? current.activityId, activityUpdates: input.activityUpdates }, activity, fail)
       reply.content = reply.content.replaceAll(reply.analysis.activity.name, target.name)
+      if (target.id !== current.activityId) reply.activityCreated = false
       reply.analysis.activity = { ...activityInformation(target), match: 'existing', confidence: reply.analysis.activity.confidence }
       db.prepare('UPDATE records SET activity_id = ?, reply = ?, updated_at = ? WHERE id = ?').run(target.id, JSON.stringify(reply), now, current.id)
       if (input.changes !== undefined) syncEvents(current.id, reply, now)
       touchActivities(db, [current.activityId, target.id], now)
     })
-    res.json(record(current.id))
+    const saved = record(current.id)
+    if (autoActivityAnalysis) for (const id of new Set([current.activityId, saved.activityId])) activityMetadata.schedule(id)
+    res.json(saved)
   })
   app.get('/api/activities/:id/timeline', (req, res) => {
     activity(req.params.id)

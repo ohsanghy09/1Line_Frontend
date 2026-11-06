@@ -14,8 +14,8 @@ from fastapi.testclient import TestClient
 
 from app.analysis import AnalysisError
 from app.database import SharedDatabase
-from app.home_analysis import analyze_home
-from app.home_schemas import HomeAnalysis, UploadedFile
+from app.home_analysis import analyze_home, build_reply
+from app.home_schemas import HomeAnalysis, HomeResponse, UploadedFile
 from app.main import create_app
 from app.links import public_target
 from test_server import settings
@@ -36,12 +36,13 @@ class ChatTests(unittest.TestCase):
     @staticmethod
     async def model(**values):
         new = values["message"].startswith("새 활동")
-        return HomeAnalysis.model_validate({
+        analysis = HomeAnalysis.model_validate({
             "activity": {"match": "new" if new else "existing", "id": None if new else "line1-hackathon",
                          "name": "새 프로젝트" if new else "1호선톤", "confidence": "high", "category": "독서 모임"},
             "materialType": "회의록", "stage": None, "summary": "실제 입력에 대한 합성 검사 응답", "changes": [],
             "files": [{"id": file.id, "materialType": "회의록"} for file in values["files"]],
         })
+        return HomeResponse(kind="analysis", content="활동 정보를 확인해 주세요.", analysis=analysis)
 
     def completed(self, client, job_id):
         for _ in range(200):
@@ -65,14 +66,14 @@ class ChatTests(unittest.TestCase):
             result = completed["result"]
             self.assertIn("stage", result["reply"]["analysis"])
             self.assertIsNone(result["reply"]["analysis"]["stage"])
-            self.assertTrue(result["reply"]["analysis"]["activity"]["id"])
-            self.assertEqual(result["reply"]["analysis"]["activity"]["match"], "existing")
+            self.assertIsNone(result["reply"]["analysis"]["activity"]["id"])
+            self.assertEqual(result["reply"]["analysis"]["activity"]["match"], "new")
             self.assertEqual(result["reply"]["analysis"]["activity"]["category"], "독서 모임")
             self.assertEqual(client.post("/api/chat", data={**data, "message": "다른 입력"}).status_code, 409)
         self.assertEqual(model.call_count, 1)
         with closing(sqlite3.connect(self.path)) as connection:
-            self.assertEqual(connection.execute("SELECT category FROM activities WHERE name = '새 프로젝트'").fetchone()[0], "독서 모임")
-            self.assertEqual(connection.execute("SELECT COUNT(*) FROM activities").fetchone()[0], 6)
+            self.assertIsNone(connection.execute("SELECT category FROM activities WHERE name = '새 프로젝트'").fetchone())
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM activities").fetchone()[0], 5)
             self.assertEqual(connection.execute("SELECT COUNT(*) FROM analyses").fetchone()[0], 1)
             self.assertEqual(connection.execute("SELECT COUNT(*) FROM records").fetchone()[0], 0)
 
@@ -85,6 +86,71 @@ class ChatTests(unittest.TestCase):
             completed = self.completed(client, accepted.json()["jobId"])
             self.assertEqual(completed["status"], "completed")
             self.assertEqual(completed["result"]["reply"]["analysis"]["activity"]["category"], "해커톤")
+
+    def test_general_chat_has_no_activity_or_record(self):
+        output = HomeResponse(kind="general", content="안녕하세요! 어떤 경험을 나누고 싶으세요?", analysis=None)
+        with patch("app.chat.analyze_home", return_value=output), TestClient(create_app(self.config)) as client:
+            accepted = client.post("/api/chat", data={"message": "안녕"})
+            completed = self.completed(client, accepted.json()["jobId"])
+            self.assertEqual(completed["status"], "completed")
+            self.assertEqual(completed["result"]["reply"]["kind"], "general")
+            self.assertIsNone(completed["result"]["reply"]["analysis"])
+        with closing(sqlite3.connect(self.path)) as connection:
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM activities").fetchone()[0], 5)
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM records").fetchone()[0], 0)
+
+    def test_sync_text_completes_in_one_request_and_does_not_repeat_model(self):
+        output = HomeResponse(kind="general", content="안녕하세요!", analysis=None)
+        with patch("app.chat.analyze_home", return_value=output) as model, TestClient(create_app(self.config)) as client:
+            data = {"message": "안녕", "requestId": "one-request"}
+            response = client.post("/api/chat", data=data, headers={"Prefer": "respond-sync"})
+            self.assertEqual(response.status_code, 200)
+            result = response.json()
+            self.assertEqual(result["status"], "completed")
+            self.assertEqual(result["result"]["reply"]["kind"], "general")
+            self.assertEqual(model.call_count, 1)
+            repeated = client.post("/api/chat", data=data, headers={"Prefer": "respond-sync"})
+            self.assertEqual(repeated.json()["jobId"], result["jobId"])
+            self.assertEqual(repeated.json()["status"], "completed")
+            self.assertEqual(model.call_count, 1)
+
+    def test_sync_analysis_and_failure_finish_without_polling(self):
+        with patch("app.chat.analyze_home", side_effect=self.model) as model, TestClient(create_app(self.config)) as client:
+            response = client.post("/api/chat", data={"message": "새 활동"}, headers={"Prefer": "respond-sync"})
+            self.assertEqual(response.json()["status"], "completed")
+            self.assertEqual(response.json()["result"]["reply"]["analysis"]["activity"]["match"], "new")
+            self.assertEqual(model.call_count, 1)
+        with patch("app.chat.analyze_home", side_effect=AnalysisError(502, "test-failure", "검사 실패")) as model, TestClient(create_app(self.config)) as client:
+            response = client.post("/api/chat", data={"message": "실패"}, headers={"Prefer": "respond-sync"})
+            self.assertEqual(response.json()["status"], "failed")
+            self.assertEqual(model.call_count, 1)
+
+    def test_chat_update_is_a_command_not_a_record_and_uses_recent_context(self):
+        output = HomeResponse.model_validate({"kind": "activity-update", "content": "수정 요청", "analysis": None,
+            "update": {"activityId": "line1-hackathon", "activityName": "1호선톤", "updates": [{"field": "role", "value": "팀장"}]}})
+        with patch("app.chat.analyze_home", return_value=output) as model, TestClient(create_app(self.config)) as client:
+            first = client.post("/api/chat", data={"message": "1호선톤 역할을 팀장으로 바꿔줘", "conversationId": "edit-chat"}, headers={"Prefer": "respond-sync"}).json()
+            self.assertEqual(first["result"]["reply"]["kind"], "activity-update")
+            self.assertIsNone(first["result"]["reply"]["analysis"])
+        with closing(sqlite3.connect(self.path)) as connection:
+            self.assertIsNone(connection.execute("SELECT role FROM activities WHERE id='line1-hackathon'").fetchone()[0])
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM records").fetchone()[0], 0)
+            # 백엔드 적용 후의 완료 응답을 재현한다. 새 수정 이력을 만들지 않는다.
+            connection.execute("UPDATE analyses SET reply = ? WHERE id = ?", (json.dumps({"id": "done", "kind": "general", "analysis": None,
+                "content": "역할을 팀장으로 바꿨어요.", "updatedActivityId": "line1-hackathon"}), first["result"]["analysisId"]))
+            connection.commit()
+        general = HomeResponse(kind="general", content="네, 확인했어요.", analysis=None)
+        with patch("app.chat.analyze_home", return_value=general) as model, TestClient(create_app(self.config)) as client:
+            client.post("/api/chat", data={"message": "고마워", "conversationId": "edit-chat"}, headers={"Prefer": "respond-sync"})
+            self.assertEqual(model.call_args.kwargs["active_activity_id"], "line1-hackathon")
+            self.assertIn("팀장", model.call_args.kwargs["recent_messages"][0]["content"])
+    def test_existing_missing_category_is_only_a_proposal(self):
+        with patch("app.chat.analyze_home", side_effect=self.model), TestClient(create_app(self.config)) as client:
+            accepted = client.post("/api/chat", data={"message": "기존 활동"})
+            completed = self.completed(client, accepted.json()["jobId"])
+            self.assertEqual(completed["result"]["reply"]["analysis"]["activity"]["category"], "독서 모임")
+        with closing(sqlite3.connect(self.path)) as connection:
+            self.assertIsNone(connection.execute("SELECT category FROM activities WHERE id='line1-hackathon'").fetchone()[0])
 
     def test_invalid_activity_category_is_rejected(self):
         from pydantic import ValidationError
@@ -147,23 +213,61 @@ class ChatTests(unittest.TestCase):
 
 
 class HomeModelTests(unittest.IsolatedAsyncioTestCase):
+    async def test_update_target_and_attachments_are_checked(self):
+        from app.schemas import AnalysisContext
+        output = HomeResponse.model_validate({"kind": "activity-update", "content": "요청", "analysis": None,
+            "update": {"activityId": "known", "activityName": "다른 표시명", "updates": [{"field": "role", "value": "팀장"}]}})
+        context = AnalysisContext(activities=[{"id": "known", "name": "실제 활동"}])
+        with patch("app.home_analysis.structured_response", new_callable=AsyncMock, return_value=output) as provider:
+            result = await analyze_home(message="역할을 팀장으로 바꿔줘", files=[], source_url=None, link_content=None,
+                                        context=context, config=settings(), active_activity_id="known")
+            self.assertEqual(result.update.activityName, "실제 활동")
+            self.assertEqual(build_reply(result, [], None, "reply")["kind"], "activity-update")
+            self.assertIn('activeActivityId', provider.call_args.kwargs["input"][0]["content"][0]["text"])
+            with self.assertRaises(AnalysisError):
+                await analyze_home(message="수정해줘", files=[], source_url=None, link_content=None, context=AnalysisContext(), config=settings())
+            with self.assertRaises(AnalysisError):
+                await analyze_home(message="수정해줘", files=[UploadedFile(id="f", name="자료.txt", mime_type="text/plain", content=b"text")],
+                                   source_url=None, link_content=None, context=context, config=settings())
+
+    def test_invalid_update_fields_and_values_are_rejected(self):
+        from pydantic import ValidationError
+        from app.home_schemas import ActivityFieldUpdate, ActivityUpdate
+        for field, value in [("name", "이름"), ("status", "종료"), ("startDate", "2026-02-30")]:
+            with self.assertRaises(ValidationError):
+                ActivityFieldUpdate(field=field, value=value)
+        with self.assertRaises(ValidationError):
+            ActivityUpdate(activityId="known", activityName="활동", updates=[{"field": "role", "value": "팀장"}] * 2)
+
     async def test_file_content_and_prompt_are_sent_and_file_ids_checked(self):
         from app.schemas import AnalysisContext
         file = UploadedFile(id="f1", name="회의록.txt", mime_type="text/plain", content="실제 본문".encode())
         output = HomeAnalysis.model_validate({"activity": {"match": "unresolved", "id": None, "name": "활동 미확정", "confidence": None},
                                              "materialType": "회의록", "stage": None, "summary": "요약", "changes": [],
                                              "files": [{"id": "f1", "materialType": "회의록"}]})
-        with patch("app.home_analysis.structured_response", new_callable=AsyncMock, return_value=output) as provider:
+        response = HomeResponse(kind="analysis", content="자료를 확인했어요.", analysis=output)
+        with patch("app.home_analysis.structured_response", new_callable=AsyncMock, return_value=response) as provider:
             await analyze_home(message="입력", files=[file], source_url=None, link_content=None,
                                context=AnalysisContext(), config=settings())
         request = provider.call_args.kwargs
         self.assertIn("실제 본문", request["input"][0]["content"][1]["text"])
         self.assertIn("Before", request["instructions"])
         output.files[0].id = "fake-file"
-        with patch("app.home_analysis.structured_response", new_callable=AsyncMock, return_value=output):
+        with patch("app.home_analysis.structured_response", new_callable=AsyncMock, return_value=response):
             with self.assertRaises(AnalysisError):
                 await analyze_home(message="입력", files=[file], source_url=None, link_content=None,
                                    context=AnalysisContext(), config=settings())
+
+    async def test_general_is_allowed_only_without_attachments(self):
+        from app.schemas import AnalysisContext
+        output = HomeResponse(kind="general", content="안녕하세요!", analysis=None)
+        with patch("app.home_analysis.structured_response", new_callable=AsyncMock, return_value=output):
+            response = await analyze_home(message="안녕", files=[], source_url=None, link_content=None,
+                                          context=AnalysisContext(), config=settings())
+            self.assertEqual(response.kind, "general")
+            with self.assertRaises(AnalysisError):
+                await analyze_home(message="", files=[UploadedFile(id="f", name="자료.txt", mime_type="text/plain", content=b"text")],
+                                   source_url=None, link_content=None, context=AnalysisContext(), config=settings())
 
     async def test_private_link_is_rejected(self):
         address = [(2, 1, 6, "", ("127.0.0.1", 80))]

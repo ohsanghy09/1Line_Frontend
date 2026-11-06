@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Response
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
@@ -29,6 +29,7 @@ class ChatPipeline:
         self.database = database
         self.config = config
         self.tasks = set()
+        self.tasks_by_job = {}
         self.semaphore = asyncio.Semaphore(2)
 
     @asynccontextmanager
@@ -47,7 +48,7 @@ class ChatPipeline:
             if tasks:
                 await asyncio.gather(*tasks, return_exceptions=True)
 
-    async def submit(self, *, message, files, source_url, conversation_id, request_key):
+    async def submit(self, *, message, files, source_url, conversation_id, request_key, wait_for_result=False):
         if not self.config.openai_api_key or not self.config.openai_model:
             raise AnalysisError(503, "not_configured", "OpenAI 키와 모델을 먼저 설정해 주세요.")
         metadata = {"message": message, "sourceUrl": source_url,
@@ -64,7 +65,14 @@ class ChatPipeline:
         if created:
             task = asyncio.create_task(self.run(job_id))
             self.tasks.add(task)
+            self.tasks_by_job[job_id] = task
             task.add_done_callback(self.tasks.discard)
+            task.add_done_callback(lambda _: self.tasks_by_job.pop(job_id, None))
+        if wait_for_result:
+            # 텍스트는 한 HTTP 요청에서 결과까지 기다린다. 같은 요청 재접수도 모델을 중복 호출하지 않는다.
+            task = self.tasks_by_job.get(job_id)
+            if task is not None:
+                await asyncio.shield(task)
         return await self.response(job_id)
 
     async def run(self, job_id):
@@ -74,6 +82,8 @@ class ChatPipeline:
                 job = await run_in_threadpool(self.database.read_job, job_id)
                 metadata = json.loads(job["input_json"])
                 stored = await run_in_threadpool(self.database.read_context)
+                conversation = await run_in_threadpool(self.database.read_conversation_context, job['draft']['conversation_id'],
+                                                       {activity.id for activity in stored.context.activities})
                 files = []
                 for file in job["files"]:
                     original = await run_in_threadpool(self.database.read_file, file["id"])
@@ -82,7 +92,7 @@ class ChatPipeline:
                 link_content = await fetch_link(source_url) if source_url else None
                 await run_in_threadpool(self.database.set_phase, job_id, "analyzing")
                 result = await analyze_home(message=metadata["message"], files=files, source_url=source_url,
-                                            link_content=link_content, context=stored.context, config=self.config)
+                                            link_content=link_content, context=stored.context, config=self.config, **conversation)
                 await run_in_threadpool(self.database.set_phase, job_id, "persisting")
                 reply = build_reply(result, files, source_url, "reply-" + job["analysis_id"])
                 await run_in_threadpool(self.database.complete_job, job_id, reply)
@@ -139,14 +149,17 @@ class ChatPipeline:
 
         @router.post("/api/chat", tags=["홈 분석"], status_code=202,
                      response_model=JobResponse, response_model_exclude_none=True,
-                     openapi_extra={"requestBody": {"required": True, "content": {"multipart/form-data": {
+                     responses={200: {"model": JobResponse, "description": "Prefer: respond-sync인 파일 없는 텍스트의 최종 결과. 모델은 한 번만 호출한다."}},
+                     openapi_extra={"parameters": [{"name": "Prefer", "in": "header", "required": False,
+                                                    "schema": {"type": "string", "enum": ["respond-sync", "respond-async"]}}],
+                                    "requestBody": {"required": True, "content": {"multipart/form-data": {
                          "schema": {"type": "object", "properties": {
                              "message": {"type": "string", "maxLength": 20000},
                              "conversationId": {"type": "string", "maxLength": 200},
                              "requestId": {"type": "string", "maxLength": 200},
                              "files": {"type": "array", "maxItems": 10, "items": {"type": "string", "format": "binary"}},
                          }}}}}})
-        async def chat(request: Request):
+        async def chat(request: Request, response: Response):
             files = []
             async with request.form(max_files=10, max_fields=3) as form:
                 message = form.get("message", "")
@@ -165,8 +178,12 @@ class ChatPipeline:
                 if not message.strip() and not files:
                     raise AnalysisError(400, "empty_input", "텍스트 또는 파일을 보내주세요.")
                 validate_files(files)
-            return await self.submit(message=message, files=files, source_url=None,
-                                     conversation_id=conversation_id, request_key=request_key)
+            wait_for_result = not files and request.headers.get("Prefer") == "respond-sync"
+            result = await self.submit(message=message, files=files, source_url=None,
+                                       conversation_id=conversation_id, request_key=request_key, wait_for_result=wait_for_result)
+            if wait_for_result:
+                response.status_code = 200
+            return result
 
         @router.post("/api/chat/links", tags=["홈 분석"], status_code=202,
                      response_model=JobResponse, response_model_exclude_none=True)

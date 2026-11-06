@@ -5,7 +5,7 @@ from collections import Counter
 from pathlib import Path
 
 from .analysis import AnalysisError, structured_response
-from .home_schemas import HomeAnalysis, HomeModelInput
+from .home_schemas import HomeResponse, HomeModelInput
 
 PROMPT_PATH = Path(__file__).parent / "prompts/home.md"
 SUPPORTED_FILES = {".txt", ".md", ".json", ".csv", ".tsv", ".html", ".xml", ".py", ".js", ".ts",
@@ -25,11 +25,12 @@ def validate_files(files):
             raise AnalysisError(415, "unsupported_file", "지원하지 않는 파일 형식이에요. 문서·텍스트·PDF·이미지로 전송해 주세요.")
 
 
-async def analyze_home(*, message, files, source_url, link_content, context, config):
+async def analyze_home(*, message, files, source_url, link_content, context, config, active_activity_id=None, active_activity_pending=False, recent_messages=None):
     validate_files(files)
     metadata = [{"id": file.id, "name": file.name} for file in files]
     payload = HomeModelInput(message=message, files=metadata, sourceUrl=source_url,
-                             linkContent=link_content, context=context)
+                             linkContent=link_content, context=context, activeActivityId=active_activity_id,
+                             activeActivityPending=active_activity_pending, recentMessages=recent_messages or [])
     parts = [{"type": "input_text", "text": payload.model_dump_json()}]
     text_sources = [message, link_content or ""]
     for file in files:
@@ -51,8 +52,19 @@ async def analyze_home(*, message, files, source_url, link_content, context, con
             else:
                 parts.append({"type": "input_file", "filename": file.name,
                               "file_data": f"data:{file.mime_type};base64,{encoded}"})
-    result = await structured_response(config, instructions=PROMPT_PATH.read_text(encoding="utf-8"),
-                                       input=[{"role": "user", "content": parts}], schema=HomeAnalysis)
+    response = await structured_response(config, instructions=PROMPT_PATH.read_text(encoding="utf-8"),
+                                         input=[{"role": "user", "content": parts}], schema=HomeResponse)
+    if response.kind in {"general", "activity-update"}:
+        # 첨부 자료를 일반 대화로 무시하지 않고 분석 응답을 요구한다.
+        if files or source_url:
+            raise AnalysisError(502, "invalid_analysis", "첨부한 자료의 분석 결과를 확인하지 못했어요. 다시 시도해 주세요.")
+        if response.kind == "activity-update":
+            activities = {activity.id: activity for activity in context.activities}
+            if response.update.activityId not in activities:
+                raise AnalysisError(502, "invalid_activity_update", "수정할 활동을 확인하지 못했어요. 활동명을 함께 알려 주세요.")
+            response.update.activityName = activities[response.update.activityId].name
+        return response
+    result = response.analysis
     activities = {activity.id: activity for activity in context.activities}
     decision = result.activity
     if decision.match == "existing":
@@ -73,10 +85,17 @@ async def analyze_home(*, message, files, source_url, link_content, context, con
                 continue
             if not any(quote in source for source in text_sources):
                 raise AnalysisError(502, "invalid_analysis", "분석 근거가 실제 입력·자료와 일치하지 않아요.")
-    return result
+    return response
 
 
 def build_reply(result, files, source_url, reply_id):
+    if result.kind == "activity-update":
+        return {"id": reply_id, "role": "assistant", "kind": "activity-update", "content": "활동 정보를 수정하고 있어요.",
+                "analysis": None, "update": result.update.model_dump()}
+    if result.kind == "general":
+        return {"id": reply_id, "role": "assistant", "kind": "general", "content": result.content, "analysis": None}
+    content = result.content
+    result = result.analysis
     types = {file.id: file.materialType for file in result.files}
     names = {f"file:{file.id}": file.name for file in files}
     changes = [change.model_dump() for change in result.changes]
@@ -85,7 +104,7 @@ def build_reply(result, files, source_url, reply_id):
     kind = ("link-analysis" if source_url else "batch-analysis" if len(files) > 1
             else "file-analysis" if files and changes else "no-change" if files else "text-analysis")
     counts = Counter(types.values())
-    reply = {"id": reply_id, "role": "assistant", "kind": kind, "content": result.summary,
+    reply = {"id": reply_id, "role": "assistant", "kind": kind, "content": content,
              "analysis": {"activity": result.activity.model_dump(), "materialType": result.materialType,
                           "stage": result.stage, "summary": result.summary, "changes": changes,
                           "files": [{"name": file.name, "materialType": types[file.id], "previousVersion": None} for file in files],

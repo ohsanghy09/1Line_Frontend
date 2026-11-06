@@ -74,8 +74,9 @@ test('아카이브는 확정한 실제 자료만 집계하고 분류·활동·�
     await send('/records', { activityId: 'line1-hackathon', analysisId: textDraft.analysisId })
     await send('/records', { activityId: 'line1-hackathon', reply: createMockLinkReply('https://example.com/actual-input') })
     const entries = (await get('/archive/activities/line1-hackathon')).folders.flatMap(folder => folder.files)
-    assert.equal(entries.length, 2)
-    assert.equal(entries.find(file => file.kind === 'text').content, '오늘은 DB 연동을 구현했다.')
+    assert.equal(entries.length, 1)
+    assert.ok(entries.every(file => file.kind !== 'text'))
+    assert.equal((await get('/archive/activities/line1-hackathon')).recordsCount, 2)
     assert.equal(entries.find(file => file.kind === 'link').sourceUrl, 'https://example.com/actual-input')
     assert.deepEqual((await get('/archive/activities/line1-hackathon')).timeline, [])
     // 같은 이름의 파일은 ID를 임의 선택하지 않고 문자열 근거로 남긴다.

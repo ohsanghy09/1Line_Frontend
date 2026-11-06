@@ -1,5 +1,13 @@
 # AI API 개발 서버
 
+대화 수정(2026-11-06): 홈 모델은 일반/분석/활동 수정 응답을 구분한다. 역할·상태·기간·전체 요약 수정 명령은 실제 활동 ID와 요청 필드만 반환하고 백엔드가 직접 적용한다. 같은 대화의 최근 완료 요청 6개를 문맥으로 참고한다. 새 기록·정정 이력·확인 모달은 없다. [처리·검증](../docs/chat/구현_기능/대화로_활동_정보_수정.md) 참고. 서버 재시작 후 적용한다.
+
+활동 정보 자동 갱신(2026-11-06): 확정 저장 뒤 백엔드가 POST `/api/analyze/activities/{activity_id}`로 활동 전체 요약·상태·기간·역할을 요청한다. AI는 공유 DB를 읽고 근거 검증 결과만 반환하며 저장은 백엔드가 맡는다. `app/prompts/activity_metadata.md`를 사용한다. [기능·제한·검증](../docs/footprints/활동_정보_AI_갱신.md)을 따른다. 백엔드 스키마 준비 후 AI 서버를 재시작한다. Swagger 갱신은 이번 범위에서 제외했다.
+
+현재 모델 설정(2026-11-06): 로컬 `.env`와 `.env.example`은 `OPENAI_MODEL=gpt-5.4-mini`다. 홈·Journey의 공용 모델이며 서버 재시작 후 적용한다. 모델 메타정보 조회로 접근 권한을 확인했으나 경량 모델의 실제 분석 품질 검사는 아직 하지 않았다. 아래 `gpt-5.6-sol` 검증 기록은 이전 모델의 결과다. 파일 없는 텍스트는 `Prefer: respond-sync` POST 한 번에서 결과를 받고, 파일·링크는 비동기 접수·조회한다.
+
+최신 홈 동작: 분석 시 신규 활동을 자동 생성하지 않는다. 일반 대화와 분석을 구분하고 새 활동은 사용자 확인 후 백엔드가 기록과 함께 생성한다. [응답 구분·확인 저장](../docs/chat/구현_기능/홈_응답_구분_및_활동_확인_저장.md)을 참고한다. 홈 프롬프트·서버 코드를 갱신한 상태로 사용한다.
+
 Growth Journey도 실제 분석으로 연결했다. GET `/api/journey/context`는 확정 기록만 조회하고 POST `/api/analyze/journey`는 `app/prompts/journey.md`로 실제 모델을 호출해 근거 검증 후 결과를 반환한다. 결과 DB 쓰기는 백엔드 POST `/api/journey/analyze`가 담당한다. [성장 분석 API](../docs/journey/성장_분석_API.md)의 최신 절을 따른다. 검사: 루트에서 `node scripts/check-live-ai.mjs --journey`(임시 DB·실제 모델·추가 호출 비용).
 
 다음 작업 진입점: [현재 작업 인수인계](../docs/integration/현재_작업_인수인계.md). 실제 화면 시나리오 확인 단계이며 연결 오류·재전송 수정과 바탕화면 자료 위치를 포함한다.
@@ -31,7 +39,7 @@ Copy-Item .env.example .env
 | 환경변수 | 기본값·의미 |
 | --- | --- |
 | OPENAI_API_KEY | 비어 있음. 서버용 키, 응답에는 값이 노출되지 않음 |
-| OPENAI_MODEL | 예시는 비어 있음. 현재 선택한 모델 ID는 `gpt-5.6-sol` |
+| OPENAI_MODEL | 현재 예시와 로컬 설정은 `gpt-5.4-mini`. 홈·Journey 공용 모델 |
 | OPENAI_TIMEOUT_SECONDS | 45초. 1~120초 설정 가능, 자동 재시도 없음 |
 | AI_CORS_ORIGINS | `http://localhost:5173,http://127.0.0.1:5173`. 허용 프론트 주소를 쉼표로 구분 |
 | AI_DB_PATH | `../api-server/data/1line.db`. 상대 경로는 AI 서버 폴더 기준이며 백엔드가 사용하는 파일과 같아야 함 |

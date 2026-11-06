@@ -1,4 +1,5 @@
 import { request } from './chat'
+import { isActivityAnalysis } from './activityAnalysis'
 import type { FootprintActivity, FootprintActivityDetail, FootprintFile, FootprintFileDetail, FootprintFilters, FootprintTimelineEvent } from '../types/footprints'
 
 type RawActivity = Omit<FootprintActivity, 'updatedAt' | 'updatedAtLabel'> & { updatedAt: string | null }
@@ -16,6 +17,8 @@ function isActivity(value: unknown): value is RawActivity & Record<string, unkno
     return object(value) && ['id', 'title', 'category', 'role', 'period', 'summary'].every(key => typeof value[key] === 'string')
         && ['진행 중', '완료', '미설정'].includes(String(value.status)) && count(value.materialsCount)
         && (value.updatedAt === null || date(value.updatedAt))
+        && (value.recordsCount === undefined || count(value.recordsCount))
+        && (value.metadataAnalysis === undefined || isActivityAnalysis(value.metadataAnalysis))
 }
 
 function isFile(value: unknown): value is RawFile {

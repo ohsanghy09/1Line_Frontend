@@ -20,8 +20,11 @@ export function searchArchive(db, query) {
   const activities = db.prepare('SELECT id, name, summary FROM activities ORDER BY rowid').all().map(row => {
     const { folders, timeline: _timeline, ...activity } = readArchive(db, row.id)
     const files = folders.flatMap(folder => folder.files)
+    // 텍스트 경험 기록은 자료 폴더에는 넣지 않지만 확정 기록 검색과 분석에서는 보존한다.
+    const savedTexts = db.prepare('SELECT message, reply FROM records WHERE activity_id = ?').all(row.id)
+      .flatMap(record => [record.message, JSON.parse(record.reply).analysis?.summary ?? ''])
     // 미저장 분석은 readArchive에 포함되지 않는다. 전체 자료 수는 검색으로 줄이지 않는다.
-    return { ...activity, searchTexts: [row.name, row.summary ?? '', ...files.flatMap(file => [file.name, file.content, file.summary])] }
+    return { ...activity, searchTexts: [row.name, row.summary ?? '', ...savedTexts, ...files.flatMap(file => [file.name, file.content, file.summary])] }
   })
   const items = selectArchiveActivities(activities, { search: query.q, category: query.category, status: query.status, sort: query.sort })
     .map(({ searchTexts: _searchTexts, ...activity }) => activity)

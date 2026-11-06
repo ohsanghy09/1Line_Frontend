@@ -89,7 +89,8 @@ class SharedDatabase:
             activities_total = connection.execute("SELECT COUNT(*) FROM activities").fetchone()[0]
             records_total = connection.execute("SELECT COUNT(*) FROM records").fetchone()[0]
             activities = [dict(row) for row in connection.execute(
-                "SELECT id, name, category, summary FROM activities ORDER BY updated_at DESC, rowid DESC LIMIT 50")]
+                "SELECT id, name, category, summary, role, CASE WHEN status IN ('진행 중', '완료') THEN status ELSE NULL END AS status, "
+                "start_date AS startDate, end_date AS endDate FROM activities ORDER BY updated_at DESC, rowid DESC LIMIT 50")]
             ids = [activity["id"] for activity in activities]
             records = []
             if ids:
@@ -123,6 +124,30 @@ class SharedDatabase:
                 "SELECT id, analysis_id, name, mime_type, size, content FROM files WHERE id = ?", (file_id,)
             ).fetchone()
             return DatabaseFile(**dict(row)) if row else None
+
+    def read_conversation_context(self, conversation_id, valid_ids):
+        # 최근 완료 대화만 문맥으로 읽는다. 별도의 정정 기록·수정 이력은 만들지 않는다.
+        with self.connect() as connection:
+            rows = connection.execute("""SELECT a.id, a.message, a.reply FROM analyses a
+                JOIN ai_chat_jobs j ON j.analysis_id = a.id WHERE a.conversation_id = ? AND j.status = 'completed'
+                ORDER BY a.created_at DESC, a.rowid DESC LIMIT 6""", (conversation_id,)).fetchall()
+            messages, active_id, pending = [], None, False
+            for row in reversed(rows):
+                try:
+                    reply = json.loads(row["reply"])
+                    messages.extend([{"role": "user", "content": row["message"][:2000]},
+                                     {"role": "assistant", "content": reply.get("content", "")[:2000]}])
+                    saved = connection.execute("SELECT activity_id FROM records WHERE analysis_id = ?", (row["id"],)).fetchone()
+                    proposal = (reply.get("analysis") or {}).get("activity", {})
+                    target = saved[0] if saved else reply.get("updatedActivityId") or (proposal.get("id") if proposal.get("match") == "existing" else None)
+                    if target in valid_ids:
+                        active_id = target
+                        pending = False
+                    elif proposal.get("match") in {"new", "unresolved"}:
+                        active_id, pending = None, True
+                except (ValueError, TypeError, KeyError):
+                    continue
+            return {"active_activity_id": active_id, "active_activity_pending": pending, "recent_messages": messages[-12:]}
 
     def check_chat_schema(self, connection):
         self.check_schema(connection)
@@ -192,28 +217,20 @@ class SharedDatabase:
                                (json.dumps({"code": "server_restarted", "error": "AI 서버가 재시작되어 분석이 중단됐어요. 입력을 다시 전송해 주세요."}, ensure_ascii=False), self.now()))
 
     def complete_job(self, job_id, reply):
-        # 새 활동 생성과 분석 확정을 원자적으로 처리한다. 기록·Timeline은 여기서 만들지 않는다.
+        # 분석 응답만 원자적으로 확정한다. 활동·기록·Timeline은 사용자 확인 저장에서 만든다.
         with self.write() as connection:
             job = connection.execute("SELECT * FROM ai_chat_jobs WHERE id = ?", (job_id,)).fetchone()
             if not job or job["status"] not in {"queued", "running"}:
                 raise DatabaseError("job_not_running", "이미 종료된 분석 작업이에요.")
-            decision = reply["analysis"]["activity"]
-            if decision["match"] == "new":
-                if connection.execute("SELECT id FROM activities WHERE name = ?", (decision["name"],)).fetchone():
-                    raise DatabaseError("activity_conflict", "같은 이름의 활동이 생겼어요. 최신 활동 문맥으로 다시 분석해 주세요.")
-                decision["id"] = str(uuid4())
-                connection.execute("INSERT INTO activities (id, name, category, updated_at) VALUES (?, ?, ?, ?)",
-                                   (decision["id"], decision["name"], decision.get("category"), self.now()))
-                decision["match"] = "existing"
-            if decision["match"] == "existing":
+            # 분석 완료는 제안 보관이다. 활동 생성·메타정보 수정은 사용자 확정 저장에서만 한다.
+            decision = reply["analysis"]["activity"] if reply.get("analysis") else None
+            if decision and decision["match"] == "existing":
                 activity = connection.execute("SELECT * FROM activities WHERE id = ?", (decision["id"],)).fetchone()
                 if not activity:
                     raise DatabaseError("activity_missing", "분석 중 연결 활동이 삭제됐어요. 다시 분석해 주세요.")
-                # 기존 분류를 보존하고 미분류 활동만 실제 분석 결과로 채운다.
-                if not activity["category"] and decision.get("category"):
-                    connection.execute("UPDATE activities SET category = ? WHERE id = ?", (decision["category"], decision["id"]))
-                    activity = connection.execute("SELECT * FROM activities WHERE id = ?", (decision["id"],)).fetchone()
-                decision.update({key: activity[key] for key in ["name", "category", "role", "summary"]})
+                category = activity["category"] or decision.get("category")
+                decision.update({key: activity[key] for key in ["name", "role", "summary"]})
+                decision["category"] = category
                 decision["status"] = activity["status"] if activity["status"] in {"진행 중", "완료"} else None
                 decision["period"] = ({"start": activity["start_date"], "end": activity["end_date"]}
                                       if activity["start_date"] or activity["end_date"] else None)

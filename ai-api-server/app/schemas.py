@@ -22,6 +22,10 @@ class ActivityContext(StrictModel):
     name: Text
     category: Identifier | None = None
     summary: Text | None = None
+    role: Text | None = None
+    status: Literal["진행 중", "완료"] | None = None
+    startDate: Text | None = None
+    endDate: Text | None = None
 
 
 class RecordContext(StrictModel):

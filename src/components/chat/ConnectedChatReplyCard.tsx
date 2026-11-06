@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type { ActivitySelection, ChatReply } from '../../types/chat'
 import { getActivities, saveRecord, updateRecord } from '../../services/records'
 import type { ActivityOption } from '../../services/records'
 import ChatReplyCard from './ChatReplyCard'
 import ActivityReviewModal from './modals/ActivityReviewModal'
+import ActivityAnalysisStatus from '../ActivityAnalysisStatus'
 
 // 카드별 수정본·저장 ID를 관리한다. 홈과 독립 미리보기는 같은 저장 흐름을 사용한다.
 export default function ConnectedChatReplyCard({ reply: initial, now, onChange }: {
@@ -14,6 +15,11 @@ export default function ConnectedChatReplyCard({ reply: initial, now, onChange }
     const [activities, setActivities] = useState<ActivityOption[]>([])
     const [activityId, setActivityId] = useState(initial.activityId ?? '')
     const [reviewMode, setReviewMode] = useState<'edit' | null>(null)
+    const [isChoosingActivity, setIsChoosingActivity] = useState(false)
+    const [selectedExistingId, setSelectedExistingId] = useState('')
+    const activityPickerId = useId()
+    const existingActivityButtonRef = useRef<HTMLButtonElement>(null)
+    const showProposalActions = !recordId && (reply.analysis?.activity.match === 'new' || reply.analysis?.activity.match === 'unresolved')
     const [busy, setBusy] = useState(false)
     const [error, setError] = useState('')
     const [notice, setNotice] = useState('')
@@ -49,26 +55,41 @@ export default function ConnectedChatReplyCard({ reply: initial, now, onChange }
         return list
     }
 
+    async function saveTo(selection: ActivitySelection, materialType: string) {
+        if (!reply.analysis) return
+        const saved = await saveRecord({ ...reply, analysis: { ...reply.analysis, materialType } }, selection)
+        if (!alive.current) return
+        setRecordId(saved.id); setActivityId(saved.activityId)
+        change({ ...saved.reply, recordId: saved.id, activityId: saved.activityId })
+        setReviewMode(null)
+        setIsChoosingActivity(false)
+        setNotice('아카이브에 저장했어요.')
+    }
+
     function save() {
         if (recordId) return
         void perform(async () => {
             if (!reply.analysis) throw new Error('저장할 분석 결과를 확인할 수 없어요.')
+            const proposal = reply.analysis.activity
+            // 새 활동 생성과 원본 자료 저장은 카드의 명시적인 클릭 한 번으로 확정한다.
+            if (proposal.match === 'new') {
+                await saveTo({ newActivity: { name: proposal.name, category: proposal.category ?? null,
+                    status: null, role: null, period: null, summary: null } }, reply.analysis.materialType)
+                return
+            }
             const list = await loadActivities()
             if (!alive.current) return
             // 사용자가 선택한 ID 또는 분석의 기존 활동 ID만 사용하고 이름으로 ID를 추측하지 않는다.
-            const proposal = reply.analysis.activity
             const targetId = activityId || (proposal.match === 'existing' || !proposal.match ? proposal.id : '')
             if (!targetId || !list.some(item => item.id === targetId)) {
-                throw new Error(!list.length ? '연결할 기존 활동이 없어요. 활동이 준비된 뒤 다시 시도해 주세요.'
-                    : reply.kind === 'batch-analysis' ? '자료를 연결할 기존 활동을 확인할 수 없어요. 활동 연결을 확인한 뒤 다시 시도해 주세요.'
-                    : '수정 버튼에서 연결할 활동을 선택한 뒤 저장해 주세요.')
+                setIsChoosingActivity(true)
+                return
             }
             // 원본 파일 연결과 분류는 기존 저장 서비스가 유지하며 새 기록만 추가한다.
-            const saved = await saveRecord(reply, { activityId: targetId })
-            if (!alive.current) return
-            setRecordId(saved.id); setActivityId(saved.activityId)
-            change({ ...saved.reply, recordId: saved.id, activityId: saved.activityId })
-            setNotice('아카이브에 저장했어요.')
+            const target = list.find(item => item.id === targetId)!
+            await saveTo({ activityId: targetId, ...(!target.category && proposal.category ? {
+                activityUpdates: { category: proposal.category, status: null, role: null, period: null, summary: null },
+            } : {}) }, reply.analysis.materialType)
         })
     }
 
@@ -77,6 +98,27 @@ export default function ConnectedChatReplyCard({ reply: initial, now, onChange }
             await loadActivities()
             if (!alive.current) return
             setReviewMode('edit')
+        })
+    }
+
+    function chooseExisting() {
+        void perform(async () => {
+            const list = await loadActivities()
+            if (!alive.current) return
+            setSelectedExistingId(current => list.some(item => item.id === current) ? current : '')
+            setIsChoosingActivity(true)
+        })
+    }
+
+    function saveExisting() {
+        if (recordId) return
+        void perform(async () => {
+            if (!reply.analysis || !selectedExistingId) return
+            // 선택 후 삭제된 활동을 저장 대상으로 사용하지 않도록 최신 목록을 확인한다.
+            const list = await loadActivities()
+            if (!alive.current) return
+            if (!list.some(item => item.id === selectedExistingId)) throw new Error('선택한 활동을 찾을 수 없어요. 다른 활동을 선택해 주세요.')
+            await saveTo({ activityId: selectedExistingId }, reply.analysis.materialType)
         })
     }
 
@@ -94,25 +136,46 @@ export default function ConnectedChatReplyCard({ reply: initial, now, onChange }
                 if (analysis.groups.length) analysis.groups = [{ materialType, count: analysis.files.length }]
             }
             const next = { ...reply, analysis, content: reply.content.replaceAll(reply.analysis.activity.name, analysis.activity.name) }
-            if (recordId) {
+            if (recordId && 'activityId' in selection) {
                 const saved = await updateRecord(recordId, selection.activityId, materialType)
                 if (!alive.current) return
                 setActivityId(saved.activityId)
                 change({ ...saved.reply, recordId: saved.id, activityId: saved.activityId })
             } else {
-                setActivityId(selection.activityId)
-                change({ ...next, activityId: selection.activityId })
+                const selectedId = 'activityId' in selection ? selection.activityId : ''
+                setActivityId(selectedId)
+                change({ ...next, activityId: selectedId })
             }
             setReviewMode(null)
-            setNotice(recordId ? '저장된 기록을 수정했어요.' : isNoChange ? '활동과 자료 유형을 수정했어요. 아카이브 저장 버튼을 누르면 저장됩니다.' : '활동과 자료 유형을 수정했어요. 기록 버튼을 누르면 저장됩니다.')
+            setNotice(recordId ? '저장된 기록을 수정했어요.' : isNoChange ? '활동과 자료 유형을 수정했어요. 아카이브 저장 버튼을 누르면 저장돼요.' : '활동과 자료 유형을 수정했어요. 기록 버튼을 누르면 저장돼요.')
         })
     }
 
     return <div className="space-y-2">
-        <ChatReplyCard reply={reply} now={now} actions={{ busy, saved: Boolean(recordId), onSave: save, onEdit: edit }} />
+        <ChatReplyCard reply={reply} now={now} actions={{ busy, saved: Boolean(recordId), onSave: save, onEdit: edit }} activityActions={<>
+            {showProposalActions && <div className="flex flex-wrap gap-2">
+                {reply.analysis?.activity.match === 'new' && <button type="button" disabled={busy} onClick={save} className="rounded-lg bg-brand-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-primaryHover disabled:opacity-50">{busy ? '처리 중…' : '새 활동으로 저장'}</button>}
+                <button ref={existingActivityButtonRef} type="button" disabled={busy} aria-expanded={isChoosingActivity} aria-controls={activityPickerId} onClick={chooseExisting} className="rounded-lg border border-brand-border px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-50">기존 활동에 연결</button>
+            </div>}
+            {isChoosingActivity && !recordId && <form id={activityPickerId} className="space-y-3 rounded-xl border border-brand-border bg-slate-50 p-3" onSubmit={event => { event.preventDefault(); saveExisting() }}>
+                {activities.length ? <>
+                    <label htmlFor={`${activityPickerId}-select`} className="block text-xs font-medium">자료를 저장할 기존 활동</label>
+                    <select id={`${activityPickerId}-select`} value={selectedExistingId} disabled={busy} onChange={event => { setSelectedExistingId(event.target.value); setError('') }} className="w-full min-w-0 rounded-lg border border-brand-border bg-white p-2 text-xs focus:outline-none focus:border-brand-primary">
+                        <option value="">활동을 선택해 주세요</option>
+                        {activities.map(activity => <option key={activity.id} value={activity.id}>{activity.name}</option>)}
+                    </select>
+                    <p className="text-xs text-brand-muted">선택한 활동에 이번 자료를 함께 저장해요.</p>
+                </> : <p role="status" className="text-xs text-brand-muted">연결할 기존 활동이 없어요.{reply.analysis?.activity.match === 'new' ? ' 새 활동으로 저장할 수 있어요.' : ' 먼저 홈에서 활동을 기록해 주세요.'}</p>}
+                <div className="flex flex-wrap gap-2">
+                    {activities.length > 0 && <button type="submit" disabled={busy || !selectedExistingId} className="rounded-lg bg-brand-primary px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50">{busy ? '저장 중…' : '선택한 활동에 저장'}</button>}
+                    <button type="button" disabled={busy} onClick={() => { setIsChoosingActivity(false); setError(''); existingActivityButtonRef.current?.focus() }} className="rounded-lg border border-brand-border px-3 py-1.5 text-xs text-slate-700 disabled:opacity-50">취소</button>
+                </div>
+            </form>}
+        </>} />
         {notice && <p role="status" className="text-xs text-brand-primary">{notice}</p>}
+        {recordId && activityId && <ActivityAnalysisStatus key={activityId} activityId={activityId} />}
         {error && !reviewMode && <p role="alert" className="text-xs text-red-600">{error}</p>}
-        {/* 모달은 분류 수정에만 사용하고 기록·저장은 카드에서 바로 요청한다. */}
+        {/* 모달은 기존 활동·자료 유형 수정에만 사용한다. 신규 추가는 카드에서 판단한다. */}
         {reviewMode && reply.analysis && <ActivityReviewModal activities={activities} activityId={activityId} proposal={reply.analysis.activity} materialType={reply.analysis.materialType} classificationOnly saved={Boolean(recordId)} saving={false} busy={busy} error={error} onClose={() => { setReviewMode(null); setError('') }} onSubmit={submit} />}
     </div>
 }

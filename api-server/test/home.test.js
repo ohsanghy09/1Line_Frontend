@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { openDatabase } from '../test-support/database.js'
 import { createApp } from '../test-support/app.js'
-import { createMockReply } from '../test-support/mock-reply.js'
+import { createMockReply, createMockLinkReply } from '../test-support/mock-reply.js'
 
 test('홈 최근 활동·자료는 서로 다른 시간 기준과 실제 ID를 사용한다', async () => {
   const db = openDatabase(':memory:')
@@ -32,7 +32,7 @@ test('홈 최근 활동·자료는 서로 다른 시간 기준과 실제 ID를 �
     const saved = []
     for (const [index, activityId] of ids.entries()) {
       const record = await send('/records', index === 1 ? { activityId, analysisId: draft.analysisId }
-        : { activityId, message: `직접 입력 ${index}`, reply: createMockReply(`직접 입력 ${index}`, [], 'no-change') })
+        : { activityId, message: `링크 설명 ${index}`, reply: createMockLinkReply(`https://example.com/material-${index}`) })
       saved.push(record)
       const when = `2026-01-0${index + 1}T00:00:00.000Z`
       db.prepare('UPDATE records SET created_at = ?, updated_at = ? WHERE id = ?').run(when, when, record.id)
@@ -83,6 +83,21 @@ test('홈 최근 활동·자료는 서로 다른 시간 기준과 실제 ID를 �
     const equalTimes = await get('/home/recent')
     assert.deepEqual(equalTimes.records.map(record => record.recordId), [saved[3].id, saved[2].id, saved[1].id])
     assert.equal(equalTimes.records[2].id, draft.attachments[0].id)
+    // 채팅만 저장한 최신 기록은 보관 자료·최근 추가 자료로 전환하지 않는다.
+    const text = await send('/records', { activityId: 'ai-contest', message: '채팅으로 입력한 경험 기록', reply: createMockReply('채팅으로 입력한 경험 기록', [], 'no-change') })
+    const afterText = await get('/home/recent')
+    assert.deepEqual(afterText.records.map(record => record.id), equalTimes.records.map(record => record.id))
+    assert.ok(afterText.records.every(record => record.recordId !== text.id))
+    const textOnly = await get('/archive/activities/ai-contest')
+    assert.equal(textOnly.materialsCount, 0)
+    assert.equal(textOnly.recordsCount, 1)
+    assert.deepEqual(textOnly.folders, [])
+    assert.equal((await fetch(base + `/archive/activities/ai-contest/materials/${encodeURIComponent(`record:${text.id}`)}`)).status, 404)
+    const invented = createMockReply('가상의 파일명만 있는 입력', [], 'no-change')
+    invented.analysis.files = [{ name: '실제 첨부가 아닌 채팅.txt', materialType: '참고 자료', previousVersion: null }]
+    await send('/records', { activityId: 'ai-contest', message: '실제 첨부 없는 입력', reply: invented })
+    assert.equal((await get('/archive/activities/ai-contest')).materialsCount, 0)
+    assert.deepEqual((await get('/home/recent')).records.map(record => record.id), equalTimes.records.map(record => record.id))
   } finally {
     await new Promise(resolve => server.close(resolve))
     db.close()

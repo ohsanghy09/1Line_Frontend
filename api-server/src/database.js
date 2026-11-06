@@ -46,7 +46,8 @@ export function openDatabase(path) {
   `)
   // 기존 DB의 활동·기록·원본을 보존하며 상세 메타정보 자리만 추가한다.
   const activityColumns = new Set(db.prepare('PRAGMA table_info(activities)').all().map(column => column.name))
-  for (const column of ['category', 'status', 'role', 'period', 'summary', 'start_date', 'end_date', 'updated_at']) {
+  for (const column of ['category', 'status', 'role', 'period', 'summary', 'start_date', 'end_date', 'updated_at',
+    'metadata_status', 'metadata_fingerprint', 'metadata_error', 'metadata_model', 'metadata_updated_at']) {
     if (!activityColumns.has(column)) db.exec(`ALTER TABLE activities ADD COLUMN ${column} TEXT`)
   }
   // 실행 시 예시 활동을 넣지 않는다. 활동은 실제 사용자 입력의 AI 분석으로 생성한다.
