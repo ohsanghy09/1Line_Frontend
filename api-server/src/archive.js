@@ -23,7 +23,7 @@ export function readArchive(db, activityId) {
     }] : []
     const files = entries.map((entry, position) => ({ ...entry, recordId: record.id, recordPosition: position, savedAt: record.created_at,
       uploadedAt: uploadedAt ?? record.created_at, updatedAt: record.updated_at,
-      summary: analysis.summary, content: record.message, sourceUrl: reply.sourceUrl ?? null,
+      summary: analysis.summary, sourceUrl: reply.sourceUrl ?? null,
       // 현재 계약은 기록 단위 요약이다. 다중 파일의 개별 내용 분석으로 간주하지 않는다.
       summaryScope: 'record',
     }))
@@ -41,7 +41,7 @@ export function readArchive(db, activityId) {
     for (const label of change.evidence) {
       const matches = files.filter(file => file.name === label)
       const textEvidence = files.length === 1 && files[0].kind !== 'file'
-        && ['사용자 직접 기록', files[0].content, files[0].sourceUrl].includes(label)
+        && [files[0].sourceUrl].includes(label)
       const target = matches.length === 1 ? matches[0] : textEvidence ? files[0] : null
       if (target) evidenceFileIds.push(target.id)
       else evidenceLabels.push(label)

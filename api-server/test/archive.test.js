@@ -49,7 +49,12 @@ test('아카이브는 확정한 실제 자료만 집계하고 분류·활동·�
     const fileId = draft.attachments[0].id
     const file = await get(`/archive/activities/line1-hackathon/materials/${fileId}`)
     assert.equal(file.file.name, '실제 기획.txt')
-    assert.equal(file.file.content, '실제 입력한 자료 설명')
+    assert.equal(Object.hasOwn(file.file, 'content'), false)
+    assert.equal(db.prepare('SELECT message FROM records WHERE id = ?').get(saved.id).message, '')
+    // 이전 버전에서 저장된 자료 설명도 자료 응답에는 노출하지 않는다.
+    db.prepare('UPDATE records SET message = ? WHERE id = ?').run('이전 자료 입력문', saved.id)
+    assert.equal(Object.hasOwn((await get(`/archive/activities/line1-hackathon/materials/${fileId}`)).file, 'content'), false)
+    assert.ok(detail.folders.flatMap(folder => folder.files).every(item => !Object.hasOwn(item, 'content')))
     assert.equal(file.file.summaryScope, 'record')
     assert.equal(file.events.length, 1)
     assert.deepEqual(file.versionHistory, [])

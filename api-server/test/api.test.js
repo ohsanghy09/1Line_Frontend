@@ -30,6 +30,8 @@ test('원본·대화 보관, 기록·중복 방지·수정·Timeline·DB 재시�
     const savedResponse = await fetch(`${base}/records`, json('POST', save))
     assert.equal(savedResponse.status, 201)
     const saved = await savedResponse.json()
+    assert.equal(saved.message, '')
+    assert.equal(db.prepare('SELECT message FROM analyses WHERE id = ?').get(draft.analysisId).message, '회의 자료입니다.')
     assert.equal((await fetch(`${base}/records`, json('POST', save))).status, 409)
     assert.deepEqual(await (await fetch(`${base}/activities/line1-hackathon/timeline`)).json(), [])
     const change = { before: '이전', after: '이후', category: '범위 변경', evidence: ['회의 자료'] }

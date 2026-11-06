@@ -14,12 +14,7 @@ from .analysis import AnalysisError, structured_response
 from .database import DatabaseError
 from .schemas import StrictModel, Text, Identifier, Change
 
-PROMPT_VERSION = "journey-v2"
-AXIS_OPTIONS = [
-    {"value": "all", "label": "전체 분야"}, {"value": "planning", "label": "기획 / PM"},
-    {"value": "technology", "label": "AI·기술"}, {"value": "data", "label": "데이터"},
-    {"value": "collaboration", "label": "발표·협업"}, {"value": "other", "label": "기타"},
-]
+PROMPT_VERSION = "journey-v3"
 
 
 class Evidence(StrictModel):
@@ -47,7 +42,7 @@ class Comparison(StrictModel):
 class Event(StrictModel):
     activityId: Identifier
     type: Identifier
-    axis: Literal["planning", "technology", "data", "collaboration", "other"]
+    axis: Identifier
     title: Text
     description: Text
     comparison: Comparison | None
@@ -60,9 +55,15 @@ class AnalysisType(StrictModel):
     icon: str = Field(min_length=1, max_length=16)
 
 
+class AnalysisAxis(StrictModel):
+    value: Identifier
+    label: str = Field(min_length=1, max_length=40)
+
+
 class JourneyAnalysis(StrictModel):
     summary: Summary
     typeOptions: list[AnalysisType] = Field(max_length=8)
+    axisOptions: list[AnalysisAxis] = Field(max_length=8)
     badges: list[Badge] = Field(max_length=10)
     events: list[Event] = Field(max_length=20)
 
@@ -124,7 +125,7 @@ class SavedEvent(StrictModel):
     occurredAt: str
     activity: SavedActivity
     type: Identifier
-    axis: Literal["planning", "technology", "data", "collaboration", "other"]
+    axis: Identifier
     title: str
     description: str
     evidence: list[Evidence]
@@ -198,6 +199,13 @@ def validate_journey(result, context):
             or not all(labels) or any(not option.icon.strip() for option in result.typeOptions)
             or set(types) != {event.type for event in result.events}):
         raise AnalysisError(502, "invalid_journey", "성장 분석 분류가 중복되거나 이벤트와 일치하지 않아요.")
+    # 분야도 모델이 생성한다. 전체 선택지는 서버만 추가하고 실제 이벤트에 쓰인 분야만 허용한다.
+    axes = [option.value for option in result.axisOptions]
+    axis_labels = [" ".join(unicodedata.normalize("NFKC", option.label).split()).casefold() for option in result.axisOptions]
+    if ("all" in axes or len(set(axes)) != len(axes) or len(set(axis_labels)) != len(axis_labels)
+            or not all(axis_labels) or any(label in {"전체", "전체 분야", "전체분야"} for label in axis_labels)
+            or set(axes) != {event.axis for event in result.events}):
+        raise AnalysisError(502, "invalid_journey", "성장 분야가 중복되거나 이벤트와 일치하지 않아요.")
     def check(evidence):
         for item in evidence:
             record = records.get(item.recordId)
@@ -241,7 +249,7 @@ async def analyze_journey(database, config):
         "result": {"source": "api", "summary": result.summary.model_dump(),
                    "badges": [{"id": f"badge-{i}", **badge.model_dump()} for i, badge in enumerate(result.badges)],
                    "typeOptions": [{"value": "all", "label": "전체"}, *[option.model_dump() for option in result.typeOptions]],
-                   "axisOptions": AXIS_OPTIONS, "events": events},
+                   "axisOptions": [{"value": "all", "label": "전체 분야"}, *[option.model_dump() for option in result.axisOptions]], "events": events},
     }
 
 

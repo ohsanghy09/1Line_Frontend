@@ -30,16 +30,21 @@ test('검색 API는 확정 이름·입력·요약을 검색하고 파일 BLOB �
     const draft = await (await fetch(base + '/chat', { method: 'POST', body: form })).json()
     assert.deepEqual((await search('Research')).items, [])
     const saved = await save({ activityId: 'line1-hackathon', analysisId: draft.analysisId })
+    // 기존 자료에 남아 있는 입력문도 검색 대상에서 제외한다.
+    db.prepare('UPDATE records SET message = ? WHERE id = ?').run('입력 전용 사용자 인터뷰', saved.id)
     const reply = createMockReply('기록', [], 'no-change')
     reply.analysis.summary = '저장 요약 전용 문구'
     await save({ activityId: 'computer-vision', message: '독립 텍스트', reply })
 
-    for (const q of ['1호선톤', '활동 전체 전용', '  rEsEaRcH   &   NOTES.pdf ', '입력 전용', '사용자 인터뷰'.normalize('NFD')]) {
+    for (const q of ['1호선톤', '활동 전체 전용', '  rEsEaRcH   &   NOTES.pdf ']) {
       const result = await search(q)
       assert.deepEqual(result.items.map(item => item.id), ['line1-hackathon'])
       assert.equal(result.items[0].materialsCount, 2)
       assert.equal(result.total, 5)
     }
+    assert.deepEqual((await search('입력 전용')).items, [])
+    assert.deepEqual((await search('사용자 인터뷰'.normalize('NFD'))).items, [])
+    assert.deepEqual((await search('독립 텍스트')).items.map(item => item.id), ['computer-vision'])
     assert.deepEqual((await search('저장 요약 전용')).items.map(item => item.id), ['computer-vision'])
     assert.equal((await search('')).items.length, 5)
     // 고정 목록 밖의 분류도 자동 노출되고 검색 결과가 없어도 유형 목록은 유지된다.

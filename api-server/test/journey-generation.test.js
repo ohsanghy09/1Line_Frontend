@@ -24,12 +24,12 @@ test('실제 성장 분석 경계: 확정 기록·저장·오래된 결과·근�
   const refs = [{ recordId: 'record-1', quote: '기능 6개를 기획했습니다.' }]
   function output() {
     return {
-      sourceFingerprint: journeySnapshot(db).fingerprint, recordCount: 1, model: 'test-provider', promptVersion: 'journey-v1',
+      sourceFingerprint: journeySnapshot(db).fingerprint, recordCount: 1, model: 'test-provider', promptVersion: 'journey-v3',
       result: { source: 'api', summary: { title: '기획 기록', description: '성장 판단 근거가 부족합니다.', evidence: refs }, badges: [],
         typeOptions: [{ value: 'all', label: '전체' }, { value: 'scope-design', label: '기획 범위 설계', icon: '🧭' }],
-        axisOptions: [{ value: 'all', label: '전체 분야' }, { value: 'planning', label: '기획' }],
+        axisOptions: [{ value: 'all', label: '전체 분야' }, { value: 'product-design', label: '서비스 디자인' }],
         events: [{ id: 'model-id', occurredAt: '2026-11', activity: { id: 'line1-hackathon', name: '모델이 바꾼 이름' },
-          type: 'scope-design', axis: 'planning', title: '기획 경험', description: '기획을 수행함.', evidence: refs }],
+          type: 'scope-design', axis: 'product-design', title: '기획 경험', description: '기획을 수행함.', evidence: refs }],
       },
     }
   }
@@ -49,6 +49,8 @@ test('실제 성장 분석 경계: 확정 기록·저장·오래된 결과·근�
       const result = await response.json()
       assert.equal(result.analysis.stale, false)
       assert.equal(result.analysis.recordCount, 1)
+      assert.equal(result.events[0].axis, 'product-design')
+      assert.equal(result.axisOptions[1].label, '서비스 디자인')
       assert.equal(result.events[0].activity.name, '1호선톤')
       assert.notEqual(result.events[0].id, 'model-id')
       assert.equal(result.events[0].type, 'scope-design')
@@ -72,6 +74,13 @@ test('실제 성장 분석 경계: 확정 기록·저장·오래된 결과·근�
         data => { data.result.events[0].occurredAt = '2020-01' },
         data => { delete data.result.typeOptions[1].icon },
         data => { data.result.typeOptions.push({ value: 'unused', label: '사용하지 않는 분류', icon: '📝' }) },
+        data => { data.result.events[0].axis = 'missing' },
+        data => { data.result.axisOptions.push({ value: 'unused', label: '사용하지 않는 분야' }) },
+        data => { data.result.axisOptions[1].label = '전체 분야' },
+        data => {
+          data.result.axisOptions.push({ value: 'duplicate-label', label: ' 서비스 디자인 ' })
+          data.result.events.push({ ...data.result.events[0], id: 'different-id', axis: 'duplicate-label' })
+        },
         data => { data.result.events[0].comparison = { before: '기획', after: 'PM', evidence: [] } },
       ]) {
         behavior = () => { const body = output(); mutate(body); return { status: 200, body } }
@@ -99,7 +108,7 @@ test('실제 성장 분석 경계: 확정 기록·저장·오래된 결과·근�
       release()
       assert.equal((await pending).status, 503)
       assert.equal((await get()).analysis.id, savedId)
-      behavior = () => { const body = output(); body.result.events = []; body.result.typeOptions = [{ value: 'all', label: '전체' }]; return { status: 200, body } }
+      behavior = () => { const body = output(); body.result.events = []; body.result.typeOptions = [{ value: 'all', label: '전체' }]; body.result.axisOptions = [{ value: 'all', label: '전체 분야' }]; return { status: 200, body } }
       assert.equal((await post()).status, 200)
       assert.deepEqual((await get()).events, [])
       assert.equal((await get()).analysis.stale, false)

@@ -129,6 +129,9 @@ export function createApp(db, { origin = 'http://localhost:5173', aiBaseUrl, aut
       reply = replySchema.parse(JSON.parse(draft.reply))
       message = draft.message
     }
+    // 파일·링크 자료의 기록에는 함께 보낸 채팅 본문을 복사하지 않는다. 텍스트 경험 기록은 별도로 보존한다.
+    const hasMaterial = Boolean(reply.sourceUrl || input.analysisId && db.prepare('SELECT id FROM files WHERE analysis_id = ? LIMIT 1').get(input.analysisId))
+    if (hasMaterial) message = ''
     if (input.classification && input.classification.materialType !== reply.analysis.materialType) {
       reply.analysis.materialType = input.classification.materialType
       reply.analysis.files.forEach(file => { file.materialType = input.classification.materialType })

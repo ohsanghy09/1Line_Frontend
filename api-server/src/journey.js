@@ -66,9 +66,17 @@ const providerSchema = z.object({
   const types = output.result.typeOptions.filter(option => option.value !== 'all')
   const labels = types.map(option => option.label.normalize('NFKC').trim().toLowerCase())
   const used = new Set(output.result.events.map(event => event.type))
+  const axes = output.result.axisOptions.filter(option => option.value !== 'all')
+  const axisLabels = axes.map(option => option.label.normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase())
+  const usedAxes = new Set(output.result.events.map(event => event.axis))
   if (types.length > 8 || !unique(labels) || types.some(option => !option.icon || !used.has(option.value))
     || output.result.badges.some(badge => !badge.icon)) {
     context.addIssue({ code: 'custom', message: '분석 분류·아이콘이 누락되거나 중복됐습니다.' })
+  }
+  // 저장 결과 조회는 과거 고정 분야도 허용하고, 새 공급자 결과에만 동적 분야 계약을 적용한다.
+  if (axes.length > 8 || !unique(axisLabels) || axisLabels.some(label => ['전체', '전체 분야', '전체분야'].includes(label))
+    || axes.some(option => option.label.length > 40 || !usedAxes.has(option.value)) || usedAxes.size !== axes.length) {
+    context.addIssue({ code: 'custom', message: '성장 분야가 중복되거나 이벤트와 일치하지 않습니다.' })
   }
 })
 

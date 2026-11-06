@@ -3,7 +3,7 @@ import test from 'node:test'
 import { openDatabase } from '../src/database.js'
 import { createApp } from '../src/app.js'
 import { createMockJourney } from '../test-support/journey-fixture.js'
-import { journeySchema } from '../src/journey.js'
+import { journeySchema, readJourney } from '../src/journey.js'
 
 test('Journey HTTP 조회는 미분석 상태를 반환하고 예시를 채우거나 기존 DB를 변경하지 않는다', async () => {
   const db = openDatabase(':memory:')
@@ -35,6 +35,20 @@ test('Journey 계약은 빈 결과와 비교 없는 이벤트를 허용한다', 
   data.events = []; data.badges = []
   assert.equal(journeySchema.safeParse(data).success, true)
   assert.equal(journeySchema.safeParse(createMockJourney()).success, true)
+})
+
+test('이전 고정 분야 저장 결과는 사용하지 않는 분야가 있어도 그대로 조회한다', () => {
+  const db = openDatabase(':memory:')
+  try {
+    const legacy = createMockJourney()
+    db.prepare('INSERT INTO journey_analyses VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run('legacy', '0'.repeat(64), 5, JSON.stringify(legacy), 'previous-model', 'journey-v2', '2026-11-06T00:00:00Z')
+    const result = readJourney(db)
+    assert.deepEqual(result.axisOptions, legacy.axisOptions)
+    assert.equal(result.events[0].axis, 'planning')
+    assert.equal(result.analysis.promptVersion, 'journey-v2')
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM journey_analyses').get().n, 1)
+  } finally { db.close() }
 })
 
 test('Journey 공급자 계약은 잘못된 월·중복 ID·분류·불완전한 비교를 거절한다', () => {

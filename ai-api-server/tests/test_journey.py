@@ -22,7 +22,7 @@ class JourneyTests(unittest.TestCase):
         return JourneyAnalysis.model_validate({
             "summary": {"title": "기획 기록", "description": "성장 판단에는 추가 기록이 필요합니다.",
                         "evidence": [{"recordId": "record-1", "quote": "기능 6개를 기획했습니다."}]},
-            "typeOptions": [], "badges": [], "events": [],
+            "typeOptions": [], "axisOptions": [], "badges": [], "events": [],
         })
 
     def test_context_excludes_empty_activities_and_unsaved_drafts(self):
@@ -52,6 +52,8 @@ class JourneyTests(unittest.TestCase):
             self.assertEqual(response.status_code, 200, response.text)
             self.assertEqual(response.json()["recordCount"], 1)
             self.assertEqual(response.json()["result"]["events"], [])
+            self.assertEqual(response.json()["result"]["axisOptions"], [{"value": "all", "label": "전체 분야"}])
+            self.assertEqual(response.json()["promptVersion"], "journey-v3")
             arguments = provider.await_args.kwargs
             self.assertIn("record-1", arguments["input"])
             self.assertIn("comparison=null", arguments["instructions"])
@@ -72,6 +74,7 @@ class JourneyTests(unittest.TestCase):
         for bad in [event, {**event, "activityId": "line1-hackathon", "comparison": {"before": "기획", "after": "PM"}}]:
             data = self.result().model_dump(); data["events"] = [bad]
             data["typeOptions"] = [{"value": "ability", "label": "문제 해결", "icon": "🧩"}]
+            data["axisOptions"] = [{"value": "technology", "label": "기술"}]
             with self.assertRaises(AnalysisError):
                 validate_journey(JourneyAnalysis.model_validate(data), context)
 
@@ -86,11 +89,12 @@ class JourneyTests(unittest.TestCase):
         self.add_record()
         data = self.result().model_dump()
         data["events"] = [{
-            "activityId": "line1-hackathon", "type": "scope-design", "axis": "planning",
+            "activityId": "line1-hackathon", "type": "scope-design", "axis": "product-design",
             "title": "기획 기록", "description": "기획을 수행했습니다.", "comparison": None,
             "evidence": [{"recordId": "record-1", "quote": "기능 6개를 기획했습니다."}],
         }]
         data["typeOptions"] = [{"value": "scope-design", "label": "기획 범위 설계", "icon": "🧭"}]
+        data["axisOptions"] = [{"value": "product-design", "label": "서비스 디자인"}]
         data["badges"] = [{"label": "기록상 첫 기획", "icon": "🌱", "evidence": data["events"][0]["evidence"]}]
         config = self.config.model_copy(update={"openai_model": "test-provider"})
         with patch("app.journey.structured_response", new_callable=AsyncMock, return_value=JourneyAnalysis.model_validate(data)), TestClient(create_app(config)) as client:
@@ -104,6 +108,8 @@ class JourneyTests(unittest.TestCase):
             self.assertEqual(event["type"], "scope-design")
             self.assertEqual(result["typeOptions"][1], data["typeOptions"][0])
             self.assertEqual(result["badges"][0]["icon"], "🌱")
+            self.assertEqual(event["axis"], "product-design")
+            self.assertEqual(result["axisOptions"][1], data["axisOptions"][0])
 
     def test_dynamic_categories_reject_unknown_duplicate_reserved_or_unused_types(self):
         self.add_record()
@@ -118,5 +124,25 @@ class JourneyTests(unittest.TestCase):
             ([option], []), ([{**option, "icon": " "}], [event]),
         ]:
             data = self.result().model_dump(); data.update(typeOptions=options, events=events)
+            data["axisOptions"] = [{"value": "planning", "label": "기획"}] if events else []
+            with self.assertRaises(AnalysisError):
+                validate_journey(JourneyAnalysis.model_validate(data), context)
+
+    def test_dynamic_axes_reject_unknown_duplicate_reserved_and_unused_options(self):
+        self.add_record()
+        context = journey_context(self.database)
+        option = {"value": "education", "label": "교육"}
+        event = {"activityId": "line1-hackathon", "type": "learning", "axis": "education", "title": "경험", "description": "기록 기반",
+                 "comparison": None, "evidence": [{"recordId": "record-1", "quote": "기능 6개를 기획했습니다."}]}
+        for axes, events in [
+            ([], [event]), ([option, option], [event]),
+            ([option, {"value": "teaching", "label": " 교육 "}], [event, {**event, "axis": "teaching"}]),
+            ([option, {"value": "literature", "label": "문학"}], [event]),
+            ([{**option, "value": "all"}], [{**event, "axis": "all"}]),
+            ([{**option, "label": "전체 분야"}], [event]), ([{**option, "label": " "}], [event]),
+            ([option], []), ([option], [{**event, "axis": "missing"}]),
+        ]:
+            data = self.result().model_dump()
+            data.update(axisOptions=axes, events=events, typeOptions=[{"value": "learning", "label": "학습", "icon": "📚"}] if events else [])
             with self.assertRaises(AnalysisError):
                 validate_journey(JourneyAnalysis.model_validate(data), context)

@@ -31,7 +31,6 @@ export type FootprintFile = {
     uploadedAtLabel: string
     summary: string
     version?: string
-    content?: string
     sourceUrl?: string | null
     summaryScope?: 'record'
 }

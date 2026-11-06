@@ -83,12 +83,6 @@ function FileDetailDrawer({ activityId, fileId, onClose }: { activityId: string;
                             <h4 className="font-bold text-xs">{detail.file.summaryScope === 'record' ? 'AI 기록 요약' : 'AI 요약'}</h4>
                             <p className="text-xs text-brand-muted leading-relaxed wrap-anywhere">{detail.file.summary}</p>
                         </div>
-                        {detail.file.content && (
-                            <div className="space-y-1">
-                                <h4 className="font-bold text-xs">입력한 내용</h4>
-                                <p className="text-xs text-brand-muted leading-relaxed whitespace-pre-wrap wrap-anywhere">{detail.file.content}</p>
-                            </div>
-                        )}
 
                         {/* 선택 자료가 근거로 연결된 이벤트만 표시한다. 변화 없는 파일에 비교를 만들지 않는다. */}
                         {detail.events.map(event => (

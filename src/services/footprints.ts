@@ -24,7 +24,6 @@ function isActivity(value: unknown): value is RawActivity & Record<string, unkno
 function isFile(value: unknown): value is RawFile {
     return object(value) && ['id', 'name', 'type', 'summary'].every(key => typeof value[key] === 'string') && date(value.uploadedAt)
         && (value.version === undefined || typeof value.version === 'string')
-        && (value.content === undefined || typeof value.content === 'string')
         && (value.sourceUrl === undefined || value.sourceUrl === null || typeof value.sourceUrl === 'string')
         && (value.summaryScope === undefined || value.summaryScope === 'record')
 }

@@ -66,16 +66,20 @@ test('Journey 서비스 → Vite 프록시 → API와 오류·취소·응답 계
             globalThis.fetch = async () => Response.json(null)
             await assert.rejects(service.getGrowthJourney(), /응답 형식/)
         })
-        await t.test('고정 목록에 없던 분석 분류·아이콘으로 필터링하고 이전 무아이콘 응답도 읽는다', async () => {
+        await t.test('고정 목록 밖의 성장 유형·분야로 AND 필터링하고 이전 무아이콘 응답도 읽는다', async () => {
             const raw = createMockJourney()
             raw.typeOptions = [{ value: 'all', label: '전체' }, { value: 'scope-design', label: '기획 범위 설계', icon: '🧭' }]
-            raw.events = [{ ...raw.events[0], type: 'scope-design' }]
+            raw.axisOptions = [{ value: 'all', label: '전체 분야' }, { value: 'education', label: '교육' }]
+            raw.events = [{ ...raw.events[0], type: 'scope-design', axis: 'education' }]
             raw.badges[0] = { ...raw.badges[0], label: '기록상 첫 기획', icon: '🌱' }
             globalThis.fetch = async () => Response.json(raw)
             const data = await service.getGrowthJourney()
             assert.equal(data.typeOptions[1].icon, '🧭')
             assert.equal(data.badges[0].icon, '🌱')
             assert.equal(filterJourneyEvents(data.events, 'scope-design', 'all').length, 1)
+            assert.equal(data.axisOptions[1].label, '교육')
+            assert.equal(filterJourneyEvents(data.events, 'scope-design', 'education').length, 1)
+            assert.equal(filterJourneyEvents(data.events, 'scope-design', 'planning').length, 0)
             delete raw.typeOptions[1].icon
             globalThis.fetch = async () => Response.json(raw)
             assert.equal((await service.getGrowthJourney()).events[0].type, 'scope-design')
