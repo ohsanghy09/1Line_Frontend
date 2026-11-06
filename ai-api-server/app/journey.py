@@ -2,9 +2,12 @@
 
 import hashlib
 import json
+import logging
+import re
 import unicodedata
 from pathlib import Path
 from typing import Literal
+from uuid import uuid4
 
 from fastapi import APIRouter
 from pydantic import Field, ValidationError
@@ -14,7 +17,8 @@ from .analysis import AnalysisError, structured_response
 from .database import DatabaseError
 from .schemas import StrictModel, Text, Identifier, Change
 
-PROMPT_VERSION = "journey-v4"
+PROMPT_VERSION = "journey-v5"
+logger = logging.getLogger(__name__)
 
 
 class Evidence(StrictModel):
@@ -66,6 +70,91 @@ class JourneyAnalysis(StrictModel):
     axisOptions: list[AnalysisAxis] = Field(max_length=8)
     badges: list[Badge] = Field(max_length=10)
     events: list[Event] = Field(max_length=20)
+
+
+class EvidenceSelection(StrictModel):
+    evidenceId: Identifier
+
+
+class ModelSummary(Summary):
+    evidence: list[EvidenceSelection] = Field(min_length=1, max_length=20)
+
+
+class ModelBadge(Badge):
+    evidence: list[EvidenceSelection] = Field(min_length=1, max_length=5)
+
+
+class ModelEvent(Event):
+    evidence: list[EvidenceSelection] = Field(min_length=1, max_length=10)
+
+
+class JourneyModelAnalysis(JourneyAnalysis):
+    """모델 전용 계약. 공개 API에는 원문으로 복원한 JourneyAnalysis만 전달한다."""
+    summary: ModelSummary
+    badges: list[ModelBadge] = Field(max_length=10)
+    events: list[ModelEvent] = Field(max_length=20)
+
+
+def evidence_failure(reason, location):
+    diagnostic_id = str(uuid4())
+    # 모델 원문·사용자 기록·키를 남기지 않고 실패 지점만 추적한다.
+    logger.warning("journey_evidence_validation %s", json.dumps({
+        "diagnosticId": diagnostic_id, "promptVersion": PROMPT_VERSION,
+        "reason": reason, "location": location,
+    }))
+    return AnalysisError(502, "journey_evidence_invalid",
+                         f"성장 분석 근거를 확인하지 못했어요. 기존 결과는 유지돼요. 진단 ID: {diagnostic_id}")
+
+
+def prepare_journey_input(context):
+    """연속 원문 후보를 생성한다. 원본 문맥과 스냅샷 해시는 수정하지 않는다."""
+    catalog, records = [], []
+    for record in context["records"]:
+        records.append({key: value for key, value in record.items() if key not in {"message", "summary"}})
+        seen = set()
+        for source in ["message", "summary"]:
+            # 문장/줄 단위로 나누되 긴 구간도 800자 이하의 연속 원문으로 보존한다.
+            for passage in re.split(r"(?<=[.!?。！？])\s+|\n+", record.get(source) or ""):
+                passage = passage.strip()
+                while passage:
+                    end = min(len(passage), 800)
+                    if len(passage) > 800:
+                        space = passage.rfind(" ", 400, 800)
+                        if space != -1:
+                            end = space
+                    quote, passage = passage[:end].strip(), passage[end:].strip()
+                    if quote and quote not in seen:
+                        seen.add(quote)
+                        catalog.append({"id": f"evidence-{len(catalog) + 1}", "recordId": record["id"],
+                                        "source": source, "quote": quote})
+                        if len(catalog) > 2000:
+                            raise AnalysisError(422, "journey_context_limit", "성장 분석 근거가 너무 많아요. 분석 범위 분할이 필요해요.")
+    if not catalog:
+        raise AnalysisError(422, "journey_evidence_missing", "성장 분석에 사용할 저장 원문이 없어요.")
+    payload = {"records": records, "recordCount": context["recordCount"], "evidenceCatalog": catalog}
+    if len(json.dumps(payload, ensure_ascii=False)) > 250_000:
+        raise AnalysisError(422, "journey_context_limit", "성장 분석 근거 문맥이 너무 커요. 분석 범위 분할이 필요해요.")
+    return payload
+
+
+def resolve_journey_evidence(selected, catalog):
+    sources = {item["id"]: item for item in catalog}
+    data = selected.model_dump()
+    groups = [("summary", data["summary"])]
+    groups += [(f"badges[{i}]", item) for i, item in enumerate(data["badges"])]
+    groups += [(f"events[{i}]", item) for i, item in enumerate(data["events"])]
+    for location, group in groups:
+        restored, seen = [], set()
+        for index, reference in enumerate(group["evidence"]):
+            source = sources.get(reference["evidenceId"])
+            if source is None:
+                raise evidence_failure("unknown_evidence_id", f"{location}.evidence[{index}]")
+            key = (source["recordId"], source["quote"])
+            if key not in seen:
+                seen.add(key)
+                restored.append({"recordId": key[0], "quote": key[1]})
+        group["evidence"] = restored
+    return JourneyAnalysis.model_validate(data)
 
 
 class FileReference(StrictModel):
@@ -247,23 +336,23 @@ def validate_journey(result, context):
             or not all(axis_labels) or any(label in {"전체", "전체 분야", "전체분야"} for label in axis_labels)
             or set(axes) != {event.axis for event in result.events}):
         raise AnalysisError(502, "invalid_journey", "성장 분야가 중복되거나 이벤트와 일치하지 않아요.")
-    def check(evidence):
-        for item in evidence:
+    def check(evidence, location):
+        for index, item in enumerate(evidence):
             record = records.get(item.recordId)
             # 파일명이나 AI가 새로 만든 문장을 원문 근거로 인정하지 않는다.
             if not record or not any(item.quote in (record.get(key) or "") for key in ["message", "summary"]):
-                raise AnalysisError(502, "invalid_journey", "성장 분석 근거가 저장된 기록과 일치하지 않아요.")
+                raise evidence_failure("record_or_quote_mismatch", f"{location}.evidence[{index}]")
     if not result.summary.evidence:
         raise AnalysisError(502, "invalid_journey", "성장 요약의 근거가 없어요.")
-    check(result.summary.evidence)
-    for badge in result.badges:
-        check(badge.evidence)
-    for event in result.events:
-        check(event.evidence)
+    check(result.summary.evidence, "summary")
+    for index, badge in enumerate(result.badges):
+        check(badge.evidence, f"badges[{index}]")
+    for index, event in enumerate(result.events):
+        check(event.evidence, f"events[{index}]")
         if not any(records[item.recordId]["activityId"] == event.activityId for item in event.evidence):
-            raise AnalysisError(502, "invalid_journey", "성장 이벤트의 활동과 근거 기록이 일치하지 않아요.")
+            raise evidence_failure("activity_mismatch", f"events[{index}].activityId")
         if event.comparison and len({item.recordId for item in event.evidence}) < 2:
-            raise AnalysisError(502, "invalid_journey", "전후 비교에는 서로 다른 저장 기록의 근거가 필요해요.")
+            raise evidence_failure("comparison_needs_distinct_records", f"events[{index}].comparison")
     return result
 
 
@@ -272,7 +361,9 @@ async def analyze_journey(database, config):
     if not context["records"]:
         raise AnalysisError(422, "journey_records_missing", "홈에서 기록을 저장한 뒤 성장 분석을 실행해 주세요.")
     prompt = Path(__file__).with_name("prompts").joinpath("journey.md").read_text(encoding="utf-8")
-    result = await structured_response(config, instructions=prompt, input=json.dumps(context, ensure_ascii=False), schema=JourneyAnalysis)
+    payload = prepare_journey_input(context)
+    selected = await structured_response(config, instructions=prompt, input=json.dumps(payload, ensure_ascii=False), schema=JourneyModelAnalysis)
+    result = resolve_journey_evidence(selected, payload["evidenceCatalog"])
     result = normalize_journey_options(result)
     validate_journey(result, context)
     records = {record["id"]: record for record in context["records"]}

@@ -4,11 +4,14 @@ import json
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 import unittest
+from pydantic import ValidationError
 
 from fastapi.testclient import TestClient
 
 from app.analysis import AnalysisError
-from app.journey import JourneyAnalysis, journey_context, normalize_journey_options, validate_journey
+from app.journey import (JourneyAnalysis, JourneyModelAnalysis, journey_context,
+                         prepare_journey_input, resolve_journey_evidence,
+                         normalize_journey_options, validate_journey)
 from app.main import create_app
 import test_database
 
@@ -24,6 +27,14 @@ class JourneyTests(unittest.TestCase):
                         "evidence": [{"recordId": "record-1", "quote": "기능 6개를 기획했습니다."}]},
             "typeOptions": [], "axisOptions": [], "badges": [], "events": [],
         })
+
+    def model_result(self, result=None):
+        data = (result or self.result()).model_dump()
+        catalog = prepare_journey_input(journey_context(self.database))["evidenceCatalog"]
+        ids = {(item['recordId'], item['quote']): item['id'] for item in catalog}
+        for group in [data['summary'], *data['badges'], *data['events']]:
+            group['evidence'] = [{'evidenceId': ids[(ref['recordId'], ref['quote'])]} for ref in group['evidence']]
+        return JourneyModelAnalysis.model_validate(data)
 
     def test_context_excludes_empty_activities_and_unsaved_drafts(self):
         self.assertEqual(journey_context(self.database)["records"], [])
@@ -46,18 +57,23 @@ class JourneyTests(unittest.TestCase):
     def test_actual_route_uses_db_context_and_does_not_write_results(self):
         self.add_record()
         config = self.config.model_copy(update={"openai_model": "test-provider"})
-        with patch("app.journey.structured_response", new_callable=AsyncMock, return_value=self.result()) as provider, TestClient(create_app(config)) as client:
+        with patch("app.journey.structured_response", new_callable=AsyncMock, return_value=self.model_result()) as provider, TestClient(create_app(config)) as client:
             before = self.node("const db = openDatabase(process.argv[1]); console.log(db.prepare('SELECT COUNT(*) AS n FROM journey_analyses').get().n); db.close();")
             response = client.post("/api/analyze/journey")
             self.assertEqual(response.status_code, 200, response.text)
             self.assertEqual(response.json()["recordCount"], 1)
             self.assertEqual(response.json()["result"]["events"], [])
             self.assertEqual(response.json()["result"]["axisOptions"], [{"value": "all", "label": "전체 분야"}])
-            self.assertEqual(response.json()["promptVersion"], "journey-v4")
+            self.assertEqual(response.json()["promptVersion"], "journey-v5")
             arguments = provider.await_args.kwargs
             self.assertIn("record-1", arguments["input"])
             self.assertIn("comparison=null", arguments["instructions"])
             self.assertNotIn("Scent Orbit", arguments["input"])
+            self.assertIs(arguments['schema'], JourneyModelAnalysis)
+            payload = json.loads(arguments['input'])
+            self.assertIn('evidenceCatalog', payload)
+            self.assertNotIn('message', payload['records'][0])
+            self.assertEqual(response.json()['result']['summary']['evidence'], self.result().summary.model_dump()['evidence'])
             after = self.node("const db = openDatabase(process.argv[1]); console.log(db.prepare('SELECT COUNT(*) AS n FROM journey_analyses').get().n); db.close();")
             self.assertEqual(before, after)
 
@@ -97,7 +113,7 @@ class JourneyTests(unittest.TestCase):
         data["axisOptions"] = [{"value": "product-design", "label": "서비스 디자인"}]
         data["badges"] = [{"label": "기록상 첫 기획", "icon": "🌱", "evidence": data["events"][0]["evidence"]}]
         config = self.config.model_copy(update={"openai_model": "test-provider"})
-        with patch("app.journey.structured_response", new_callable=AsyncMock, return_value=JourneyAnalysis.model_validate(data)), TestClient(create_app(config)) as client:
+        with patch("app.journey.structured_response", new_callable=AsyncMock, return_value=self.model_result(JourneyAnalysis.model_validate(data))), TestClient(create_app(config)) as client:
             response = client.post("/api/analyze/journey")
             self.assertEqual(response.status_code, 200, response.text)
             event = response.json()["result"]["events"][0]
@@ -193,7 +209,7 @@ class JourneyTests(unittest.TestCase):
 
     def test_route_normalizes_classifications_in_one_model_call_and_still_checks_evidence(self):
         self.add_record()
-        result = self.classification_result()
+        result = self.model_result(self.classification_result())
         config = self.config.model_copy(update={'openai_model': 'test-provider'})
         with patch('app.journey.structured_response', new_callable=AsyncMock, return_value=result) as provider, TestClient(create_app(config)) as client:
             response = client.post('/api/analyze/journey')
@@ -203,7 +219,134 @@ class JourneyTests(unittest.TestCase):
             self.assertEqual(len(data['axisOptions']), 2)
             self.assertEqual(len(data['events']), 2)
             provider.assert_awaited_once()
-        result.summary.evidence[0].quote = '존재하지 않는 근거'
+        result.summary.evidence[0].evidenceId = 'missing-evidence'
         with patch('app.journey.structured_response', new_callable=AsyncMock, return_value=result) as provider, TestClient(create_app(config)) as client:
-            self.assertEqual(client.post('/api/analyze/journey').status_code, 502)
+            with self.assertLogs('app.journey', level='WARNING') as logs:
+                response = client.post('/api/analyze/journey')
+            self.assertEqual(response.status_code, 502)
+            self.assertEqual(response.json()['code'], 'journey_evidence_invalid')
+            self.assertIn('unknown_evidence_id', logs.output[0])
+            self.assertIn('summary.evidence[0]', logs.output[0])
+            self.assertNotIn('missing-evidence', logs.output[0])
             provider.assert_awaited_once()
+
+    def test_catalog_preserves_exact_unicode_whitespace_and_long_passages(self):
+        self.add_record()
+        context = journey_context(self.database)
+        original = '  원문은  두 칸입니다.\n가와 가는 다릅니다. ' + '긴' * 1800
+        context['records'][0]['message'] = original
+        before = json.dumps(context, ensure_ascii=False)
+        payload = prepare_journey_input(context)
+        self.assertEqual(json.dumps(context, ensure_ascii=False), before)
+        for item in payload['evidenceCatalog']:
+            source = context['records'][0][item['source']]
+            self.assertIn(item['quote'], source)
+            self.assertLessEqual(len(item['quote']), 800)
+        self.assertTrue(any('  ' in item['quote'] for item in payload['evidenceCatalog']))
+        selected = self.model_result()
+        selected.summary.evidence[0].evidenceId = payload['evidenceCatalog'][0]['id']
+        resolved = resolve_journey_evidence(selected, payload['evidenceCatalog'])
+        self.assertEqual(resolved.summary.evidence[0].quote, payload['evidenceCatalog'][0]['quote'])
+        validate_journey(resolved, context)
+
+    def test_empty_message_uses_summary_and_free_quotes_are_not_model_fields(self):
+        self.add_record()
+        self.node("const db = openDatabase(process.argv[1]); db.prepare('UPDATE records SET message = ?').run(''); db.close();")
+        context = journey_context(self.database)
+        payload = prepare_journey_input(context)
+        selected = self.result().model_dump()
+        with self.assertRaises(ValidationError):
+            JourneyModelAnalysis.model_validate(selected)
+        selected['summary']['evidence'] = [{'evidenceId': payload['evidenceCatalog'][0]['id']}]
+        selected = JourneyModelAnalysis.model_validate(selected)
+        config = self.config.model_copy(update={'openai_model': 'test-provider'})
+        with patch('app.journey.structured_response', new_callable=AsyncMock, return_value=selected) as provider, TestClient(create_app(config)) as client:
+            response = client.post('/api/analyze/journey')
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()['result']['summary']['evidence'],
+                         [{'recordId': 'record-1', 'quote': context['records'][0]['summary']}])
+        provider.assert_awaited_once()
+
+    def test_catalog_keeps_same_quote_in_distinct_records_and_comparison_validates(self):
+        self.add_record()
+        context = journey_context(self.database)
+        other = {**context['records'][0], 'id': 'record-2'}
+        context['records'].append(other)
+        context['recordCount'] = 2
+        payload = prepare_journey_input(context)
+        refs = [item for item in payload['evidenceCatalog'] if item['quote'] == self.result().summary.evidence[0].quote]
+        self.assertEqual({item['recordId'] for item in refs}, {'record-1', 'record-2'})
+        data = self.model_result(self.classification_result()).model_dump()
+        data['events'][0]['comparison'] = {'before': '이전', 'after': '이후'}
+        data['events'][0]['evidence'] = [{'evidenceId': item['id']} for item in refs]
+        resolved = resolve_journey_evidence(JourneyModelAnalysis.model_validate(data), payload['evidenceCatalog'])
+        validate_journey(normalize_journey_options(resolved), context)
+        data['events'][0]['evidence'] = [data['events'][0]['evidence'][0]] * 2
+        resolved = resolve_journey_evidence(JourneyModelAnalysis.model_validate(data), payload['evidenceCatalog'])
+        with self.assertRaises(AnalysisError):
+            validate_journey(normalize_journey_options(resolved), context)
+        data['events'][0]['comparison'] = None
+        data['events'][0]['activityId'] = 'wrong-activity'
+        resolved = resolve_journey_evidence(JourneyModelAnalysis.model_validate(data), payload['evidenceCatalog'])
+        with self.assertRaises(AnalysisError):
+            validate_journey(normalize_journey_options(resolved), context)
+
+    def test_catalog_limits_fail_before_model_call(self):
+        self.add_record()
+        context = journey_context(self.database)
+        cases = [
+            ('\n'.join(f'{i}.' for i in range(2001)), 'summary'),
+            ('\n'.join(str(i) + 'x' * 795 + '.' for i in range(300)), 'summary'),
+            ('', ''),
+        ]
+        for message, summary in cases:
+            oversized = json.loads(json.dumps(context))
+            oversized['records'][0].update(message=message, summary=summary)
+            with patch('app.journey.journey_context', return_value=oversized), patch('app.journey.structured_response', new_callable=AsyncMock) as provider, TestClient(create_app(self.config)) as client:
+                response = client.post('/api/analyze/journey')
+            self.assertEqual(response.status_code, 422, response.text)
+            provider.assert_not_awaited()
+
+    def test_v5_route_output_saves_in_existing_backend_and_passes_frontend_guard(self):
+        self.add_record()
+        config = self.config.model_copy(update={'openai_model': 'test-provider'})
+        selected = self.model_result(self.classification_result())
+        with patch('app.journey.structured_response', new_callable=AsyncMock, return_value=selected), TestClient(create_app(config)) as client:
+            response = client.post('/api/analyze/journey')
+        self.assertEqual(response.status_code, 200, response.text)
+        root = Path(__file__).resolve().parents[2]
+        script = """
+const {generateJourney} = await import(BACKEND);
+const {readFileSync} = await import('node:fs');
+const {stripTypeScriptTypes} = await import('node:module');
+const asUrl = code => `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`;
+const chat = asUrl(stripTypeScriptTypes(readFileSync(CHAT, 'utf8')));
+const source = stripTypeScriptTypes(readFileSync(FRONTEND, 'utf8')).replace("from './chat'", `from '${chat}'`);
+const {isGrowthJourney} = await import(asUrl(source));
+const output = OUTPUT;
+globalThis.fetch = async () => Response.json(output);
+const db = openDatabase(process.argv[1]);
+try {
+  const before = db.prepare('SELECT message, reply FROM records ORDER BY id').all();
+  const saved = await generateJourney(db);
+  const legacy = {...output, promptVersion: 'journey-v4'};
+  globalThis.fetch = async () => Response.json(legacy);
+  const old = await generateJourney(db);
+  console.log(JSON.stringify({valid: isGrowthJourney(saved), version: saved.analysis.promptVersion,
+    stale: saved.analysis.stale, evidence: saved.events[0].evidence,
+    recordsUnchanged: JSON.stringify(before) === JSON.stringify(db.prepare('SELECT message, reply FROM records ORDER BY id').all()),
+    legacyValid: isGrowthJourney(old), legacyVersion: old.analysis.promptVersion}));
+} finally { db.close(); }
+"""
+        script = (script.replace('BACKEND', json.dumps((root / 'api-server/src/journey.js').as_uri()))
+                  .replace('CHAT', json.dumps(str(root / 'src/services/chat.ts')))
+                  .replace('FRONTEND', json.dumps(str(root / 'src/services/journey.ts')))
+                  .replace('OUTPUT', json.dumps(response.json(), ensure_ascii=True)))
+        saved = json.loads(self.node(script))
+        self.assertTrue(saved['valid'])
+        self.assertEqual(saved['version'], 'journey-v5')
+        self.assertFalse(saved['stale'])
+        self.assertTrue(saved['recordsUnchanged'])
+        self.assertTrue(saved['legacyValid'])
+        self.assertEqual(saved['legacyVersion'], 'journey-v4')
+        self.assertEqual(saved['evidence'], self.result().summary.model_dump()['evidence'])

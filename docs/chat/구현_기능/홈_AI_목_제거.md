@@ -2,7 +2,7 @@
 
 2026-11-06. 홈 입력은 `src/services/chat.ts`에서 FastAPI로 보내고 실제 OpenAI 분석 결과를 표시한다. 목 응답 fallback은 없다.
 
-- `src/mocks/Home/chatResponse.ts`, `batchAnalysis.ts`, `chatStatus.ts`와 `src/examples/ExamplePage.tsx`를 제거했다. `/example`은 홈으로 이동한다.
+- 홈 목 응답과 개발용 독립 페이지를 제거했다. 후속 사용자 요청으로 독립 페이지의 리다이렉트 라우트와 기능 명세도 제거했다.
 - 기존 백엔드의 목 분석 생성·목 진행·testMockAnalysis 옵션을 제거했다. 분석 POST·작업 GET은 410으로 FastAPI를 안내한다.
 - 회귀 검사 합성 결과는 `api-server/test-support/`, `tests/fixtures/chat.ts`에만 둔다. 실행 앱의 import와 분리했다. 문서 예시는 `api-server/docs/chat-examples.json`에서 읽는다.
 - 사용자 DB·기존 저장 기록·세션은 보존했다. Growth Journey의 목 응답은 별도 후속 범위다.
