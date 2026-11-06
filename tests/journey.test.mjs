@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { stripTypeScriptTypes } from 'node:module'
 import test from 'node:test'
-import { createMockJourney } from '../api-server/src/mock-journey.js'
+import { createMockJourney } from '../api-server/test-support/journey-fixture.js'
 
 const load = async path => import(`data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(readFileSync(new URL(path, import.meta.url), 'utf8'))).toString('base64')}`)
 const { filterJourneyEvents } = await load('../src/utils/journey.ts')

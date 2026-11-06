@@ -1,8 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { openDatabase } from '../src/database.js'
-import { createApp } from '../src/app.js'
-import { jobProgress, MOCK_STAGE_MS } from '../src/progress.js'
+import { openDatabase } from '../test-support/database.js'
+import { createApp } from '../test-support/app.js'
+import { jobProgress, MOCK_STAGE_MS } from '../test-support/progress.js'
 
 test('목 진행 경계값과 시각 역전', () => {
   for (let stage = 0; stage <= 4; stage++) {

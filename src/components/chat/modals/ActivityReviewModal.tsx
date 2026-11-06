@@ -24,7 +24,7 @@ export default function ActivityReviewModal({ activities, activityId, proposal, 
     const selectedActivity = activities.find(item => item.id === selected)
     const initialActivity = activities.find(item => item.id === initialTarget)
     const initial = {
-        name: proposal.name,
+        name: proposal.match === 'unresolved' ? '' : proposal.name,
         category: proposal.category ?? initialActivity?.category ?? null,
         status: proposal.status ?? initialActivity?.status ?? null,
         role: proposal.role ?? initialActivity?.role ?? null,
@@ -53,7 +53,7 @@ export default function ActivityReviewModal({ activities, activityId, proposal, 
 
     function selectTarget(value: string) {
         setSelected(value); setApplyUpdates(false); setLocalError('')
-        const item = activities.find(activity => activity.id === value)
+        const item = value === NEW_ACTIVITY ? initial : activities.find(activity => activity.id === value)
         // 다른 활동을 선택하면 이전 활동의 후보 정보를 옮기지 않는다.
         setName(item?.name ?? (proposal.match === 'new' ? proposal.name : ''))
         setCategory(item?.category ?? ''); setStatus(item?.status ?? ''); setRole(item?.role ?? '')
@@ -104,7 +104,7 @@ export default function ActivityReviewModal({ activities, activityId, proposal, 
                         {!isNew && <label className="flex items-start gap-2"><input type="checkbox" checked={applyUpdates} disabled={busy} onChange={event => setApplyUpdates(event.target.checked)} /><span>확인한 정보를 이 활동에 적용합니다. 기존 기록들도 이 활동 정보를 사용합니다. 빈 항목은 기존 값을 유지합니다.</span></label>}
                         <fieldset disabled={busy || !isNew && !applyUpdates} className="space-y-3">
                             <legend className="font-semibold mb-2">활동 정보</legend>
-                            <label className="block"><span className="block mb-1">유형</span><input value={category} maxLength={20000} onChange={event => setCategory(event.target.value)} className={inputClass} /></label>
+                            <label className="block"><span className="block mb-1">유형</span><input value={category} maxLength={200} onChange={event => setCategory(event.target.value)} className={inputClass} /></label>
                             <label className="block"><span className="block mb-1">상태</span><select value={status} onChange={event => setStatus(event.target.value as typeof status)} className={inputClass}><option value="">미확인</option><option value="진행 중">진행 중</option><option value="완료">완료</option></select></label>
                             <label className="block"><span className="block mb-1">역할</span><input value={role} maxLength={20000} onChange={event => setRole(event.target.value)} className={inputClass} /></label>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

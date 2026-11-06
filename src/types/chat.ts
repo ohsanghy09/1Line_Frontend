@@ -83,6 +83,10 @@ export type ChatReply = {
     // 같은 탭에서 복원할 카드의 저장·연결 상태. 서버 응답의 분석 내용과 구분한다.
     recordId?: string
     activityId?: string
+    // 신규 활동 확정 카드의 표시를 저장·세션 복원 뒤에도 유지한다.
+    activityCreated?: boolean
+    // 대화로 직접 수정한 활동. 일반 말풍선이며 새 기록 저장 버튼은 표시하지 않는다.
+    updatedActivityId?: string
     // 링크 분석의 실제 입력 URL. 목 분석 내용과 별도로 보존한다.
     sourceUrl?: string
 

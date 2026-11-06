@@ -1,5 +1,6 @@
-// 화면용 임시 계약. 실제 AI 응답은 서비스에서 이 구조로 변환한다.
-export type JourneyOption = { value: string; label: string }
+// 백엔드에 저장한 실제 성장 분석 결과와 조회 상태.
+export type JourneyOption = { value: string; label: string; icon?: string }
+export type JourneyEvidence = { recordId: string; quote: string }
 
 export type JourneyEvent = {
     id: string
@@ -11,13 +12,19 @@ export type JourneyEvent = {
     title: string
     description: string
     comparison?: { before: string; after: string; evidence: string[] }
+    evidence?: JourneyEvidence[]
 }
 
 export type GrowthJourneyData = {
-    source: 'mock' | 'api'
-    summary: { title: string; description: string }
-    badges: { id: string; label: string }[]
+    source: 'api'
+    summary: { title: string; description: string; evidence?: JourneyEvidence[] }
+    badges: { id: string; label: string; icon?: string; evidence?: JourneyEvidence[] }[]
     typeOptions: JourneyOption[]
     axisOptions: JourneyOption[]
     events: JourneyEvent[]
+    analysis?: {
+        id: string | null; generatedAt: string | null; stale: boolean
+        recordCount: number; currentRecordCount: number
+        model: string | null; promptVersion: string | null
+    }
 }

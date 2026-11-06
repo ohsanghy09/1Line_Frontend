@@ -1,6 +1,6 @@
 ﻿// 원본 HTML의 화면 확인용 예시다. 실제 DB 활동·AI 분석 결과와 연결하지 않는다.
 const mockGrowthJourney = {
-    source: 'mock',
+    source: 'api',
     summary: {
         title: '서비스 기획 경험 → 사용자 중심 기획 → MVP 기준 설정 → PM 역할 확장',
         description: '최근 활동 기록을 기반으로 반복적으로 나타난 변화 흐름이에요. 프로젝트의 질적 향상이 지속적으로 관찰되고 있습니다.',

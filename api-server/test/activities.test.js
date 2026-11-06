@@ -1,8 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { openDatabase } from '../src/database.js'
-import { createApp } from '../src/app.js'
-import { createMockReply } from '../src/mock-reply.js'
+import { openDatabase } from '../test-support/database.js'
+import { createApp } from '../test-support/app.js'
+import { createMockReply } from '../test-support/mock-reply.js'
 import { replySchema } from '../src/validation.js'
 
 const unknown = { category: null, status: null, role: null, period: null, summary: null }
@@ -59,7 +59,8 @@ test('초안 후보는 활동을 만들지 않으며 확인한 새 활동과 기
   assert.equal(row.start_date, '2026-09')
   assert.equal(row.end_date, null)
   const archive = await (await fetch(base + `/archive/activities/${row.id}`)).json()
-  assert.equal(archive.materialsCount, 1)
+  assert.equal(archive.materialsCount, 0)
+  assert.equal(archive.recordsCount, 1)
   assert.equal(archive.role, '모델 개발')
   assert.equal(archive.period, '2026-09 ~ ')
   assert.deepEqual(archive.timeline, [])

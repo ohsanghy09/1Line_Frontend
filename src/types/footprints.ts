@@ -1,5 +1,6 @@
 // 나의 발자국 목록에 필요한 표시 데이터. 실제 API 연결 시 서비스에서 이 구조로 변환한다.
 export type FootprintActivity = {
+    metadataAnalysis?: import('./activity').ActivityAnalysis
     id: string
     title: string
     category: string
@@ -8,6 +9,7 @@ export type FootprintActivity = {
     period: string
     summary: string
     materialsCount: number
+    recordsCount?: number
     // 실제 저장 시각을 서비스에서 표시용으로 변환한다.
     updatedAtLabel: string
     // 정렬용 ISO 시각. 아직 저장 기록이 없는 활동은 빈 문자열이다.
@@ -29,7 +31,6 @@ export type FootprintFile = {
     uploadedAtLabel: string
     summary: string
     version?: string
-    content?: string
     sourceUrl?: string | null
     summaryScope?: 'record'
 }

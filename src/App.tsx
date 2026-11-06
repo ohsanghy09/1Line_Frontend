@@ -1,11 +1,10 @@
-import { Route, Routes } from 'react-router'
+import { Navigate, Route, Routes } from 'react-router'
 import MainPage from './pages/MainPage'
 import Home from './pages/Home'
 import GrowthJourney from './pages/GrowthJourney'
 import Footprints from './pages/Footprints'
 import ActivityArchive from './pages/ActivityArchive'
 import ProjectTimeline from './pages/ProjectTimeline'
-import ExamplePage from './examples/ExamplePage'
 
 
 function App() {
@@ -26,8 +25,8 @@ function App() {
 
       </Route>
 
-      {/* 실제 채팅 컴포넌트와 응답 데이터를 확인하는 독립 페이지 */}
-      <Route path='/example' element={<ExamplePage />} />
+      {/* 이전 미리보기 주소에서도 실제 분석 입력 화면으로 이동한다. */}
+      <Route path='/example' element={<Navigate to="/" replace />} />
       
     </Routes>
 

@@ -4,13 +4,12 @@ import type { ChangeEvent, DragEvent, SubmitEvent } from 'react'
 import { Link as RouterLink } from 'react-router'
 import { useHomeRecent } from '../hooks/useHomeRecent'
 import { formatRecentActivityTime } from '../utils/recentActivityTime'
-import { mockGreetingReply } from '../mocks/Home/chat'
 import ConnectedChatReplyCard from '../components/chat/ConnectedChatReplyCard'
 import LinkInputModal from '../components/chat/modals/LinkInputModal'
 import ChatMessageTime from '../components/chat/ChatMessageTime'
 import FileAnalysisProgress from '../components/chat/FileAnalysisProgress'
 import ChatServiceStatusBadge from '../components/chat/ChatServiceStatusBadge'
-import { getChatReply, getLinkReply, getChatServiceStatus, resumeChatReply } from '../services/chat'
+import { getChatReply, getLinkReply, getChatServiceStatus, resumeChatReply, isTerminalChatFailure } from '../services/chat'
 import type { ChatMessage, ChatProgress, ChatServiceStatus } from '../types/chat'
 import { appendChatReply, readChatSession, writeChatSession } from '../utils/chatSession'
 import type { PendingChatJob } from '../utils/chatSession'
@@ -145,13 +144,17 @@ function Home() {
         setIsReplying(true); setReplyError('')
         void resumeChatReply(job.jobId, {
             signal: controller.signal,
-            onProgress: progress => { if (requestId === requestIdRef.current) setAnalysisProgress(progress) },
+            onProgress: progress => { if (requestId === requestIdRef.current && job.showProgress !== false) setAnalysisProgress(progress) },
         }).then(reply => {
             if (requestId !== requestIdRef.current) return
             setMessages(current => appendChatReply(current, { ...reply, createdAt: Date.now() }))
             setPendingJob(null)
         }).catch(error => {
-            if (requestId === requestIdRef.current) setReplyError(error instanceof Error ? error.message : '진행 상태를 확인하지 못했어요.')
+            if (requestId === requestIdRef.current) {
+                setReplyError(error instanceof Error ? error.message : '진행 상태를 확인하지 못했어요.')
+                // 확정 실패를 대기 작업에서 해제해 다음 입력을 보낼 수 있게 한다.
+                if (isTerminalChatFailure(error)) setPendingJob(null)
+            }
         }).finally(() => {
             if (requestId !== requestIdRef.current) return
             pendingRequestRef.current = false
@@ -224,17 +227,17 @@ function Home() {
         let jobAccepted = false
 
         try {
-            // 파일·링크는 서버 진행을 표시하고 텍스트 전용은 일반 대기를 사용한다.
+            // 파일·링크는 접수 즉시 작업 ID를 보관한다. 텍스트는 한 요청의 최종 결과를 기다린다.
             const requestOptions = {
                 conversationId: conversationIdRef.current,
                 signal: controller.signal,
                 onJobStarted: (jobId: string) => {
                     if (requestId !== requestIdRef.current) return
                     jobAccepted = true
-                    setPendingJob({ jobId, userMessageId })
+                    setPendingJob({ jobId, userMessageId, showProgress: Boolean(filesToSend.length || sourceUrl) })
                 },
                 onProgress: (progress: ChatProgress) => {
-                    if (requestId === requestIdRef.current) setAnalysisProgress(progress)
+                    if (requestId === requestIdRef.current && (filesToSend.length > 0 || sourceUrl)) setAnalysisProgress(progress)
                 },
             }
             const reply = await (sourceUrl ? getLinkReply(sourceUrl, requestOptions) : getChatReply(content, filesToSend, requestOptions))
@@ -248,8 +251,10 @@ function Home() {
         } catch (error) {
             if (requestId === requestIdRef.current) {
                 setReplyError(error instanceof Error ? error.message : '답변을 받아오지 못했어요. 메시지를 다시 보내주세요.')
+                const terminalFailure = isTerminalChatFailure(error)
+                if (terminalFailure) setPendingJob(null)
                 // 실패한 입력은 다시 보낼 수 있게 복원하되 새로 작성한 글은 덮어쓰지 않는다.
-                if (!jobAccepted && !sourceUrl) {
+                if ((!jobAccepted || terminalFailure) && !sourceUrl) {
                     setChatInput(current => current || content)
                     setPendingFiles(current => [...filesToSend.map(file => ({ id: crypto.randomUUID(), file })), ...current])
                 }
@@ -347,7 +352,7 @@ function Home() {
 
                         <div className="space-y-2 max-w-[85%]">
                             <div className="bg-slate-100/80 p-3.5 rounded-2xl rounded-tl-sm text-sm text-brand-text leading-relaxed whitespace-pre-wrap">
-                                {mockGreetingReply.content}
+                                {'안녕하세요! 오늘 만든 자료나 기록하고 싶은 경험을 남겨주세요.\n어떤 활동인지 제가 먼저 확인하고 기존 기록과 연결해볼게요.'}
                             </div>
 
                             <p className="text-[10px] text-brand-muted pl-1">

@@ -3,14 +3,17 @@ import test from 'node:test'
 import { readFileSync } from 'node:fs'
 import { stripTypeScriptTypes } from 'node:module'
 import { createServer } from 'vite'
-import { openDatabase } from '../api-server/src/database.js'
-import { createApp } from '../api-server/src/app.js'
+import { openDatabase } from '../api-server/test-support/database.js'
+import { createApp } from '../api-server/test-support/app.js'
 
 test('프론트 아카이브 서비스 → Vite 프록시 → REST API → SQLite', async t => {
     const db = openDatabase(':memory:')
     const api = createApp(db).listen(0, '127.0.0.1')
     await new Promise(resolve => api.once('listening', resolve))
-    const vite = await createServer({ server: { host: '127.0.0.1', port: 0, proxy: { '/api': `http://127.0.0.1:${api.address().port}` } } })
+    const vite = await createServer({ server: { host: '127.0.0.1', port: 0, proxy: {
+        '/api': `http://127.0.0.1:${api.address().port}`,
+        '/ai-api': { target: `http://127.0.0.1:${api.address().port}`, rewrite: path => path.replace(/^\/ai-api/, '/api') },
+    } } })
     const originalFetch = globalThis.fetch
     try {
         await vite.listen()
@@ -22,7 +25,8 @@ test('프론트 아카이브 서비스 → Vite 프록시 → REST API → SQLit
         const chat = await import(chatUrl)
         const recordsSource = stripTypeScriptTypes(readFileSync(new URL('../src/services/records.ts', import.meta.url), 'utf8')).replace("from './chat'", `from '${chatUrl}'`)
         const records = await import(moduleUrl(recordsSource))
-        const source = stripTypeScriptTypes(readFileSync(new URL('../src/services/footprints.ts', import.meta.url), 'utf8')).replace("from './chat'", `from '${chatUrl}'`)
+        const activityAnalysisUrl = moduleUrl(stripTypeScriptTypes(readFileSync(new URL('../src/services/activityAnalysis.ts', import.meta.url), 'utf8')).replace("from './chat'", `from '${chatUrl}'`))
+        const source = stripTypeScriptTypes(readFileSync(new URL('../src/services/footprints.ts', import.meta.url), 'utf8')).replace("from './chat'", `from '${chatUrl}'`).replace("from './activityAnalysis'", `from '${activityAnalysisUrl}'`)
         const archiveUrl = moduleUrl(source)
         const service = await import(archiveUrl)
         const homeSource = stripTypeScriptTypes(readFileSync(new URL('../src/services/home.ts', import.meta.url), 'utf8'))
@@ -62,7 +66,7 @@ test('프론트 아카이브 서비스 → Vite 프록시 → REST API → SQLit
             assert.equal(activity.timeline[0].isTurningPoint, false)
             const detail = await service.getFootprintFile(activity.id, fileId)
             assert.equal(detail.file.name, '내 자료.txt')
-            assert.equal(detail.file.content, '사용자가 입력한 파일 설명')
+            assert.equal(Object.hasOwn(detail.file, 'content'), false)
             assert.equal(detail.file.summary, draft.reply.analysis.summary)
             assert.equal(detail.file.summaryScope, 'record')
             assert.equal(detail.events[0].id, activity.timeline[0].id)
@@ -74,7 +78,7 @@ test('프론트 아카이브 서비스 → Vite 프록시 → REST API → SQLit
             assert.deepEqual(matches.items.map(item => item.id), [activity.id])
             assert.equal(matches.items[0].materialsCount, 1)
             const content = await service.searchFootprintActivities({ search: '사용자가 입력한 파일 설명', category: 'all', status: 'all', sort: 'recent' })
-            assert.equal(content.items[0].id, activity.id)
+            assert.deepEqual(content.items, [])
             const noMatches = await service.searchFootprintActivities({ search: '없는 자료', category: 'all', status: 'all', sort: 'materials' })
             assert.deepEqual(noMatches.items, [])
             assert.equal(noMatches.total, 5)
@@ -127,14 +131,26 @@ test('프론트 아카이브 서비스 → Vite 프록시 → REST API → SQLit
             assert.equal(choice.name, metadata.name)
             assert.deepEqual(choice.period, metadata.period)
             const archive = await service.getFootprintActivity(created.activityId)
-            assert.equal(archive.materialsCount, 1)
+            assert.equal(archive.materialsCount, 0)
+            assert.equal(archive.recordsCount, 1)
             assert.equal(archive.role, '연구')
             const { name: _name, ...updates } = metadata
             await records.updateRecord(created.id, created.activityId, '연구 기록', { ...updates, role: null, status: '완료' })
             const updated = await service.getFootprintActivity(created.activityId)
             assert.equal(updated.status, '완료')
             assert.equal(updated.role, '연구')
-            assert.equal(updated.folders[0].name, '연구 기록')
+            assert.deepEqual(updated.folders, [])
+        })
+
+        await t.test('삭제 서비스는 자료와 활동을 실제 삭제하고 잘못된 활동명은 거절한다', async () => {
+            await service.deleteFootprintMaterial('computer-vision', fileId)
+            assert.equal(await service.getFootprintFile('computer-vision', fileId), null)
+            assert.equal((await service.getFootprintActivity('computer-vision')).materialsCount, 0)
+            await assert.rejects(service.deleteFootprintActivity('computer-vision', '틀린 활동명'), /활동명/)
+            const activity = await service.getFootprintActivity('computer-vision')
+            await service.deleteFootprintActivity('computer-vision', activity.title)
+            assert.equal(await service.getFootprintActivity('computer-vision'), null)
+            assert.ok((await home.getHomeRecent()).records.every(item => item.id !== fileId))
         })
 
         await t.test('서버 오류·연결 실패·잘못된 응답은 목 데이터로 대체하지 않는다', async () => {

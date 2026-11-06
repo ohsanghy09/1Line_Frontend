@@ -20,10 +20,20 @@ export function searchArchive(db, query) {
   const activities = db.prepare('SELECT id, name, summary FROM activities ORDER BY rowid').all().map(row => {
     const { folders, timeline: _timeline, ...activity } = readArchive(db, row.id)
     const files = folders.flatMap(folder => folder.files)
+    // 텍스트 경험 기록은 자료 폴더에는 넣지 않지만 확정 기록 검색과 분석에서는 보존한다.
+    const savedTexts = db.prepare(`SELECT r.message, r.reply,
+      EXISTS(SELECT 1 FROM files f WHERE f.analysis_id = r.analysis_id) AS has_files
+      FROM records r WHERE r.activity_id = ?`).all(row.id).flatMap(record => {
+        const reply = JSON.parse(record.reply)
+        // 기존 자료에 남은 입력 글도 자료 검색에 사용하지 않는다. 독립 텍스트 경험은 유지한다.
+        return [record.has_files || reply.sourceUrl ? '' : record.message, reply.analysis?.summary ?? '']
+      })
     // 미저장 분석은 readArchive에 포함되지 않는다. 전체 자료 수는 검색으로 줄이지 않는다.
-    return { ...activity, searchTexts: [row.name, row.summary ?? '', ...files.flatMap(file => [file.name, file.content, file.summary])] }
+    return { ...activity, searchTexts: [row.name, row.summary ?? '', ...savedTexts, ...files.flatMap(file => [file.name, file.summary])] }
   })
   const items = selectArchiveActivities(activities, { search: query.q, category: query.category, status: query.status, sort: query.sort })
     .map(({ searchTexts: _searchTexts, ...activity }) => activity)
-  return { items, total: activities.length }
+  // 검색·유형·상태 조건과 무관한 전체 유형을 반환해 필터 선택지를 유지한다.
+  const categories = [...new Set(activities.map(activity => activity.category))].sort((a, b) => a.localeCompare(b, 'ko'))
+  return { items, total: activities.length, categories }
 }

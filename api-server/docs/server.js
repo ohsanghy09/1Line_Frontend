@@ -13,7 +13,7 @@ export function createDocsApp() {
 <link rel="stylesheet" href="/swagger-assets/swagger-ui.css"></head>
 <body><div id="swagger-ui"></div><script src="/swagger-assets/swagger-ui-bundle.js"></script><script src="/swagger-assets/swagger-ui-standalone-preset.js"></script><script src="/swagger-init.js"></script></body></html>`))
   app.get('/swagger-init.js', (_req, res) => res.type('js').send(`window.ui = SwaggerUIBundle({
-    urls: [{url: '/openapi/backend.json', name: '백엔드 · 현재 개발 서버'}, {url: '/openapi/ai.json', name: 'AI · 모델 미정 / 입력·출력'}],
+    urls: [{url: '/openapi/backend.json', name: '백엔드 · 저장·조회'}, {url: '/openapi/ai.json', name: 'AI · FastAPI / OpenAI'}],
     dom_id: '#swagger-ui', presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset], layout: 'StandaloneLayout',
     deepLinking: true, docExpansion: 'list', defaultModelsExpandDepth: 1, defaultModelExpandDepth: 2,
     supportedSubmitMethods: [], validatorUrl: null

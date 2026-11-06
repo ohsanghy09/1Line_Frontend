@@ -15,7 +15,7 @@ export const activityDate = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])(?:-(0[1-9]|
 export const activityPeriod = z.object({ start: activityDate.nullable(), end: activityDate.nullable() }).strict()
   .refine(value => !value.start || !value.end || value.start.slice(0, 7) <= value.end.slice(0, 7) && (value.start.length !== 10 || value.end.length !== 10 || value.start <= value.end), '종료일은 시작일보다 빠를 수 없습니다.')
 export const activityMetadata = z.object({
-  category: text.nullable(), status: z.enum(['진행 중', '완료']).nullable(), role: text.nullable(),
+  category: z.string().trim().min(1).max(200).refine(value => !['all', '전체'].includes(value), '전체는 활동 유형으로 사용할 수 없습니다.').nullable(), status: z.enum(['진행 중', '완료']).nullable(), role: text.nullable(),
   period: activityPeriod.nullable(), summary: text.nullable(),
 }).strict()
 const activityProposal = activityMetadata.partial().extend({
@@ -41,6 +41,7 @@ export const replySchema = z.object({
   id: text, role: z.literal('assistant'),
   kind: z.enum(['text-analysis', 'file-analysis', 'no-change', 'batch-analysis', 'link-analysis']),
   content: text,
+  activityCreated: z.boolean().optional(),
   sourceUrl: linkSchema.shape.url.optional(),
   analysis: z.object({
     activity: activityProposal,

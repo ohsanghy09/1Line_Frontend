@@ -1,4 +1,5 @@
 import { request } from './chat'
+import { isActivityAnalysis } from './activityAnalysis'
 import type { FootprintActivity, FootprintActivityDetail, FootprintFile, FootprintFileDetail, FootprintFilters, FootprintTimelineEvent } from '../types/footprints'
 
 type RawActivity = Omit<FootprintActivity, 'updatedAt' | 'updatedAtLabel'> & { updatedAt: string | null }
@@ -16,12 +17,13 @@ function isActivity(value: unknown): value is RawActivity & Record<string, unkno
     return object(value) && ['id', 'title', 'category', 'role', 'period', 'summary'].every(key => typeof value[key] === 'string')
         && ['진행 중', '완료', '미설정'].includes(String(value.status)) && count(value.materialsCount)
         && (value.updatedAt === null || date(value.updatedAt))
+        && (value.recordsCount === undefined || count(value.recordsCount))
+        && (value.metadataAnalysis === undefined || isActivityAnalysis(value.metadataAnalysis))
 }
 
 function isFile(value: unknown): value is RawFile {
     return object(value) && ['id', 'name', 'type', 'summary'].every(key => typeof value[key] === 'string') && date(value.uploadedAt)
         && (value.version === undefined || typeof value.version === 'string')
-        && (value.content === undefined || typeof value.content === 'string')
         && (value.sourceUrl === undefined || value.sourceUrl === null || typeof value.sourceUrl === 'string')
         && (value.summaryScope === undefined || value.summaryScope === 'record')
 }
@@ -62,11 +64,12 @@ export async function getFootprintActivities(): Promise<FootprintActivity[]> {
 }
 
 // 정식 서버로 교체할 때도 검색 조건과 응답을 이 경계에서 변환한다.
-export async function searchFootprintActivities(filters: FootprintFilters, signal?: AbortSignal): Promise<{ items: FootprintActivity[]; total: number }> {
+export async function searchFootprintActivities(filters: FootprintFilters, signal?: AbortSignal): Promise<{ items: FootprintActivity[]; total: number; categories: string[] }> {
     const query = new URLSearchParams({ q: filters.search, category: filters.category, status: filters.status, sort: filters.sort })
     const data = await request(`/archive/activities?${query}`, { signal })
     if (!object(data) || !Array.isArray(data.items) || !data.items.every(isActivity) || !count(data.total) || data.total < data.items.length) throw new Error('활동 목록 응답 형식이 올바르지 않습니다.')
-    return { items: data.items.map(activityView), total: data.total }
+    if (!strings(data.categories) || data.categories.some(category => !category.trim() || category === 'all') || new Set(data.categories).size !== data.categories.length) throw new Error('활동 유형 응답 형식이 올바르지 않습니다.')
+    return { items: data.items.map(activityView), total: data.total, categories: data.categories }
 }
 
 export async function getFootprintActivity(id: string): Promise<FootprintActivityDetail | null> {
@@ -88,4 +91,22 @@ export async function getFootprintFile(activityId: string, fileId: string): Prom
     if (!object(data) || data.activityId !== activityId || !isFile(data.file) || data.file.id !== fileId || !Array.isArray(data.events) || !data.events.every(isEvent)
         || !Array.isArray(data.versionHistory) || !data.versionHistory.every(item => object(item) && typeof item.fileId === 'string' && typeof item.version === 'string')) throw new Error('자료 상세 응답 형식이 올바르지 않습니다.')
     return { activityId, file: fileView(data.file), events: data.events.map(eventView), versionHistory: data.versionHistory }
+}
+
+async function remove(path: string, confirmation?: string): Promise<void> {
+    const result = await request(path, { method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirmation }) }, undefined, 165_000)
+    if (!object(result) || result.deleted !== true) throw new Error('삭제 결과를 확인하지 못했어요. 새로고침 후 확인해 주세요.')
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('1line:activities-changed'))
+        window.dispatchEvent(new Event('1line:records-changed'))
+    }
+}
+
+export function deleteFootprintActivity(id: string, confirmation: string): Promise<void> {
+    return remove(`/archive/activities/${encodeURIComponent(id)}`, confirmation)
+}
+
+export function deleteFootprintMaterial(activityId: string, fileId: string): Promise<void> {
+    return remove(`/archive/activities/${encodeURIComponent(activityId)}/materials/${encodeURIComponent(fileId)}`)
 }

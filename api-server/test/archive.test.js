@@ -4,9 +4,9 @@ import { DatabaseSync } from 'node:sqlite'
 import { mkdtempSync, rmSync, rmdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { openDatabase } from '../src/database.js'
-import { createApp } from '../src/app.js'
-import { createMockLinkReply } from '../src/mock-reply.js'
+import { openDatabase } from '../test-support/database.js'
+import { createApp } from '../test-support/app.js'
+import { createMockLinkReply } from '../test-support/mock-reply.js'
 
 test('아카이브는 확정한 실제 자료만 집계하고 분류·활동·변화 수정과 함께 갱신한다', async () => {
   const db = openDatabase(':memory:')
@@ -49,7 +49,12 @@ test('아카이브는 확정한 실제 자료만 집계하고 분류·활동·�
     const fileId = draft.attachments[0].id
     const file = await get(`/archive/activities/line1-hackathon/materials/${fileId}`)
     assert.equal(file.file.name, '실제 기획.txt')
-    assert.equal(file.file.content, '실제 입력한 자료 설명')
+    assert.equal(Object.hasOwn(file.file, 'content'), false)
+    assert.equal(db.prepare('SELECT message FROM records WHERE id = ?').get(saved.id).message, '')
+    // 이전 버전에서 저장된 자료 설명도 자료 응답에는 노출하지 않는다.
+    db.prepare('UPDATE records SET message = ? WHERE id = ?').run('이전 자료 입력문', saved.id)
+    assert.equal(Object.hasOwn((await get(`/archive/activities/line1-hackathon/materials/${fileId}`)).file, 'content'), false)
+    assert.ok(detail.folders.flatMap(folder => folder.files).every(item => !Object.hasOwn(item, 'content')))
     assert.equal(file.file.summaryScope, 'record')
     assert.equal(file.events.length, 1)
     assert.deepEqual(file.versionHistory, [])
@@ -74,8 +79,9 @@ test('아카이브는 확정한 실제 자료만 집계하고 분류·활동·�
     await send('/records', { activityId: 'line1-hackathon', analysisId: textDraft.analysisId })
     await send('/records', { activityId: 'line1-hackathon', reply: createMockLinkReply('https://example.com/actual-input') })
     const entries = (await get('/archive/activities/line1-hackathon')).folders.flatMap(folder => folder.files)
-    assert.equal(entries.length, 2)
-    assert.equal(entries.find(file => file.kind === 'text').content, '오늘은 DB 연동을 구현했다.')
+    assert.equal(entries.length, 1)
+    assert.ok(entries.every(file => file.kind !== 'text'))
+    assert.equal((await get('/archive/activities/line1-hackathon')).recordsCount, 2)
     assert.equal(entries.find(file => file.kind === 'link').sourceUrl, 'https://example.com/actual-input')
     assert.deepEqual((await get('/archive/activities/line1-hackathon')).timeline, [])
     // 같은 이름의 파일은 ID를 임의 선택하지 않고 문자열 근거로 남긴다.

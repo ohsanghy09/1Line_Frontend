@@ -1,3 +1,5 @@
+import { readActivityAnalysis } from './activity-metadata.js'
+
 // 확정 기록만 읽는다. 미저장 분석 초안과 원본 파일은 아카이브에 노출하지 않는다.
 export function readArchive(db, activityId) {
   const activity = db.prepare('SELECT * FROM activities WHERE id = ?').get(activityId)
@@ -10,19 +12,18 @@ export function readArchive(db, activityId) {
     const analysis = reply.analysis
     const uploadedAt = record.analysis_id ? db.prepare('SELECT created_at FROM analyses WHERE id = ?').get(record.analysis_id)?.created_at : null
     const originals = record.analysis_id ? db.prepare('SELECT id, name FROM files WHERE analysis_id = ? ORDER BY rowid').all(record.analysis_id) : []
-    // 업로드한 실제 파일 ID와 이름을 우선한다. 독립 카드의 파일은 원본 없는 기록 자료로 구분한다.
-    const sourceFiles = originals.length ? originals : analysis.files.map((file, index) => ({ id: `record:${record.id}:file:${index}`, name: file.name }))
-    const entries = sourceFiles.length ? sourceFiles.map((file, index) => ({
+    // 자료 목록은 실제 첨부 원본과 명시적으로 저장한 링크만 사용한다. 입력한 채팅을 자료로 만들지 않는다.
+    const entries = originals.length ? originals.map((file, index) => ({
       id: file.id, name: file.name,
       type: analysis.files[index]?.materialType ?? analysis.materialType,
-      kind: 'file', originalFileId: originals.length ? file.id : null,
-    })) : [{
-      id: `record:${record.id}`, name: (reply.sourceUrl ?? record.message).trim().slice(0, 120) || '저장된 기록',
-      type: analysis.materialType, kind: reply.sourceUrl ? 'link' : 'text', originalFileId: null,
-    }]
+      kind: 'file', originalFileId: file.id,
+    })) : reply.sourceUrl ? [{
+      id: `record:${record.id}`, name: reply.sourceUrl,
+      type: analysis.materialType, kind: 'link', originalFileId: null,
+    }] : []
     const files = entries.map((entry, position) => ({ ...entry, recordId: record.id, recordPosition: position, savedAt: record.created_at,
       uploadedAt: uploadedAt ?? record.created_at, updatedAt: record.updated_at,
-      summary: analysis.summary, content: record.message, sourceUrl: reply.sourceUrl ?? null,
+      summary: analysis.summary, sourceUrl: reply.sourceUrl ?? null,
       // 현재 계약은 기록 단위 요약이다. 다중 파일의 개별 내용 분석으로 간주하지 않는다.
       summaryScope: 'record',
     }))
@@ -40,7 +41,7 @@ export function readArchive(db, activityId) {
     for (const label of change.evidence) {
       const matches = files.filter(file => file.name === label)
       const textEvidence = files.length === 1 && files[0].kind !== 'file'
-        && ['사용자 직접 기록', files[0].content, files[0].sourceUrl].includes(label)
+        && [files[0].sourceUrl].includes(label)
       const target = matches.length === 1 ? matches[0] : textEvidence ? files[0] : null
       if (target) evidenceFileIds.push(target.id)
       else evidenceLabels.push(label)
@@ -66,6 +67,8 @@ export function readArchive(db, activityId) {
     role: activity.role ?? '미설정', period: activity.period ?? '미설정',
     summary: activity.summary ?? '활동 전체 요약이 아직 없습니다.',
     updatedAt, materialsCount: materials.length,
+    recordsCount: records.length,
+    metadataAnalysis: readActivityAnalysis(db, activityId),
     folders: [...groups].map(([name, files]) => ({ id: `${encodeURIComponent(activity.id)}:${encodeURIComponent(name)}`, name, materialsCount: files.length, files })),
     timeline,
   }

@@ -6,7 +6,7 @@ const source = path => stripTypeScriptTypes(readFileSync(new URL(path, import.me
 const url = code => `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`
 const chatUrl = url(source('../src/services/chat.ts'))
 const session = await import(url(source('../src/utils/chatSession.ts').replace("from '../services/chat'", `from '${chatUrl}'`)))
-const mocks = await import(url(source('../src/mocks/Home/chat.ts')))
+const mocks = await import(url(source('../tests/fixtures/chat.ts')))
 const data = new Map()
 const storage = { getItem: key => data.get(key) ?? null, setItem: (key, value) => data.set(key, value) }
 globalThis.window = { sessionStorage: storage }
@@ -30,6 +30,17 @@ proposedSession.messages[1].analysis.activity = {
 }
 session.writeChatSession(proposedSession)
 assert.deepEqual(session.readChatSession(), proposedSession)
+const generalSession = structuredClone(snapshot)
+generalSession.messages.push({ id: 'general-response', role: 'assistant', kind: 'general', content: '안녕하세요!', analysis: null, createdAt: 4000 })
+session.writeChatSession(generalSession)
+assert.deepEqual(session.readChatSession(), generalSession)
+generalSession.messages.at(-1).updatedActivityId = 'computer-vision'
+session.writeChatSession(generalSession)
+assert.equal(session.readChatSession().messages.at(-1).updatedActivityId, 'computer-vision')
+const approvedSession = structuredClone(snapshot)
+approvedSession.messages[1].activityCreated = true
+session.writeChatSession(approvedSession)
+assert.equal(session.readChatSession().messages[1].activityCreated, true)
 proposedSession.messages[1].analysis.activity.period.start = '2026-02-30'
 session.writeChatSession(proposedSession)
 assert.equal(session.readChatSession(), null)
@@ -41,6 +52,9 @@ changed.pending = true
 changed.pendingJob = { jobId: 'job-1', userMessageId: 'user-1' }
 session.writeChatSession(changed)
 assert.deepEqual(session.readChatSession(), changed)
+changed.pendingJob.showProgress = false
+session.writeChatSession(changed)
+assert.equal(session.readChatSession().pendingJob.showProgress, false)
 const received = { ...snapshot.messages[1], id: 'completed-reply' }
 const once = session.appendChatReply([snapshot.messages[0]], received)
 const twice = session.appendChatReply(once, { ...received, id: 'duplicate-id' })

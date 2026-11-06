@@ -4,8 +4,10 @@ import { NavLink } from "react-router"
 import { Footprints, House, Settings, Sparkles, TrendingUp } from "lucide-react"
 import { useEffect, useState } from 'react'
 import { getActivities } from '../services/records'
+import SettingsModal from './SettingsModal'
 
 function Sidebar() {
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false)
     // 화면 예시의 6개 대신 서버에 존재하는 활동 개수를 표시한다.
     const [activityCount, setActivityCount] = useState<number | null>(null)
     useEffect(() => {
@@ -107,9 +109,12 @@ function Sidebar() {
                         <p className="text-[10px] text-brand-muted">{activityCount === null ? '나의 활동 기록' : `활동 ${activityCount}개 기록 중`}</p>
                     </div>
                 </div>
-                {/* 설정 아이콘: 원본에 별도의 설정 화면이나 클릭 동작은 없음 */}
-                <Settings className="w-4 h-4 text-brand-muted cursor-pointer hover:text-brand-text" aria-hidden="true" />
+                {/* 설정에서 확인 문구를 입력한 경우에만 전체 데이터 삭제를 요청한다. */}
+                <button type="button" aria-label="사용자 설정" aria-haspopup="dialog" onClick={() => setIsSettingsOpen(true)} className="p-2 text-brand-muted hover:text-brand-text">
+                    <Settings className="w-4 h-4" aria-hidden="true" />
+                </button>
             </div>
+            {isSettingsOpen && <SettingsModal onClose={() => setIsSettingsOpen(false)} />}
         </aside>
     )
 }

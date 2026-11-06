@@ -23,5 +23,8 @@ export default defineConfig({
     configurePreviewServer(server) { server.middlewares.use(swaggerDocumentRoute) },
   }],
   // 로컬 REST API는 프론트와 별도 프로세스로 실행한다.
-  server: { proxy: { '/api': 'http://127.0.0.1:3001' } },
+  server: { proxy: {
+    '/api': 'http://127.0.0.1:3001',
+    '/ai-api': { target: 'http://127.0.0.1:8000', rewrite: path => path.replace(/^\/ai-api/, '/api') },
+  } },
 })

@@ -2,7 +2,7 @@ import type { ChatMessage } from '../types/chat'
 import { isReply } from '../services/chat'
 
 export const CHAT_SESSION_KEY = '1line.home-chat.v1'
-export type PendingChatJob = { jobId: string; userMessageId: string }
+export type PendingChatJob = { jobId: string; userMessageId: string; showProgress?: boolean }
 export type ChatSession = {
     version: 1
     conversationId: string
@@ -40,6 +40,7 @@ export function readChatSession(): ChatSession | null {
         }
         if (value.pendingJob !== undefined && value.pendingJob !== null) {
             const job = value.pendingJob as Record<string, unknown>
+            if (job.showProgress !== undefined && typeof job.showProgress !== 'boolean') return null
             if (typeof job !== 'object' || typeof job.jobId !== 'string' || !job.jobId || typeof job.userMessageId !== 'string' || !value.messages.some(message => message.role === 'user' && message.id === job.userMessageId)) return null
         }
         return value as ChatSession

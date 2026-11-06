@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { openDatabase } from '../src/database.js'
-import { createApp } from '../src/app.js'
+import { openDatabase } from '../test-support/database.js'
+import { createApp } from '../test-support/app.js'
 
 test('링크 검증·접수·링크 진행·확정 저장·수정에서 URL 보존', async () => {
   const db = openDatabase(':memory:')
@@ -33,6 +33,7 @@ test('링크 검증·접수·링크 진행·확정 저장·수정에서 URL 보�
     const savedResponse = await fetch(`${base}/records`, json('POST', saveBody))
     assert.equal(savedResponse.status, 201)
     const saved = await savedResponse.json()
+    assert.equal(saved.message, '')
     assert.equal(saved.reply.sourceUrl, url)
     assert.equal(saved.reply.analysis.materialType, '참고 링크')
     const edited = await (await fetch(`${base}/records/${saved.id}`, json('PATCH', { activityId: 'line1-hackathon', materialType: '기획 링크' }))).json()
