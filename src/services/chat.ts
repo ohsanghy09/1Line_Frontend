@@ -105,8 +105,8 @@ function aiRequest(path: string, init: RequestInit = {}): Promise<unknown> {
     return request(path, init, aiBase)
 }
 
-export async function request(path: string, init: RequestInit = {}, base = apiBase): Promise<unknown> {
-    const timeout = AbortSignal.timeout(30_000)
+export async function request(path: string, init: RequestInit = {}, base = apiBase, timeoutMs = 30_000): Promise<unknown> {
+    const timeout = AbortSignal.timeout(timeoutMs)
     try {
         const response = await fetch(`${base}${path}`, { ...init, signal: init.signal ? AbortSignal.any([init.signal, timeout]) : timeout })
         const data: unknown = await response.json().catch(() => null)

@@ -98,7 +98,7 @@ AI 완료는 analyses.reply의 확정이지 records 저장 완료가 아니다. 
 .\.venv\Scripts\python.exe -m scripts.export_openapi
 ```
 
-이후 루트의 `npm.cmd run docs:build` 또는 dev/build를 실행한다. 기존 백엔드 분석 POST 경로는 기본 410으로 폐기 안내하며 자동 목 fallback은 없다. 이전 저장 회귀 검사의 합성 입력만 createApp의 명시적인 testMockAnalysis 옵션으로 유지한다. `/example` 카드 예시와 Growth Journey 목 응답은 홈 분석 호출과 구분한다.
+이후 루트의 `npm.cmd run docs:build` 또는 dev/build를 실행한다. 백엔드의 기존 분석 POST 및 작업 GET은 항상 410으로 FastAPI 사용을 안내한다. 목 분석 생성·시간 기반 진행·testMockAnalysis 옵션은 실행 코드에서 제거했다. 합성 응답과 HTTP 공급자는 `api-server/test-support/`, 프론트 세션 검사 예시는 `tests/fixtures/`에서 검사에만 사용한다. `/example`은 홈으로 이동한다. Growth Journey 목 응답은 별도 후속 범위다.
 
 주요 코드: [작업 파이프라인](../app/chat.py), [모델 입력·카드 변환](../app/home_analysis.py), [공유 DB 처리](../app/database.py), [링크 수집](../app/links.py), [프론트 서비스](../../src/services/chat.ts), [백엔드 저장](../../api-server/src/app.js), [스키마 생성](../../api-server/src/database.js).
 

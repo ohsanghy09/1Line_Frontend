@@ -5,7 +5,7 @@ import test from 'node:test'
 import { createServer } from 'vite'
 import { createApp } from '../api-server/src/app.js'
 import { openDatabase } from '../api-server/src/database.js'
-import { createMockJourney } from '../api-server/src/mock-journey.js'
+import { createMockJourney } from '../api-server/test-support/journey-fixture.js'
 
 test('Journey 서비스 → Vite 프록시 → API와 오류·취소·응답 계약', async t => {
     const db = openDatabase(':memory:')
@@ -25,13 +25,13 @@ test('Journey 서비스 → Vite 프록시 → API와 오류·취소·응답 계
         const service = await import(url(source('../src/services/journey.ts').replace("from './chat'", `from '${chatUrl}'`)))
         const { filterJourneyEvents } = await import(url(source('../src/utils/journey.ts')))
 
-        await t.test('서버 예시 표시·날짜순·비교 근거·AND 필터를 유지한다', async () => {
+        await t.test('실제 DB의 미분석 상태를 반환하며 예시를 표시하지 않는다', async () => {
             const data = await service.getGrowthJourney()
-            assert.deepEqual(data, createMockJourney())
-            assert.equal(data.source, 'mock')
-            assert.equal(filterJourneyEvents(data.events, 'ability', 'planning').length, 2)
-            assert.equal(filterJourneyEvents(data.events, 'ability', 'technology').length, 0)
-            assert.deepEqual(data.events.at(-1).comparison.evidence, ['회의록', '역할분담표'])
+            assert.equal(data.source, 'api')
+            assert.deepEqual(data.events, [])
+            assert.equal(data.analysis.id, null)
+            assert.equal(data.analysis.currentRecordCount, 0)
+            assert.equal(filterJourneyEvents(data.events, 'ability', 'planning').length, 0)
         })
         await t.test('빈 응답 허용·안정 정렬·원본 배열 보존', async () => {
             const raw = createMockJourney()
@@ -53,6 +53,8 @@ test('Journey 서비스 → Vite 프록시 → API와 오류·취소·응답 계
                 data => { data.events[0].activity.id = 1 },
                 data => { data.events[1].id = data.events[0].id },
                 data => { data.events[0].type = 'unknown' },
+                data => { data.typeOptions[1].icon = 123 },
+                data => { data.badges[0].icon = '' },
                 data => { data.axisOptions.shift() },
                 data => { data.events[0].comparison = null },
                 data => { data.events[0].comparison = { before: '', after: 'PM', evidence: [] } },
@@ -64,13 +66,27 @@ test('Journey 서비스 → Vite 프록시 → API와 오류·취소·응답 계
             globalThis.fetch = async () => Response.json(null)
             await assert.rejects(service.getGrowthJourney(), /응답 형식/)
         })
+        await t.test('고정 목록에 없던 분석 분류·아이콘으로 필터링하고 이전 무아이콘 응답도 읽는다', async () => {
+            const raw = createMockJourney()
+            raw.typeOptions = [{ value: 'all', label: '전체' }, { value: 'scope-design', label: '기획 범위 설계', icon: '🧭' }]
+            raw.events = [{ ...raw.events[0], type: 'scope-design' }]
+            raw.badges[0] = { ...raw.badges[0], label: '기록상 첫 기획', icon: '🌱' }
+            globalThis.fetch = async () => Response.json(raw)
+            const data = await service.getGrowthJourney()
+            assert.equal(data.typeOptions[1].icon, '🧭')
+            assert.equal(data.badges[0].icon, '🌱')
+            assert.equal(filterJourneyEvents(data.events, 'scope-design', 'all').length, 1)
+            delete raw.typeOptions[1].icon
+            globalThis.fetch = async () => Response.json(raw)
+            assert.equal((await service.getGrowthJourney()).events[0].type, 'scope-design')
+        })
         await t.test('서버 오류·연결 실패를 목 성공으로 숨기지 않고 재호출로 회복한다', async () => {
             globalThis.fetch = async () => Response.json({ error: '조회 실패' }, { status: 500 })
             await assert.rejects(service.getGrowthJourney(), /조회 실패/)
             globalThis.fetch = async () => { throw new TypeError('offline') }
             await assert.rejects(service.getGrowthJourney(), /연결하지 못했어요/)
             globalThis.fetch = proxyFetch
-            assert.equal((await service.getGrowthJourney()).events.length, 5)
+            assert.equal((await service.getGrowthJourney()).events.length, 0)
         })
         await t.test('이미 취소됐거나 진행 중 취소된 요청을 거절한다', async () => {
             await assert.rejects(service.getGrowthJourney(AbortSignal.abort()), { name: 'AbortError' })

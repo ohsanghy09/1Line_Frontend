@@ -2,12 +2,12 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { stripTypeScriptTypes } from 'node:module'
 import { createServer } from 'vite'
-import { openDatabase } from '../api-server/src/database.js'
-import { createApp } from '../api-server/src/app.js'
+import { openDatabase } from '../api-server/test-support/database.js'
+import { createApp } from '../api-server/test-support/app.js'
 
 // 프론트 서비스를 그대로 변환해 Vite 프록시 → 실제 API → SQLite까지 확인한다.
 const db = openDatabase(':memory:')
-const api = createApp(db, { testMockAnalysis: true }).listen(0, '127.0.0.1')
+const api = createApp(db).listen(0, '127.0.0.1')
 await new Promise(resolve => api.once('listening', resolve))
 const vite = await createServer({ server: { host: '127.0.0.1', port: 0, proxy: { '/api': `http://127.0.0.1:${api.address().port}`, '/ai-api': { target: `http://127.0.0.1:${api.address().port}`, rewrite: path => path.replace(/^\/ai-api/, '/api').replace('/chat/health', '/health') } } } })
 const originalFetch = globalThis.fetch
@@ -50,7 +50,7 @@ try {
     const edited = await records.updateRecord(saved.id, 'line1-hackathon', '기획안')
     assert.equal(edited.reply.analysis.activity.name, '1호선톤')
     assert.equal(edited.reply.analysis.files[0].materialType, '기획안')
-    const mockSource = stripTypeScriptTypes(readFileSync(new URL('../src/mocks/Home/chat.ts', import.meta.url), 'utf8'))
+    const mockSource = stripTypeScriptTypes(readFileSync(new URL('../tests/fixtures/chat.ts', import.meta.url), 'utf8'))
     const mocks = await import(`data:text/javascript;base64,${Buffer.from(mockSource).toString('base64')}`)
     for (const card of [mocks.mockTextAnalysisReply, mocks.mockFileAnalysisReply, mocks.mockNoChangeReply, mocks.mockBatchAnalysisReply]) {
         const record = await records.saveRecord(card, 'line1-hackathon')

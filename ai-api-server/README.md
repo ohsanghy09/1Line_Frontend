@@ -1,5 +1,7 @@
 # AI API 개발 서버
 
+Growth Journey도 실제 분석으로 연결했다. GET `/api/journey/context`는 확정 기록만 조회하고 POST `/api/analyze/journey`는 `app/prompts/journey.md`로 실제 모델을 호출해 근거 검증 후 결과를 반환한다. 결과 DB 쓰기는 백엔드 POST `/api/journey/analyze`가 담당한다. [성장 분석 API](../docs/journey/성장_분석_API.md)의 최신 절을 따른다. 검사: 루트에서 `node scripts/check-live-ai.mjs --journey`(임시 DB·실제 모델·추가 호출 비용).
+
 다음 작업 진입점: [현재 작업 인수인계](../docs/integration/현재_작업_인수인계.md). 실제 화면 시나리오 확인 단계이며 연결 오류·재전송 수정과 바탕화면 자료 위치를 포함한다.
 
 프로젝트 최상위 `api-server/`와 같은 위치에서 관리하는 Python·FastAPI 기반 AI 개발 서버다. 실제 OpenAI API를 사용하여 입력 분석과 활동 매칭·신규 활동 생성을 수행한다.

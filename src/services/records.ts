@@ -14,7 +14,7 @@ function notifyActivitiesChanged() {
     if (typeof window !== 'undefined') window.dispatchEvent(new Event('1line:activities-changed'))
 }
 
-// 초안은 ID로 원본 파일 연결을 유지하고, 독립 미리보기는 카드 JSON으로 저장한다.
+// 실제 분석 초안은 ID로 원본 파일 연결을 유지한다.
 export async function saveRecord(reply: ChatReply, target: string | ActivitySelection): Promise<SavedRecord> {
     const selection = typeof target === 'string' ? { activityId: target } : target
     const saved = readRecord(await request('/records', {

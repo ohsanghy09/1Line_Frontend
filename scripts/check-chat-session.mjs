@@ -6,7 +6,7 @@ const source = path => stripTypeScriptTypes(readFileSync(new URL(path, import.me
 const url = code => `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`
 const chatUrl = url(source('../src/services/chat.ts'))
 const session = await import(url(source('../src/utils/chatSession.ts').replace("from '../services/chat'", `from '${chatUrl}'`)))
-const mocks = await import(url(source('../src/mocks/Home/chat.ts')))
+const mocks = await import(url(source('../tests/fixtures/chat.ts')))
 const data = new Map()
 const storage = { getItem: key => data.get(key) ?? null, setItem: (key, value) => data.set(key, value) }
 globalThis.window = { sessionStorage: storage }

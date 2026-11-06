@@ -2,8 +2,7 @@ import { z } from 'zod'
 import { readFileSync } from 'node:fs'
 import { activityMetadata, archiveQuerySchema, editSchema, linkSchema, replySchema, saveSchema } from '../src/validation.js'
 import { journeySchema } from '../src/journey.js'
-import { createMockReply, createMockLinkReply } from '../src/mock-reply.js'
-import { createMockJourney } from '../src/mock-journey.js'
+const [replyExample, linkExample] = JSON.parse(readFileSync(new URL('./chat-examples.json', import.meta.url), 'utf8'))
 
 // 실제 검증 스키마를 읽기만 한다. 기존 입력·응답·목 데이터는 변경하지 않는다.
 const json = schema => {
@@ -64,7 +63,7 @@ export const schemas = {
   ActivityDetail: obj({ ...activity.properties, folders: arr(ref('Folder')), timeline: arr(ref('TimelineEvent')) }),
   MaterialDetail: obj({ activityId: str(), file: ref('Material'), events: arr(ref('TimelineEvent')), versionHistory: arr(obj({ fileId: str(), version: str() })) }),
   HomeRecent: obj({ activities: arr(ref('ArchiveActivity')), records: arr(obj({ id: str(), recordId: str(), activityId: str(), activityName: str(), title: str(), materialType: str(), savedAt: date, kind: enumeration(['file', 'text', 'link']) })) }),
-  Journey: { ...json(journeySchema), description: '현재 source=mock. DB·실제 AI 분석 없음. 선택지 value·이벤트/배지 ID 중복 불가, all 선택지 필요. 이벤트 분류는 선택지에 존재하고 all은 불허. 같은 월은 응답 순서. 근거는 링크가 아닌 이름 문자열.' },
+  Journey: { ...json(journeySchema), description: 'DB에 저장된 실제 AI 성장 분석. analysis는 분석 시각·분석 기록 수·현재 기록 수·stale을 표시한다. 이벤트 날짜는 근거 기록의 저장 월이며 evidence는 실제 기록 ID와 인용문이다.' },
 }
 
 const errorResponses = Object.fromEntries([400, 404, 409, 500].map(status => [status, response(ref('Error'), ({ 400: '입력 오류', 404: '대상 또는 경로 없음', 409: '미완료 분석·중복 저장·활동명 충돌', 500: '서버 오류' })[status])]))
@@ -72,12 +71,11 @@ function operation(tag, operationId, summary, schema, options = {}) {
   const { status = 200, description = '', example, errors = [500], ...rest } = options
   return { tags: [tag], operationId, summary, description, responses: { [status]: response(schema, '성공', example), ...Object.fromEntries(errors.map(code => [code, errorResponses[code]])) }, ...rest }
 }
-const replyExample = createMockReply('사용자 인터뷰를 진행했습니다.', [], 'no-change', { activities: [] })
 replyExample.id = 'reply-example-001'
-const linkExample = createMockLinkReply('https://example.com', { activities: [] })
 linkExample.id = 'reply-link-example-001'
 schemas.ChatReply.examples = [replyExample, linkExample]
-schemas.Journey.examples = [createMockJourney()]
+const emptyJourneyExample = { source: 'api', summary: { title: '아직 성장 분석이 없어요.', description: '기록 저장 후 분석해 주세요.' }, badges: [], typeOptions: [{ value: 'all', label: '전체' }], axisOptions: [{ value: 'all', label: '전체 분야' }], events: [], analysis: { id: null, generatedAt: null, stale: false, recordCount: 0, currentRecordCount: 0, model: null, promptVersion: null } }
+schemas.Journey.examples = [emptyJourneyExample]
 
 export const backendSpec = {
   openapi: '3.1.0',
@@ -91,7 +89,8 @@ export const backendSpec = {
     '/api/health': { get: operation('상태', 'health', '개발 서버 준비 상태', obj({ status: { const: 'ready' }, label: str(), analysisProvider: { const: 'mock' } }), { description: 'ready는 고정 응답이며 실제 AI 상태 확인이 아닙니다.' }) },
     '/api/activities': { get: operation('활동', 'activities', '활동 선택지 조회', arr(ref('ActivityOption'))) },
     '/api/home/recent': { get: operation('홈', 'recent', '최근 활동·자료 조회', ref('HomeRecent'), { description: '각 최대 3개. 활동은 변경순, 자료는 최초 확정 저장순. 다중 파일은 같은 recordId가 반복될 수 있습니다.' }) },
-    '/api/journey': { get: operation('성장 분석 조회', 'journey', '성장 분석 목 결과 조회', ref('Journey'), { description: '조회만 수행하며 DB·AI 분석 실행·결과 저장은 없습니다. 필터는 프론트에서 처리합니다.', example: createMockJourney() }) },
+    '/api/journey': { get: operation('성장 분석 조회', 'journey', '저장된 성장 분석 조회', ref('Journey'), { description: '최신 저장 결과와 갱신 필요 상태를 조회한다. 모델 호출 없음. 필터는 프론트에서 처리한다.', example: emptyJourneyExample }) },
+    '/api/journey/analyze': { post: { tags: ['성장 분석 조회'], operationId: 'generateJourney', summary: '확정 기록으로 실제 성장 분석·결과 저장', description: 'FastAPI 실제 AI 분석을 호출한 뒤 근거·스냅샷을 검증하고 결과를 저장한다. 기록 100개·문맥 250000자까지 지원한다. 기존 홈 기록·Timeline은 변경하지 않는다.', responses: { 200: response(ref('Journey')), ...Object.fromEntries([409, 422, 429, 502, 503, 504].map(code => [code, response(ref('Error'), '분석 실패·진행 중·기록 변경·문맥 한도·공급자 오류')])) } } },
     '/api/archive/activities': { get: operation('아카이브', 'archiveList', '활동 검색·필터·정렬', obj({ items: arr(ref('ArchiveActivity')), total: count }), { description: 'total은 조건 적용 전 전체 활동 수. q/category/status는 AND. oldest도 업데이트 기준. 파일 내부 본문 검색·페이지네이션 없음.', parameters: Object.entries(json(archiveQuerySchema).properties).map(([name, schema]) => ({ name, in: 'query', required: false, schema })) }) },
     '/api/archive/activities/{id}': { get: operation('아카이브', 'archiveDetail', '활동 상세·분류 폴더·Timeline', ref('ActivityDetail'), { parameters: [parameter('id')], errors: [404, 500], description: '확정 저장 기록만 조회. 폴더는 자료 유형 그룹. 표시용 날짜 라벨은 프론트 계산.' }) },
     '/api/archive/activities/{id}/materials/{fileId}': { get: operation('아카이브', 'materialDetail', '자료 상세 패널 데이터', ref('MaterialDetail'), { parameters: [parameter('id', '활동 ID'), parameter('fileId', '자료 ID')], errors: [404, 500], description: '해당 활동 내 자료만 조회. versionHistory는 현재 빈 배열. 요약은 기록 단위. 파일 본문 추출 없음.' }) },
@@ -138,10 +137,10 @@ const liveAiSpec = JSON.parse(readFileSync(new URL('./ai-openapi.json', import.m
 export const aiSpec = {
   ...liveAiSpec,
   info: { ...liveAiSpec.info, title: '1Line AI API · FastAPI / OpenAI',
-    description: '홈 텍스트·파일·링크의 실제 분석과 초안·원본 보관 API입니다. 신규 활동 생성은 AI 서버, 기록 확정 저장은 백엔드가 담당합니다. 분석 프롬프트는 ai-api-server/app/prompts/home.md입니다. GrowthAnalysisRequest·Journey는 후속 성장 분석 계약이며 현재 홈 실행 API와 구분합니다.' },
+    description: '홈 텍스트·파일·링크와 Growth Journey 실제 분석 API입니다. 신규 활동 생성은 AI 서버, 기록·성장 분석 결과 확정 저장은 백엔드가 담당합니다. 프롬프트는 app/prompts/home.md와 journey.md입니다. GrowthAnalysisRequest는 이전 초안이며 실제 성장 분석은 /api/analyze/journey를 사용합니다.' },
   components: { schemas: { ...aiContractDraft.components.schemas, ...liveAiSpec.components.schemas } },
 }
-backendSpec.info.description = '기록·자료 저장·수정·조회 API입니다. 실제 홈 분석은 FastAPI에서 처리합니다. 이전 백엔드 분석 접수는 기본 410이며 테스트 전용 합성 입력에서만 활성화됩니다. Growth Journey는 별도 후속 범위입니다.'
+backendSpec.info.description = '기록·자료 저장·수정·조회 API입니다. 홈·성장 분석은 FastAPI에서 처리하며 백엔드는 성장 결과를 검증해 저장합니다. 이전 백엔드 홈 분석 접수와 작업 조회는 항상 410입니다.'
 backendSpec.paths['/api/health'].get.responses[200].content['application/json'].schema.properties.analysisProvider = { const: 'external' }
 schemas.ChatReply.description = '실제 홈 카드 응답과 저장 검증 구조. 생성 완료된 신규 활동도 실제 ID와 match=existing으로 반환합니다. new/unresolved 후보는 ID가 없습니다.'
 for (const route of ['/api/chat', '/api/chat/links']) {
@@ -151,3 +150,8 @@ for (const route of ['/api/chat', '/api/chat/links']) {
   operation.description = '실제 개발 서버에서는 410을 반환합니다. AI 문서의 같은 경로를 사용하세요. 이전 목 계약은 회귀 테스트 전용입니다.'
   operation.responses = { 410: response(ref('Error'), '분석 접수는 FastAPI로 이관') }
 }
+const legacyJob = backendSpec.paths['/api/chat/jobs/{id}'].get
+legacyJob.deprecated = true
+legacyJob.summary = '이전 분석 진행 조회 — FastAPI로 이관'
+legacyJob.description = 'FastAPI AI 서버의 작업 조회 경로를 사용하세요.'
+legacyJob.responses = { 410: response(ref('Error'), '분석 진행 조회는 FastAPI로 이관') }

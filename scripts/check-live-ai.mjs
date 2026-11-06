@@ -9,7 +9,7 @@ import { stripTypeScriptTypes } from 'node:module'
 import { createServer } from 'vite'
 import { openDatabase } from '../api-server/src/database.js'
 
-// 수동 통합 검사: 임시 DB·합성 자료만 사용한다. 기본 2회 + --extended 시 추가 모델 호출 비용이 발생한다.
+// 수동 통합 검사: 임시 DB·합성 자료를 실제 모델로 분석한다. 기본 2회, --extended/--journey는 추가 호출이다.
 const root = fileURLToPath(new URL('../', import.meta.url))
 const directory = await mkdtemp(path.join(tmpdir(), '1line-live-ai-'))
 const databasePath = path.join(directory, 'test.db')
@@ -45,7 +45,7 @@ async function ready(url, child) {
 try {
     const backendPort = await freePort()
     const aiPort = await freePort()
-    const api = start(process.execPath, ['api-server/src/server.js'], { cwd: root, env: { ...process.env, PORT: String(backendPort), DB_PATH: databasePath } })
+    const api = start(process.execPath, ['api-server/src/server.js'], { cwd: root, env: { ...process.env, PORT: String(backendPort), DB_PATH: databasePath, AI_API_BASE_URL: `http://127.0.0.1:${aiPort}` } })
     await ready(`http://127.0.0.1:${backendPort}/api/health`, api)
     const python = path.join(root, 'ai-api-server', '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python')
     const ai = start(python, ['-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', String(aiPort)], {
@@ -83,7 +83,9 @@ try {
     assert.equal((await chat.resumeChatReply(firstJob)).analysisId, first.analysisId)
     console.log('PASS: 실제 모델 → 활동 생성/연결 → 분석 초안 → 프론트 서비스 → 백엔드 확정 저장·중복 방지·작업 복원')
 
-    const content = `${first.analysis.activity.name} 회의록입니다. 오늘은 첫 독서 모임의 다음 날짜를 확인했습니다. 기존 계획이나 역할에 변화는 없었습니다.`
+    const content = process.argv.includes('--journey')
+        ? `${first.analysis.activity.name} 진행 회고입니다. 처음 준비할 때는 독서 토론 진행 경험이 없어 질문을 즉석에서 정했습니다. 이번에는 토론 진행법을 학습하고 사전 질문지를 직접 설계해 6명의 토론을 진행했습니다. 발언 순서와 시간을 조율해 이전 60분 걸리던 토론을 30분에 마쳤고 참여자 전원이 한 번 이상 의견을 냈습니다. 새로 배운 진행 방법을 실제 모임에 적용한 경험입니다.`
+        : `${first.analysis.activity.name} 회의록입니다. 오늘은 첫 독서 모임의 다음 날짜를 확인했습니다. 기존 계획이나 역할에 변화는 없었습니다.`
     const bytes = new TextEncoder().encode(content)
     const fileReply = await chat.getChatReply(`${first.analysis.activity.name} 활동의 회의록입니다.`, [new File([bytes], '실제본문_회의록.txt', { type: 'text/plain' })], { conversationId })
     assert.equal(fileReply.analysis.activity.id, activityId)
@@ -97,6 +99,40 @@ try {
     const downloaded = new Uint8Array(await (await fetch(`/api/files/${fileId}`)).arrayBuffer())
     assert.deepEqual(downloaded, bytes)
     console.log('PASS: 실제 파일 본문 분석 → 원본 보관 → 기록 저장·분류 수정 → 아카이브 조회·다운로드 바이트 일치')
+
+    if (process.argv.includes('--journey')) {
+        const journeySource = stripTypeScriptTypes(await readFile(path.join(root, 'src/services/journey.ts'), 'utf8')).replace("from './chat'", `from '${chatUrl}'`)
+        const journey = await import(moduleUrl(journeySource))
+        const before = await journey.getGrowthJourney()
+        assert.equal(before.source, 'api')
+        assert.equal(before.analysis.id, null)
+        assert.deepEqual(before.events, [])
+        const result = await journey.generateGrowthJourney()
+        assert.ok(result.analysis.id)
+        assert.equal(result.analysis.recordCount, 2)
+        assert.equal(result.analysis.stale, false)
+        assert.ok(result.summary.evidence.length)
+        assert.ok(result.events.length > 0, '성장 근거가 있는 테스트 기록에서 이벤트를 확인한다.')
+        const categoryIds = new Set(result.typeOptions.filter(option => option.value !== 'all').map(option => option.value))
+        assert.ok(categoryIds.size > 0)
+        assert.ok(result.typeOptions.filter(option => option.value !== 'all').every(option => option.icon && option.label))
+        assert.ok(result.events.every(event => categoryIds.has(event.type)))
+        assert.ok(result.badges.every(badge => badge.icon))
+        assert.deepEqual(await journey.getGrowthJourney(), result)
+        const context = await (await fetch('/ai-api/journey/context')).json()
+        assert.equal(context.recordCount, 2)
+        const ids = new Set(context.records.map(record => record.id))
+        for (const item of [...result.summary.evidence, ...result.events.flatMap(event => event.evidence), ...result.badges.flatMap(badge => badge.evidence)]) {
+            assert.ok(ids.has(item.recordId))
+            const record = context.records.find(record => record.id === item.recordId)
+            assert.ok([record.message, record.summary].some(value => value?.includes(item.quote)))
+        }
+        await records.updateRecord(changed.id, activityId, '갱신 필요 검사')
+        const stale = await journey.getGrowthJourney()
+        assert.equal(stale.analysis.stale, true)
+        assert.equal(stale.analysis.id, result.analysis.id)
+        console.log('PASS: 실제 성장 분석 → 확정 기록/근거 검증 → 백엔드 DB 저장 → 프론트 조회 → 기록 수정 후 갱신 필요')
+    }
 
     if (process.argv.includes('--extended')) {
         const batch = await chat.getChatReply(`${first.analysis.activity.name} 자료 두 개입니다.`, [

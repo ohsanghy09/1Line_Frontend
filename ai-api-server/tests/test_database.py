@@ -17,7 +17,7 @@ from app.main import create_app
 from app.schemas import TextAnalysis
 from test_server import settings
 
-BACKEND_DATABASE = Path(__file__).resolve().parents[2] / "api-server/src/database.js"
+BACKEND_DATABASE = Path(__file__).resolve().parents[2] / "api-server/test-support/database.js"
 
 
 class DatabaseTests(unittest.TestCase):

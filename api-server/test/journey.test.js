@@ -2,12 +2,12 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { openDatabase } from '../src/database.js'
 import { createApp } from '../src/app.js'
-import { createMockJourney } from '../src/mock-journey.js'
+import { createMockJourney } from '../test-support/journey-fixture.js'
 import { journeySchema } from '../src/journey.js'
 
-test('Journey HTTP 조회는 독립된 목 응답을 반환하고 기존 DB를 변경하지 않는다', async () => {
+test('Journey HTTP 조회는 미분석 상태를 반환하고 예시를 채우거나 기존 DB를 변경하지 않는다', async () => {
   const db = openDatabase(':memory:')
-  const server = createApp(db, { testMockAnalysis: true }).listen(0, '127.0.0.1')
+  const server = createApp(db).listen(0, '127.0.0.1')
   try {
     await new Promise(resolve => server.once('listening', resolve))
     const snapshot = () => ['activities', 'analyses', 'records', 'files', 'timeline_events', 'analysis_jobs']
@@ -16,12 +16,13 @@ test('Journey HTTP 조회는 독립된 목 응답을 반환하고 기존 DB를 �
     const response = await fetch(`http://127.0.0.1:${server.address().port}/api/journey`)
     assert.equal(response.status, 200)
     const data = await response.json()
-    assert.deepEqual(data, createMockJourney())
-    assert.equal(data.source, 'mock')
-    assert.equal(data.events.length, 5)
-    data.events[0].title = '응답 수정'
+    assert.equal(data.source, 'api')
+    assert.equal(data.events.length, 0)
+    assert.equal(data.analysis.id, null)
+    assert.equal(data.analysis.currentRecordCount, 0)
+    data.summary.title = '응답 수정'
     const again = await (await fetch(`http://127.0.0.1:${server.address().port}/api/journey`)).json()
-    assert.notEqual(again.events[0].title, data.events[0].title)
+    assert.notEqual(again.summary.title, data.summary.title)
     assert.deepEqual(snapshot(), before)
   } finally {
     await new Promise(resolve => server.close(resolve))

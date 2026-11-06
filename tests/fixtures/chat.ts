@@ -1,4 +1,4 @@
-import type { ChatProgress, ChatReply } from '../../types/chat'
+import type { ChatProgress, ChatReply } from '../../src/types/chat'
 
 // 레퍼런스 HTML의 AI 채팅 응답을 데이터로 옮긴 파일.
 // 텍스트 분석 응답은 채팅 화면에 연결했으며 실제 AI 분석이나 저장 요청을 수행하지 않는다.

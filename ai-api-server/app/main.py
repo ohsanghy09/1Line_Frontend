@@ -14,6 +14,7 @@ from .analysis import AnalysisError, analyze_text
 from .database import DatabaseError, SharedDatabase
 from .schemas import DatabaseContext, TextAnalysisRequest, TextAnalysisResponse
 from .chat import ChatPipeline
+from .journey import journey_router
 
 
 class OpenAIConfiguration(BaseModel):
@@ -41,8 +42,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     pipeline = ChatPipeline(database, config)
     application = FastAPI(
         title="1Line AI API 개발 서버",
-        version="0.4.0", lifespan=pipeline.lifespan,
-        description="공유 DB·실제 OpenAI 홈 분석·원본과 초안 보관. 기록 확정 저장은 백엔드에서 처리합니다.",
+        version="0.5.0", lifespan=pipeline.lifespan,
+        description="공유 DB·실제 OpenAI 홈/성장 분석·원본과 초안 보관. 기록과 성장 결과 확정 저장은 백엔드에서 처리합니다.",
     )
     application.add_middleware(
         CORSMiddleware,
@@ -95,6 +96,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                                     contextSource=source, contextSelection=selection)
 
     application.include_router(pipeline.router())
+    application.include_router(journey_router(database, config))
     return application
 
 

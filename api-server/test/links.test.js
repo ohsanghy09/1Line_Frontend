@@ -1,11 +1,11 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { openDatabase } from '../src/database.js'
-import { createApp } from '../src/app.js'
+import { openDatabase } from '../test-support/database.js'
+import { createApp } from '../test-support/app.js'
 
 test('링크 검증·접수·링크 진행·확정 저장·수정에서 URL 보존', async () => {
   const db = openDatabase(':memory:')
-  const server = createApp(db, { testMockAnalysis: true }).listen(0, '127.0.0.1')
+  const server = createApp(db).listen(0, '127.0.0.1')
   await new Promise(resolve => server.once('listening', resolve))
   const base = `http://127.0.0.1:${server.address().port}/api`
   const json = (method, body) => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })

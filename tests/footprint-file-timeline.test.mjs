@@ -3,12 +3,12 @@ import test from 'node:test'
 import { readFileSync } from 'node:fs'
 import { stripTypeScriptTypes } from 'node:module'
 import { createServer } from 'vite'
-import { openDatabase } from '../api-server/src/database.js'
-import { createApp } from '../api-server/src/app.js'
+import { openDatabase } from '../api-server/test-support/database.js'
+import { createApp } from '../api-server/test-support/app.js'
 
 test('프론트 아카이브 서비스 → Vite 프록시 → REST API → SQLite', async t => {
     const db = openDatabase(':memory:')
-    const api = createApp(db, { testMockAnalysis: true }).listen(0, '127.0.0.1')
+    const api = createApp(db).listen(0, '127.0.0.1')
     await new Promise(resolve => api.once('listening', resolve))
     const vite = await createServer({ server: { host: '127.0.0.1', port: 0, proxy: {
         '/api': `http://127.0.0.1:${api.address().port}`,

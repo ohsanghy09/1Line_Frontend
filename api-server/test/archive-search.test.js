@@ -1,12 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { openDatabase } from '../src/database.js'
-import { createApp } from '../src/app.js'
-import { createMockReply } from '../src/mock-reply.js'
+import { openDatabase } from '../test-support/database.js'
+import { createApp } from '../test-support/app.js'
+import { createMockReply } from '../test-support/mock-reply.js'
 
 test('검색 API는 확정 이름·입력·요약을 검색하고 파일 BLOB 본문은 읽지 않는다', async () => {
   const db = openDatabase(':memory:')
-  const server = createApp(db, { testMockAnalysis: true }).listen(0, '127.0.0.1')
+  const server = createApp(db).listen(0, '127.0.0.1')
   await new Promise(resolve => server.once('listening', resolve))
   const base = `http://127.0.0.1:${server.address().port}/api`
   const search = async (q, rest = {}) => {

@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { openDatabase } from '../src/database.js'
+import { openDatabase } from '../test-support/database.js'
 import { createApp } from '../src/app.js'
-import { createMockReply } from '../src/mock-reply.js'
+import { createMockReply } from '../test-support/mock-reply.js'
 
 test('실제 개발 모드는 목 분석 접수를 막고 AI 작업 완료 후에만 기록을 저장한다', async () => {
   const db = openDatabase(':memory:')

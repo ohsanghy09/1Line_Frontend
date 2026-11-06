@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "1Line AI API 개발 서버",
-    "description": "공유 DB·실제 OpenAI 홈 분석·원본과 초안 보관. 기록 확정 저장은 백엔드에서 처리합니다.",
-    "version": "0.4.0"
+    "description": "공유 DB·실제 OpenAI 홈/성장 분석·원본과 초안 보관. 기록과 성장 결과 확정 저장은 백엔드에서 처리합니다.",
+    "version": "0.5.0"
   },
   "paths": {
     "/api/health": {
@@ -276,6 +276,65 @@
           }
         }
       }
+    },
+    "/api/journey/context": {
+      "get": {
+        "tags": [
+          "성장 분석"
+        ],
+        "summary": "Context",
+        "description": "확정 기록만 조회한다. 모델 호출·DB 변경 없음.",
+        "operationId": "context_api_journey_context_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JourneyContext"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analyze/journey": {
+      "post": {
+        "tags": [
+          "성장 분석"
+        ],
+        "summary": "Analyze",
+        "description": "실제 성장 분석. 결과를 반환하며 확정 저장은 백엔드가 담당한다.",
+        "operationId": "analyze_api_analyze_journey_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JourneyResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "확정 기록 없음·분석 문맥 한도·분석 거절"
+          },
+          "429": {
+            "description": "모델 호출 제한"
+          },
+          "502": {
+            "description": "분석 실패·근거 불일치"
+          },
+          "503": {
+            "description": "설정·DB 오류"
+          },
+          "504": {
+            "description": "분석 시간 초과"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -372,6 +431,85 @@
           "confidence"
         ],
         "title": "ActivityDecision"
+      },
+      "ActivityMetadata": {
+        "properties": {
+          "category": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "startDate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Startdate"
+          },
+          "endDate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enddate"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "category",
+          "role",
+          "summary",
+          "startDate",
+          "endDate"
+        ],
+        "title": "ActivityMetadata"
       },
       "AnalysisContext": {
         "properties": {
@@ -505,6 +643,82 @@
         ],
         "title": "CompletedResult"
       },
+      "ContextRecord": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Id"
+          },
+          "activityId": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Activityid"
+          },
+          "activityName": {
+            "type": "string",
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Activityname"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "summary": {
+            "type": "string",
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Summary"
+          },
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/Change"
+            },
+            "type": "array",
+            "title": "Changes"
+          },
+          "savedAt": {
+            "type": "string",
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Savedat"
+          },
+          "updatedAt": {
+            "type": "string",
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Updatedat"
+          },
+          "activity": {
+            "$ref": "#/components/schemas/ActivityMetadata"
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileReference"
+            },
+            "type": "array",
+            "title": "Files"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "activityId",
+          "activityName",
+          "message",
+          "summary",
+          "changes",
+          "savedAt",
+          "updatedAt",
+          "activity",
+          "files"
+        ],
+        "title": "ContextRecord"
+      },
       "ContextSelection": {
         "properties": {
           "activitiesTotal": {
@@ -583,6 +797,52 @@
           "status"
         ],
         "title": "DatabaseStatus"
+      },
+      "Evidence": {
+        "properties": {
+          "recordId": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Recordid"
+          },
+          "quote": {
+            "type": "string",
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Quote"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "recordId",
+          "quote"
+        ],
+        "title": "Evidence"
+      },
+      "FileReference": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "FileReference"
       },
       "HTTPValidationError": {
         "properties": {
@@ -708,6 +968,66 @@
         ],
         "title": "JobResponse"
       },
+      "JourneyContext": {
+        "properties": {
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/ContextRecord"
+            },
+            "type": "array",
+            "title": "Records"
+          },
+          "recordCount": {
+            "type": "integer",
+            "title": "Recordcount"
+          },
+          "sourceFingerprint": {
+            "type": "string",
+            "title": "Sourcefingerprint"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "records",
+          "recordCount",
+          "sourceFingerprint"
+        ],
+        "title": "JourneyContext"
+      },
+      "JourneyResponse": {
+        "properties": {
+          "sourceFingerprint": {
+            "type": "string",
+            "title": "Sourcefingerprint"
+          },
+          "recordCount": {
+            "type": "integer",
+            "title": "Recordcount"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "promptVersion": {
+            "type": "string",
+            "title": "Promptversion"
+          },
+          "result": {
+            "$ref": "#/components/schemas/SavedJourney"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "sourceFingerprint",
+          "recordCount",
+          "model",
+          "promptVersion",
+          "result"
+        ],
+        "title": "JourneyResponse"
+      },
       "LinkRequest": {
         "properties": {
           "url": {
@@ -773,6 +1093,40 @@
           "modelConfigured"
         ],
         "title": "OpenAIConfiguration"
+      },
+      "Option": {
+        "properties": {
+          "value": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Value"
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Label"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "value",
+          "label"
+        ],
+        "title": "Option"
       },
       "Progress": {
         "properties": {
@@ -867,6 +1221,255 @@
           "activityId"
         ],
         "title": "RecordContext"
+      },
+      "SavedActivity": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "SavedActivity"
+      },
+      "SavedBadge": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Label"
+          },
+          "icon": {
+            "type": "string",
+            "maxLength": 16,
+            "minLength": 1,
+            "title": "Icon"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/Evidence"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "minItems": 1,
+            "title": "Evidence"
+          },
+          "id": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "label",
+          "icon",
+          "evidence",
+          "id"
+        ],
+        "title": "SavedBadge"
+      },
+      "SavedComparison": {
+        "properties": {
+          "before": {
+            "type": "string",
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Before"
+          },
+          "after": {
+            "type": "string",
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "After"
+          },
+          "evidence": {
+            "items": {
+              "type": "string",
+              "maxLength": 20000,
+              "minLength": 1
+            },
+            "type": "array",
+            "title": "Evidence"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "before",
+          "after",
+          "evidence"
+        ],
+        "title": "SavedComparison"
+      },
+      "SavedEvent": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "occurredAt": {
+            "type": "string",
+            "title": "Occurredat"
+          },
+          "activity": {
+            "$ref": "#/components/schemas/SavedActivity"
+          },
+          "type": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Type"
+          },
+          "axis": {
+            "type": "string",
+            "enum": [
+              "planning",
+              "technology",
+              "data",
+              "collaboration",
+              "other"
+            ],
+            "title": "Axis"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/Evidence"
+            },
+            "type": "array",
+            "title": "Evidence"
+          },
+          "comparison": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SavedComparison"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "occurredAt",
+          "activity",
+          "type",
+          "axis",
+          "title",
+          "description",
+          "evidence"
+        ],
+        "title": "SavedEvent"
+      },
+      "SavedJourney": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "const": "api",
+            "title": "Source"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/Summary"
+          },
+          "badges": {
+            "items": {
+              "$ref": "#/components/schemas/SavedBadge"
+            },
+            "type": "array",
+            "title": "Badges"
+          },
+          "typeOptions": {
+            "items": {
+              "$ref": "#/components/schemas/Option"
+            },
+            "type": "array",
+            "title": "Typeoptions"
+          },
+          "axisOptions": {
+            "items": {
+              "$ref": "#/components/schemas/Option"
+            },
+            "type": "array",
+            "title": "Axisoptions"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/SavedEvent"
+            },
+            "type": "array",
+            "title": "Events"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source",
+          "summary",
+          "badges",
+          "typeOptions",
+          "axisOptions",
+          "events"
+        ],
+        "title": "SavedJourney"
+      },
+      "Summary": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Description"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/Evidence"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Evidence"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "title",
+          "description",
+          "evidence"
+        ],
+        "title": "Summary"
       },
       "TextAnalysis": {
         "properties": {

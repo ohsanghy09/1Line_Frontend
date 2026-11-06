@@ -26,7 +26,7 @@ class ChatTests(unittest.TestCase):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.path = Path(self.directory.name) / "test.db"
-        module = Path(__file__).resolve().parents[2] / "api-server/src/database.js"
+        module = Path(__file__).resolve().parents[2] / "api-server/test-support/database.js"
         subprocess.run(["node", "--input-type=module", "-e",
                         f"import {{openDatabase}} from {json.dumps(module.as_uri())}; openDatabase(process.argv[1]).close();",
                         str(self.path)], check=True, capture_output=True)
