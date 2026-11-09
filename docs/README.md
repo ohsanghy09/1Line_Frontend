@@ -5,6 +5,7 @@
 | 구분 | 문서 안내 | 내용 |
 | --- | --- | --- |
 | 프론트엔드 | [frontend](frontend/README.md) | 개발 규칙, 화면별 구현·API 사용·변경 기록 |
+| 프론트 연동 정비 | [frontend-integration](frontend-integration/README.md) | handoff 기준 API 대조, 독립 Swagger, 로컬 의존성, 변경 협의·검증 기록 |
 | 백엔드 | [backend](backend/README.md) | API·DB·ERD·저장 및 삭제 계약, 로컬 서버 실행 안내 |
 | AI | [ai](ai/README.md) | 분석 API·검증·프롬프트 정의, 로컬 서버 구현·실행 기록 |
 | 공통 | [common](common/README.md) | 공통 계약, 서버 간 연동, 작업 계획, 서비스 정의와 참고 자료 |
@@ -14,6 +15,11 @@
 ```text
 docs/
   README.md
+  frontend-integration/
+    README.md
+    API_계약_대조표.md
+    로컬_서버_의존성_점검.md
+    변경_협의_및_검증_기록.md
   frontend/
     README.md
     개발_규칙.md
@@ -44,6 +50,7 @@ docs/
 
 ## 작업을 이어갈 때
 
+- [프론트 API 연동 정비](frontend-integration/README.md): 이번 작업의 상세 조사·사용자 확인·검증 기록 진입점.
 - [프론트 독립 및 원격 서버 연동 정비](common/integration/프론트엔드_독립_및_원격_서버_연동_정비.md): 현재 작업 계획. 실제 원격 서버 연동 검증은 별도 후속 작업이다.
 - [인수인계 안내](common/handoff/README.md): 각 파트의 읽기 순서와 문서 전달 범위.
 - [기존 개발 현황과 문서 이력](common/개발_현황과_문서_이력.md): 정리 이전 안내와 과거 검증 기록.
