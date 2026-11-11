@@ -4,6 +4,14 @@
 
 ## 현재 상태 — 서버 독립화·프론트 정리·환경설정 완료
 
+### lint·작은 중복 코드 정리 — 2026-11-11
+
+- useHomeRecent의 요청 컨트롤러·번호를 ref에 보관하고 최신 번호·취소 신호로 성공/실패 응답을 걸러낸다. Effect 해제 때 요청을 취소하고 이벤트 구독을 해제한다.
+- Home의 resumeJob을 복원 Effect 앞에 배치하고 중복된 화면 해제 cleanup을 하나로 통합했다. 초기 복원 대기 상태는 기존 state 초기값을 사용하고 수동 재조회 버튼에서 대기·오류 상태를 갱신한다. 전송별 작업 접수 여부는 해당 요청의 상태 객체에서 관리한다. 최신 요청 판별·취소·확정 실패·입력 복원 조건은 유지한다.
+- ConnectedChatReplyCard의 분류 수정 인자를 기존 활동 선택 타입으로 좁혀 반복 조건을 제거했다. 저장 시 같은 활동을 some·find로 두 번 찾던 코드는 한 번의 find로 정리했다. 신규 활동 저장·기존 활동 연결·저장 전후 분류 수정의 API 계약은 유지한다.
+- tests/home-recent-request.test.mjs에 실제 hook의 Effect 로직을 분리 실행하는 검사 3개를 추가했다. 연속 갱신 시 이전 요청 취소와 늦은 성공/실패 무시, 해제 뒤 응답·이벤트 차단과 setup→cleanup→setup, 오류 후 회복을 확인했다. React 훅·서비스 경계를 대역으로 주입하는 단위 검사이며 실제 React 렌더링·브라우저 StrictMode 검증은 아니다.
+- 검증: npm test 42개·세션 복원 통과, npm run build의 Swagger·TypeScript·Vite 통과. lint 오류·경고 모두 0개. 아래 경고 3개와 이전 검사 개수는 당시 이력이다. 실제 브라우저·원격 연동 검증은 원격 서버 준비 후 진행한다.
+
 ### 후속 환경설정 정비 — 2026-11-11
 
 - package.json과 lockfile의 engines에 Node 24.x·npm 11.x를 명시했다. .nvmrc에는 검증한 Node 24.14.0, packageManager에는 npm@11.21.1을 기록했다. 패키지 버전과 의존성 목록은 변경하지 않았다.

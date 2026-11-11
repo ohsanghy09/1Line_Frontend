@@ -107,12 +107,12 @@ export default function ConnectedChatReplyCard({ reply: initial, now, onChange }
             if (!alive.current) return
             // 사용자가 선택한 ID 또는 분석의 기존 활동 ID만 사용하고 이름으로 ID를 추측하지 않는다.
             const targetId = activityId || (proposal.match === 'existing' || !proposal.match ? proposal.id : '')
-            if (!targetId || !list.some(item => item.id === targetId)) {
+            const target = list.find(item => item.id === targetId)
+            if (!targetId || !target) {
                 setIsChoosingActivity(true)
                 return
             }
             // 원본 파일 연결과 분류는 기존 저장 서비스가 유지하며 새 기록만 추가한다.
-            const target = list.find(item => item.id === targetId)!
             await saveTo({ activityId: targetId, ...(!target.category && proposal.category ? {
                 activityUpdates: { category: proposal.category, status: null, role: null, period: null, summary: null },
             } : {}) }, reply.analysis.materialType)
@@ -148,11 +148,10 @@ export default function ConnectedChatReplyCard({ reply: initial, now, onChange }
         })
     }
 
-    function submit(selection: ActivitySelection, materialType: string) {
+    function submit(selection: { activityId: string }, materialType: string) {
         void perform(async () => {
             if (!reply.analysis) return
             const analysis = structuredClone(reply.analysis)
-            if (!('activityId' in selection)) throw new Error('연결할 기존 활동을 선택해 주세요.')
             const existing = activities.find(item => item.id === selection.activityId)
             if (!existing) throw new Error('연결할 활동을 다시 선택해 주세요.')
             analysis.activity = { ...existing, match: 'existing', confidence: analysis.activity.confidence }
@@ -162,15 +161,14 @@ export default function ConnectedChatReplyCard({ reply: initial, now, onChange }
                 if (analysis.groups.length) analysis.groups = [{ materialType, count: analysis.files.length }]
             }
             const next = { ...reply, analysis, content: reply.content.replaceAll(reply.analysis.activity.name, analysis.activity.name) }
-            if (recordId && 'activityId' in selection) {
+            if (recordId) {
                 const saved = await updateRecord(recordId, selection.activityId, materialType)
                 if (!alive.current) return
                 setActivityId(saved.activityId)
                 change({ ...saved.reply, recordId: saved.id, activityId: saved.activityId })
             } else {
-                const selectedId = 'activityId' in selection ? selection.activityId : ''
-                setActivityId(selectedId)
-                change({ ...next, activityId: selectedId })
+                setActivityId(selection.activityId)
+                change({ ...next, activityId: selection.activityId })
             }
             setReviewMode(null)
             setNotice(recordId ? '저장된 기록을 수정했어요.' : isNoChange ? '활동과 자료 유형을 수정했어요. 아카이브 저장 버튼을 누르면 저장돼요.' : '활동과 자료 유형을 수정했어요. 기록 버튼을 누르면 저장돼요.')
