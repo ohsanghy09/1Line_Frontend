@@ -70,9 +70,22 @@ API 명세는 같은 프론트 주소의 `/swagger/`로 직접 접속합니다. 
 | 명령어 | 설명 |
 | --- | --- |
 | `npm run dev` | 개발 서버 실행 |
+| `npm test` | 서버·DB·실제 AI 없이 프론트 계약·필터·세션·명세 검사 |
 | `npm run lint` | 코드 검사 |
 | `npm run build` | TypeScript 검사 및 프로덕션 빌드 |
 | `npm run preview` | 빌드 결과 로컬 확인 |
+
+프론트 검사는 Node.js 24 이상과 루트 의존성만 사용합니다. 테스트 데이터는
+`tests/fixtures/`에 있으며 실제 서비스 응답을 대체하지 않습니다.
+`node scripts/check-chat-api.mjs`로 채팅 계약 검사만 실행할 수도 있습니다.
+
+실제 API 기능을 사용하려면 백엔드·AI 서버가 필요합니다. 원격 연결 시
+`VITE_API_BASE_URL=https://백엔드주소/api`와 `VITE_AI_API_BASE_URL=https://AI주소/api`를
+빌드 전에 설정합니다. 미설정 시 `/api`·`/ai-api`를 사용하며 개발 환경에서는
+Vite 로컬 프록시로 연결합니다. 정적 호스팅에서는 별도 API 라우팅 또는 원격 Base가 필요합니다.
+
+`scripts/check-live-ai.mjs`는 양 개발 서버·Python 가상환경·실제 모델 설정이 필요한
+수동 통합 검사입니다. 실제 모델 호출 비용이 발생할 수 있어 `npm test`에 포함하지 않습니다.
 
 ## 브랜치 전략
 

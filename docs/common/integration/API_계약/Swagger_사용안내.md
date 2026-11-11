@@ -15,6 +15,10 @@ npm.cmd run dev
 
 ## 빌드·Vercel 배포
 
+사용자가 확인한 기존 배포 주소는 `https://1-line-frontend.vercel.app/`이며 Swagger 경로는
+`https://1-line-frontend.vercel.app/swagger/`다. 2026-11-11 현재 최신 변경의 재배포는
+사용자가 직접 진행할 작업이다. 배포 완료·HTTP 확인으로 기록하지 않는다.
+
 ```powershell
 npm.cmd run build
 npm.cmd run preview
