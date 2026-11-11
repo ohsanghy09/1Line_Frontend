@@ -1,4 +1,4 @@
-# Growth Archive
+# Growth AI
 
 파일, 링크, 텍스트로 경험을 기록하고, AI가 활동별로 정리해
 변화와 성장 과정을 보여주는 개인 성장 아카이브 서비스입니다.
@@ -44,8 +44,8 @@
 ## 시작하기
 
 Node.js 24 계열과 npm 11 계열을 사용합니다. `package.json`의 engines에 이 범위를 명시했고,
-`.nvmrc`는 검증한 Node.js 24.14.0, packageManager는 npm 11.21.1을 기록합니다.
-버전 관리 도구의 `.nvmrc` 지원 여부에 따라 Node 버전을 선택하고 `node --version`·`npm --version`으로 확인합니다.
+packageManager는 검증한 npm 11.21.1을 기록합니다. 검증한 Node.js 버전은 24.14.0이며,
+`node --version`·`npm --version`으로 실행 환경을 확인합니다.
 프로젝트 루트에서 lockfile 기준으로 의존성을 설치하고 프론트 개발 서버를 실행합니다.
 
 ```bash
@@ -129,6 +129,11 @@ scripts/   Swagger 생성과 개별 검사 진입점
 docs/      구현 기록·백엔드/AI handoff·독립 OpenAPI
 public/    정적 자산과 생성된 Swagger
 ```
+
+원본 파비콘 PNG는 `public/assets/Growth_AI_favicon.png`에 보존합니다.
+실제 파비콘은 PNG를 내장하고 원형으로 마스킹한 `public/assets/Growth_AI_favicon_round.svg`이며
+`/assets/Growth_AI_favicon_round.svg`로 제공합니다. 사이드바 설명 문구는 ‘나의 경험을 성장으로’입니다.
+탭 제목·화면 브랜드·문서 제목은 Growth AI이며, npm 패키지 이름은 소문자 형식인 `growth-ai`를 사용합니다.
 
 백엔드·AI 개발 서버 소스와 로컬 서버 전용 통합 검사는 이 저장소에서 제거했습니다.
 API 계약·프롬프트 인계 문서는 `docs/`에 유지합니다. `public/swagger/`와 `dist/`는 생성물이며 Git에서 제외합니다.

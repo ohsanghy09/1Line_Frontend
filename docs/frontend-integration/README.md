@@ -4,6 +4,20 @@
 
 ## 현재 상태 — 서버 독립화·프론트 정리·환경설정 완료
 
+### 원형 파비콘·브랜드 설명·링크 힌트 정리 — 2026-11-11
+
+- 원본 PNG는 public/assets/Growth_AI_favicon.png에 보존하고, 원본을 그대로 내장한 Growth_AI_favicon_round.svg를 추가했다. 원형 clipPath로 바깥 영역을 투명하게 표시한다. 앱·Swagger·인계 HTML의 파비콘 경로를 SVG로 연결했다.
+- 사용자 선택에 따라 사이드바의 Personal AI Knowledge를 ‘나의 경험을 성장으로’로 변경했다.
+- 링크 추가 모달 안내는 사용자 후속 요청에 따라 특정 사이트를 한정하지 않는 ‘기록할 링크를 붙여넣어 주세요.’로 수정하고 입력 예시는 완전한 URL인 ‘https://www.wikipedia.org’로 지정했다. URL 검증·전송·입력 보존과 스타일은 유지한다. 원격 서버의 사이트별 처리 범위는 이번 문구 수정에서 변경하지 않았다.
+- 원형 SVG가 원본 PNG 바이트를 그대로 포함하는지 확인했다. 이번 변경 후 Swagger·TypeScript·Vite 빌드와 lint 오류·경고 0개를 확인했다. 기존 브랜드 적용 시 통과한 검사 42개·세션 복원 기록과 구분하며 문구·정적 자산 변경으로 전체 검사는 반복하지 않았다. 실제 브라우저 표시·배포는 미확인이다.
+
+### Growth AI 이름·파비콘 적용 — 2026-11-11
+
+- 사용자 지정 프로젝트 이름은 Growth AI다. 기존에 사용자가 변경한 index.html 탭 제목은 유지하고 application-name·사이드바 브랜드·루트 README·Swagger/인계 페이지 제목·독립 OpenAPI의 info.title을 맞췄다. npm 이름은 소문자 형식 growth-ai로 package.json·lockfile에 함께 반영했다. API 경로·스키마와 과거 handoff 원문은 변경하지 않았다.
+- 루트 assets/Growth_AI_favicon.png를 public/assets/Growth_AI_favicon.png로 옮겼다. 파비콘은 변환 없이 원본 파일명·내용으로 제공하는 정적 자산이므로 public/assets에 두고 /assets/Growth_AI_favicon.png로 연결했다. 앱·Swagger·인계 HTML에서 같은 아이콘을 사용한다.
+- 사용자 작업 트리의 .nvmrc 삭제를 유지하고 루트 README의 해당 파일 안내를 정리했다. Node 24.x·npm 11.x engines와 검증 버전 기록은 유지한다.
+- 검증: npm test 42개·세션 복원, npm run build 통과, lint 오류·경고 0개. 로컬 preview에서 앱·/archive·Swagger·인계 페이지 제목과 파비콘 링크, PNG HTTP 200·image/png·응답 바이트와 빌드 복사본의 원본 일치를 확인했다. 실제 브라우저 탭 표시·배포는 미확인이다.
+
 ### lint·작은 중복 코드 정리 — 2026-11-11
 
 - useHomeRecent의 요청 컨트롤러·번호를 ref에 보관하고 최신 번호·취소 신호로 성공/실패 응답을 걸러낸다. Effect 해제 때 요청을 취소하고 이벤트 구독을 해제한다.

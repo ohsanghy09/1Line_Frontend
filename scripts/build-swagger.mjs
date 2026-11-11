@@ -30,7 +30,7 @@ async function buildHandoffPages(target) {
     const index = path.posix.relative(path.posix.dirname(source), 'common/handoff/README.html')
     const html = `<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escapeHtml(title)} · 1Line handoff</title>
+<title>${escapeHtml(title)} · Growth AI handoff</title><link rel="icon" type="image/svg+xml" href="/assets/Growth_AI_favicon_round.svg">
 <style>body{max-width:1100px;margin:32px auto;padding:0 20px;font-family:system-ui,sans-serif;line-height:1.7;color:#172033}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px}a{color:#174fa3}h1{font-size:24px}</style></head>
 <body><nav><a href="/swagger/">API 명세</a> · <a href="${escapeHtml(index)}">handoff 문서 목록</a></nav>
 <h1>${escapeHtml(title)}</h1><pre>${content}</pre></body></html>
@@ -55,7 +55,7 @@ export async function buildSwagger(outputDirectory = fileURLToPath(new URL('../p
   }
   const html = `<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>1Line API 명세</title><link rel="stylesheet" href="./swagger-ui.css"></head>
+<title>Growth AI API 명세</title><link rel="icon" type="image/svg+xml" href="/assets/Growth_AI_favicon_round.svg"><link rel="stylesheet" href="./swagger-ui.css"></head>
 <body><div id="swagger-ui"></div><script src="./swagger-ui-bundle.js"></script>
 <script src="./swagger-ui-standalone-preset.js"></script><script src="./swagger-init.js"></script></body></html>
 `

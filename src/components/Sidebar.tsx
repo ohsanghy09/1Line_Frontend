@@ -36,8 +36,8 @@ function Sidebar() {
                             <Sparkles className="w-5 h-5" aria-hidden="true" />
                         </div>
                         <div>
-                            <h1 className="font-bold text-base tracking-tight text-brand-text leading-tight">Growth Archive</h1>
-                            <p className="text-[11px] text-brand-muted font-medium">Personal AI Knowledge</p>
+                            <h1 className="font-bold text-base tracking-tight text-brand-text leading-tight">Growth AI</h1>
+                            <p className="text-[11px] text-brand-muted font-medium">나의 경험을 성장으로</p>
                         </div>
                     </NavLink>
                 </div>
