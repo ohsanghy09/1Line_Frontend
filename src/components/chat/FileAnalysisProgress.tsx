@@ -1,7 +1,7 @@
 import { Check, Loader, Sparkles } from 'lucide-react'
 import type { ChatProgress } from '../../types/chat'
 
-// 원본 시연의 진행 카드. 완료된 실제 작업인지는 서비스를 제공하는 쪽에서 결정한다.
+// AI 서버가 제공한 진행 단계와 완료 상태를 표시한다.
 function FileAnalysisProgress({ progress }: { progress: ChatProgress }) {
     return (
         <div role="status" className="flex gap-3">

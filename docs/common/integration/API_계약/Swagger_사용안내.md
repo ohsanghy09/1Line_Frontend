@@ -61,7 +61,7 @@ OpenAPI 3.1의 required·nullable·oneOf·조건부 스키마로 필수 필드�
 - [백엔드 명세](../../../frontend-integration/openapi/backend.openapi.json)와 [AI 명세](../../../frontend-integration/openapi/ai.openapi.json)에 handoff 계약을 반영
 - [명세 검사](../../../../tests/openapi.test.mjs)는 공개 API 목록·내부 인증·경로 매개변수·스키마 참조·필수 제약을 확인
 - [Vite 설정](../../../../vite.config.ts): 개발·preview의 `/swagger/` 직접 접속 처리
-- 기존 3002 [독립 문서 서버](../../../../api-server/docs/server.js)는 선택적으로 유지하며 프론트 배포에는 사용하지 않는다.
+- 기존 3002 독립 문서 서버는 개발 서버 폴더와 함께 제거했다. 현재 `/swagger/` 정적 생성 경로만 사용한다.
 - 실제 달력 날짜·기간 순서·원문 근거·실제 ID 참조·스냅샷·원자성은 handoff의 의미 검증 규칙도 함께 확인한다. ChatHealth.network의 세부 필드는 handoff에서 정의하지 않아 설명을 남긴 객체로 표현했다.
 - 로컬 개발·preview의 문서 HTML·명세·자산 HTTP 제공과 빌드 산출물을 확인한다. 실제 Vercel·브라우저 렌더링 검증과 구분한다.
 

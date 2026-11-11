@@ -59,4 +59,4 @@ docs/
 
 새 문서는 담당 프로젝트 폴더에 추가하고, 여러 프로젝트가 공유하는 계약·연동 계획·참고 자료는 `common/`에 둔다. 각 프로젝트의 README에서 주요 문서로 연결하며, 링크는 해당 문서 위치를 기준으로 작성한다.
 
-저장소 루트 README는 프로젝트 진입점으로 유지한다. AI의 `ai-api-server/app/prompts/*.md`는 실행 시 읽는 프롬프트이며, `api-server/docs/`와 `public/swagger/`는 Swagger 생성 코드·명세 리소스 및 생성물이다. 이 실행 리소스는 현재 위치를 유지하고 관련 설명 문서만 이곳에서 관리한다.
+저장소 루트 README는 프로젝트 진입점으로 유지한다. 2026-11-11 백엔드·AI 개발 서버 소스와 로컬 서버 전용 검사 스크립트를 프론트 저장소에서 제거했다. backend·AI 문서의 과거 개발 서버 실행 기록과 소스 경로는 이전 구현 이력이며 현재 실행 안내가 아니다. handoff 계약·프롬프트 인계 문서는 유지한다. Swagger는 `docs/frontend-integration/openapi/`의 독립 명세와 handoff 문서를 읽어 `public/swagger/`에 생성한다.

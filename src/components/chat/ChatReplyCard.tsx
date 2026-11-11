@@ -8,7 +8,7 @@ import RecordButtons from './RecordButtons'
 import type { RecordActions } from './RecordButtons'
 import type { ReactNode } from 'react'
 
-// API 또는 목데이터로 받은 값을 카드로 표시하는 컴포넌트
+// 서비스 응답과 복원한 카드 데이터를 표시한다.
 function ChatReplyCard({ reply, now, actions, activityActions }: { reply: ChatReply & { createdAt: number }; now: number; actions?: RecordActions; activityActions?: ReactNode }) {
     const analysis = reply.analysis
     const isBatchAnalysis = reply.kind === 'batch-analysis'

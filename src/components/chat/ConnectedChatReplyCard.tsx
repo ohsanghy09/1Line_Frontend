@@ -7,7 +7,7 @@ import ActivityReviewModal from './modals/ActivityReviewModal'
 import ActivityAnalysisStatus from '../ActivityAnalysisStatus'
 import { isReply, request } from '../../services/chat'
 
-// 카드별 수정본·저장 ID를 관리한다. 홈과 독립 미리보기는 같은 저장 흐름을 사용한다.
+// 홈의 카드별 수정본·저장 ID와 연결 활동을 관리한다.
 export default function ConnectedChatReplyCard({ reply: initial, now, onChange }: {
     reply: ChatReply & { createdAt: number }; now: number; onChange?: (reply: ChatReply) => void
 }) {
@@ -202,6 +202,6 @@ export default function ConnectedChatReplyCard({ reply: initial, now, onChange }
         {recordId && activityId && <ActivityAnalysisStatus key={activityId} activityId={activityId} />}
         {error && !reviewMode && <p role="alert" className="text-xs text-red-600">{error}</p>}
         {/* 모달은 기존 활동·자료 유형 수정에만 사용한다. 신규 추가는 카드에서 판단한다. */}
-        {reviewMode && reply.analysis && <ActivityReviewModal activities={activities} activityId={activityId} proposal={reply.analysis.activity} materialType={reply.analysis.materialType} classificationOnly saved={Boolean(recordId)} saving={false} busy={busy} error={error} onClose={() => { setReviewMode(null); setError('') }} onSubmit={submit} />}
+        {reviewMode && reply.analysis && <ActivityReviewModal activities={activities} activityId={activityId} proposal={reply.analysis.activity} materialType={reply.analysis.materialType} saved={Boolean(recordId)} busy={busy} error={error} onClose={() => { setReviewMode(null); setError('') }} onSubmit={submit} />}
     </div>
 }

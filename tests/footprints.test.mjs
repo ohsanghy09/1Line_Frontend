@@ -4,6 +4,7 @@ import { loadFrontend, expectRequests } from './support/frontend.mjs'
 import { activity } from './fixtures/archive.mjs'
 
 const service = await loadFrontend('src/services/footprints.ts')
+const defaultFilters = { search: '', category: 'all', status: 'all', sort: 'recent' }
 
 test('검색·유형·상태·정렬을 인코딩해 전달하며 서버 결과 순서와 총계를 보존한다', async t => {
     const filters = { search: ' AI 기획 & 자료/이름 ', category: '해커톤', status: '진행 중', sort: 'materials' }
@@ -19,7 +20,7 @@ test('검색·유형·상태·정렬을 인코딩해 전달하며 서버 결과 
 
 test('기본 목록 요청과 빈 결과를 예시 자료로 채우지 않는다', async t => {
     expectRequests(t, [{ path: '/api/archive/activities?q=&category=all&status=all&sort=recent', data: { items: [], total: 0, categories: [] } }])
-    assert.deepEqual(await service.getFootprintActivities(), [])
+    assert.deepEqual(await service.searchFootprintActivities(defaultFilters), { items: [], total: 0, categories: [] })
 })
 
 test('잘못된 목록·총계·유형 응답을 거절한다', async t => {
@@ -28,7 +29,7 @@ test('잘못된 목록·총계·유형 응답을 거절한다', async t => {
         { ...valid, categories: ['all'] }, { ...valid, categories: ['중복', '중복'] }, { ...valid, categories: [' '] }]
     const path = '/api/archive/activities?q=&category=all&status=all&sort=recent'
     expectRequests(t, invalid.map(data => ({ path, data })))
-    for (const _data of invalid) await assert.rejects(service.getFootprintActivities(), /응답 형식/)
+    for (const _data of invalid) await assert.rejects(service.searchFootprintActivities(defaultFilters), /응답 형식/)
 })
 
 test('검색 중 취소를 요청 signal에 전달한다', async t => {

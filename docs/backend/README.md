@@ -2,6 +2,8 @@
 
 [전체 문서](../README.md) · [공통 인수인계](../common/handoff/README.md)
 
+2026-11-11 프론트 독립화 후 api-server 소스·검사는 이 저장소에서 제거했다. 아래 handoff 계약은 유지하며 과거 로컬 실행 안내와 소스 링크는 이전 구현 이력이다. 현재 상태·보존 경로는 [프론트 연동 정비](../frontend-integration/README.md)를 따른다.
+
 - [구현 인수인계](handoff/README.md): 백엔드 담당자의 읽기 순서와 책임.
 - [API 정의서](handoff/API_정의서.md)
 - [데이터베이스 정의서](handoff/데이터베이스_정의서.md) · [ERD](handoff/ERD.md)

@@ -38,7 +38,7 @@ export type FootprintFile = {
 export type FootprintFolder = {
     id: string
     name: string
-    // DB 조회에서는 실제 폴더 내 자료 수다. 독립 목 예시는 표시용 총계일 수 있다.
+    // 서버에서 조회한 실제 폴더 내 자료 수다.
     materialsCount: number
     files: FootprintFile[]
 }
