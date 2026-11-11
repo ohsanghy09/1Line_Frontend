@@ -73,7 +73,7 @@ FastAPI의 공개 경로는 `ai-api-server/app/chat.py`에 있고 `main.py`에�
 | AI-01 | checkConnection 선택, 기본 false. 200 ready/unavailable, label, analysisProvider, 선택 network | 홈 상태 배지는 query 없이 조회해 status·label 사용, 오류 상태 표시 | 기본 호출은 설정·DB 스키마 확인. network는 명시 요청에서만 추가. **일치** |
 | AI-02 | multipart message/files/ID와 Prefer. 기본 202, 파일 없는 sync 200, JobResponse. 파일 10개·개별 10MiB·합계 25MiB 등 | 브라우저 FormData, 파일이면 async 30초·텍스트면 sync 150초. 응답 실패 envelope를 처리. 사전 검사는 글자 수·개수·개별 크기 중심 | 서버는 파일 합계·빈 파일·확장자도 확인하고 완료/실패 envelope 생성. **현재 호출 일치**. 일부 multipart 파싱 오류는 도메인 오류 형식 대신 프레임워크 응답이 될 수 있음. 분리 서버는 완료 응답 전 정본 게시 필요 |
 | AI-03 | JSON url, 선택 conversationId/requestId 문자열. 202 JobResponse, 400/422/409/503 | URL 검증·trim, UUID 생성, JSON 전송. 비동기 결과 처리 | 추가 키를 거절하고 URL 검증 후 접수. 개발 LinkRequest는 ID에 명시적 null도 허용하며 공백 문자열을 trim해서 거절하지 않는다. **현재 호출 일치**, 입력 경계 **차이**. FastAPI 422 기본 detail은 프론트 일반 오류로 표시 |
-| AI-04 | ai- 작업 ID. 200 JobResponse, 404 job_missing | ID 인코딩·응답 ID 대조, 400ms 순차 조회·전체 120초. failed는 확정 실패 처리. 과거 non-ai 작업은 백엔드 조회 | AI는 ai- ID를 발급하고 세 상태의 envelope 반환. **공개 AI 경로 일치**. 과거 백엔드 작업 재조회는 개발 백엔드가 410을 반환하므로 **복원 차이 C-03** |
+| AI-04 | ai- 작업 ID. 200 JobResponse, 404 job_missing | AI 서버에 ID 인코딩·응답 ID 대조, 400ms 순차 조회·전체 120초. failed는 확정 실패 처리. 복원할 작업 ID에 ai-가 없으면 요청 전에 복원 불가 안내와 대기 해제 | AI는 ai- ID를 발급하고 세 상태의 envelope 반환. **공개 AI 경로 일치**. C-03 처리 완료 |
 
 ### JSON 예시와 필드 정의
 
@@ -95,7 +95,7 @@ FastAPI의 공개 경로는 `ai-api-server/app/chat.py`에 있고 `main.py`에�
 | --- | --- | --- | --- |
 | C-01 | handoff는 analysisId를 요구한다. 프론트가 ID 없는 카드에서 직접 reply를 보냈던 분기를 제거했다. 개발 백엔드는 직접 reply 저장을 허용한다 | 이전 카드의 표시는 유지한다. 유효한 ID가 없는 미저장 카드에서 저장을 시도하면 서버에 POST하지 않고 원본을 다시 분석하라는 안내를 표시한다 | 프론트 저장 요청 수정. 개발 서버 확장 유지 |
 | C-02 | 현재 카드 PATCH는 activityId·materialType만 전송한다. 서비스의 선택 activityUpdates와 개발 백엔드의 summary/content/changes 편집 확장은 현재 카드 호출 밖에 있다 | 현재 UI의 계약 충돌은 확인되지 않았다. 저장 POST에서 기존 활동의 비어 있는 category를 보완하는 activityUpdates는 별도 계약으로 보존한다 | 미수정 |
-| C-03 | 프론트는 non-ai 작업 ID를 복원해 백엔드에 조회하지만 개발 백엔드의 해당 경로는 410이고 handoff 공개 목록에도 없다 | 과거 진행 작업을 이 경로로 복구할 수 없다. 이전 세션의 보존·안내 방식을 협의하고 현재 ai- 작업의 재조회 동작을 유지한다 | 미수정 |
+| C-03 | 백엔드로 진행 조회하던 분기를 제거하고 AI 조회로 통일했다. ai- 없는 복원 작업은 서버 요청 전에 확정 실패로 처리한다 | 복원 불가 안내 후 대기 작업을 해제해 새 전송을 허용한다. 기존 말풍선·카드와 정상 AI 작업의 재조회는 유지한다 | 사용자 확인 후 수정, 서비스 검사 3개·세션 검사·TypeScript 검사 통과 |
 
 분리 환경에서는 완료 작업을 백엔드에 게시하기 전에 AI가 완료 응답을 보내면 저장·직접 수정이 404/409로 실패할 수 있다. 현재 개발 서버의 공유 DB가 대신하는 기능을 handoff의 내부 문맥·작업 게시 계약으로 구현해야 한다. 활동 종합·성장 분석·남은 파일 분석의 내부 본문도 별도로 전환해야 한다. 이 변경은 공개 프론트 요청을 그대로 유지하는 방향이다.
 
