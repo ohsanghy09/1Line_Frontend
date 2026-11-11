@@ -3,6 +3,11 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": "24.x",
+    "npm": "11.x"
+  },
+  "packageManager": "npm@11.21.1",
   "scripts": {
     "test": "node --test tests/*.test.mjs && node scripts/check-chat-session.mjs",
     "docs:build": "node scripts/build-swagger.mjs",
