@@ -1,0 +1,3295 @@
+{
+  "openapi": "3.1.0",
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "info": {
+    "title": "1Line AI handoff API",
+    "version": "2026-11-06",
+    "description": "AI 담당자가 이 문서의 API를 제공합니다. 프론트가 호출하는 공개 홈 API 4개와 백엔드가 호출하는 내부 분석 API 3개가 있습니다. AI는 입력·파일·링크를 분석하고 작업 상태와 결과를 제공합니다. 활동·확정 기록·성장 결과의 확정 저장은 백엔드가 담당합니다.\n\n**구현 기준**\n2026-11-06 handoff의 HTTP·JSON 계약입니다. 각 담당자가 언어·프레임워크·DB를 선택할 수 있습니다. 이 연동 프로파일의 공급자 표기는 analysisProvider=openai입니다. 날짜·원문 근거·실제 ID·동시 변경·원자성 규칙도 함께 구현합니다.\n\n**주소와 호출 범위**\nServers의 example.org는 설명용 주소이며 실제 주소는 각 서버 담당자가 제공합니다. 공개 Base는 /api까지 포함하고 목록의 /chat·/records 같은 경로를 이어 붙입니다. 내부 API에는 별도 서버용 Base를 사용할 수 있으며 해당 작업의 Servers에 설명용 내부 주소를 표시했습니다. 공개 API의 인증·사용자 식별은 연결 전에 협의하며 내부 API는 서버 간 Bearer 토큰과 권한 범위를 검증합니다.\n\n**홈 분석에서 기록 저장까지**\n\n1. 프론트가 AI에 요청하며 requestId와 conversationId를 보냅니다.\n2. AI가 접수 시 ai- jobId와 analysisId를 발급하고 작업·초안·원본을 백엔드에서 조회 가능하게 보관·게시합니다.\n3. AI가 분석 결과와 완료 상태를 영속 게시한 뒤 completed와 result를 반환합니다. 파일·링크는 jobId로 상태를 조회하고 파일 없는 respond-sync는 완료까지 기다립니다.\n4. 사용자가 분석 카드의 저장 버튼을 누르면 프론트가 완료 결과의 analysisId로 백엔드 POST /records를 요청합니다. 백엔드는 완료 초안과 원본을 확인해 기록을 확정하고 recordId를 반환합니다.\n5. AI 결과가 activity-update이면 프론트가 analysisId로 백엔드 POST /activities/apply-chat-update를 호출합니다. 백엔드는 활동 정보를 변경하고 완료 답변을 반환합니다.\n\n일반 답변은 말풍선으로 표시합니다. 분석 카드의 기록 확정은 사용자 저장 동작으로 실행하고, activity-update는 활동 정보 수정 흐름으로 처리합니다.\n\n**ID와 예시**\njobId는 분석 진행 조회, analysisId는 분석 초안 조회와 저장 요청, recordId는 확정 기록 조회·수정에 사용합니다. activityId는 실제 활동, fileId는 실제 원본을 가리킵니다. 예시 ID·시각·도메인·해시는 설명용 값이며 실제 데이터로 교체합니다. 상태별 null·생략·빈 배열 규칙은 각 Schema와 JSON 예시를 확인합니다. 문서 화면에서 API 실행은 비활성화되어 있습니다.\n\n**함께 읽을 원문**\n[담당 파트 API](/swagger/handoff/ai/handoff/API_정의서.html) · [역할과 요청 순서](/swagger/handoff/common/handoff/서버별_역할과_요청_흐름.html) · [공통 데이터](/swagger/handoff/common/handoff/공통_데이터_계약.html) · [서버 간 전달](/swagger/handoff/common/handoff/서버간_데이터_전달_계약.html) · [상태와 오류](/swagger/handoff/common/handoff/상태와_오류_처리.html) · [구현 환경](/swagger/handoff/common/handoff/개발환경과_구현_범위.html) · [배포와 연결](/swagger/handoff/common/integration/handoff/배포와_서버_연결.html)"
+  },
+  "servers": [
+    {
+      "url": "https://ai.example.org/api",
+      "description": "AI 공개 API 설명용 Base. 실제 공개 HTTPS 주소는 AI 담당자가 제공합니다."
+    }
+  ],
+  "security": [],
+  "tags": [
+    {
+      "name": "공개 홈 API",
+      "description": "프론트 → AI 서버. AI 담당자가 제공합니다."
+    },
+    {
+      "name": "서버 간 내부 API",
+      "description": "백엔드 서버 → AI 서버. AI 담당자가 제공하고 백엔드 담당자가 호출합니다. 서버 간 Bearer 인증을 적용합니다."
+    }
+  ],
+  "x-handoff-sources": [
+    "docs/ai/handoff/API_정의서.md",
+    "docs/ai/handoff/분석_입출력과_검증_규칙.md",
+    "docs/common/handoff/공통_데이터_계약.md",
+    "docs/common/handoff/상태와_오류_처리.md",
+    "docs/common/handoff/서버간_데이터_전달_계약.md"
+  ],
+  "paths": {
+    "/chat/health": {
+      "get": {
+        "operationId": "getChatHealth",
+        "summary": "[프론트 → AI] AI 분석 준비 상태 조회",
+        "tags": [
+          "공개 홈 API"
+        ],
+        "x-audience": "frontend",
+        "responses": {
+          "200": {
+            "description": "정상 응답",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatHealth"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "checkConnection",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "description": "AI 담당자가 제공하고 프론트가 호출합니다.\n\n기본은 키·모델·DB 스키마 상태만 확인하며 모델을 호출하지 않는다. checkConnection=true일 때 network 진단을 추가한다."
+      }
+    },
+    "/chat": {
+      "post": {
+        "operationId": "submitChat",
+        "summary": "[프론트 → AI] 텍스트·파일 분석 접수",
+        "tags": [
+          "공개 홈 API"
+        ],
+        "x-audience": "frontend",
+        "responses": {
+          "200": {
+            "description": "파일 없는 respond-sync의 완료 또는 확정 실패",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponse"
+                },
+                "examples": {
+                  "running": {
+                    "value": {
+                      "jobId": "ai-job-01",
+                      "status": "running",
+                      "analysisProvider": "openai",
+                      "pollAfterMs": 400,
+                      "progress": {
+                        "title": "입력과 기존 기록을 확인하고 있어요.",
+                        "steps": [
+                          {
+                            "label": "입력과 기존 기록을 확인하고 있어요.",
+                            "status": "working"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "completed": {
+                    "value": {
+                      "jobId": "ai-job-01",
+                      "status": "completed",
+                      "analysisProvider": "openai",
+                      "pollAfterMs": 400,
+                      "progress": {
+                        "title": "분석 결과를 준비했어요.",
+                        "steps": [
+                          {
+                            "label": "입력과 기존 기록을 확인하고 있어요.",
+                            "status": "completed"
+                          },
+                          {
+                            "label": "AI가 실제 자료를 분석하고 있어요.",
+                            "status": "completed"
+                          },
+                          {
+                            "label": "분석 결과를 보관하고 있어요.",
+                            "status": "completed"
+                          }
+                        ]
+                      },
+                      "result": {
+                        "analysisId": "draft-01",
+                        "conversationId": "conversation-01",
+                        "message": "안녕",
+                        "reply": {
+                          "id": "reply-draft-01",
+                          "role": "assistant",
+                          "kind": "general",
+                          "content": "안녕하세요! 어떤 경험을 남겨볼까요?",
+                          "analysis": null
+                        },
+                        "attachments": [],
+                        "createdAt": "2026-11-06T09:00:00.000Z"
+                      }
+                    }
+                  },
+                  "failed": {
+                    "value": {
+                      "jobId": "ai-job-01",
+                      "status": "failed",
+                      "analysisProvider": "openai",
+                      "error": "분석 응답 시간이 초과됐어요. 다시 시도해 주세요.",
+                      "code": "openai_timeout"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "정상 응답",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponse"
+                },
+                "examples": {
+                  "running": {
+                    "value": {
+                      "jobId": "ai-job-01",
+                      "status": "running",
+                      "analysisProvider": "openai",
+                      "pollAfterMs": 400,
+                      "progress": {
+                        "title": "입력과 기존 기록을 확인하고 있어요.",
+                        "steps": [
+                          {
+                            "label": "입력과 기존 기록을 확인하고 있어요.",
+                            "status": "working"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "completed": {
+                    "value": {
+                      "jobId": "ai-job-01",
+                      "status": "completed",
+                      "analysisProvider": "openai",
+                      "pollAfterMs": 400,
+                      "progress": {
+                        "title": "분석 결과를 준비했어요.",
+                        "steps": [
+                          {
+                            "label": "입력과 기존 기록을 확인하고 있어요.",
+                            "status": "completed"
+                          },
+                          {
+                            "label": "AI가 실제 자료를 분석하고 있어요.",
+                            "status": "completed"
+                          },
+                          {
+                            "label": "분석 결과를 보관하고 있어요.",
+                            "status": "completed"
+                          }
+                        ]
+                      },
+                      "result": {
+                        "analysisId": "draft-01",
+                        "conversationId": "conversation-01",
+                        "message": "안녕",
+                        "reply": {
+                          "id": "reply-draft-01",
+                          "role": "assistant",
+                          "kind": "general",
+                          "content": "안녕하세요! 어떤 경험을 남겨볼까요?",
+                          "analysis": null
+                        },
+                        "attachments": [],
+                        "createdAt": "2026-11-06T09:00:00.000Z"
+                      }
+                    }
+                  },
+                  "failed": {
+                    "value": {
+                      "jobId": "ai-job-01",
+                      "status": "failed",
+                      "analysisProvider": "openai",
+                      "error": "분석 응답 시간이 초과됐어요. 다시 시도해 주세요.",
+                      "code": "openai_timeout"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "요청 검증 실패",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "중복 또는 진행·버전 충돌",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "지원하지 않는 파일",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "입력 검증 실패. 기존 프레임워크의 detail 배열도 있을 수 있으며 프론트는 error 문자열이 없으면 일반 오류를 표시한다.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ServiceError"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "detail": {
+                          "type": "array",
+                          "items": {}
+                        }
+                      },
+                      "required": [
+                        "detail"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "설정·DB 또는 작업 예약 실패",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "Prefer",
+            "in": "header",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "respond-sync",
+                "respond-async"
+              ]
+            },
+            "description": "파일 없는 텍스트만 respond-sync로 완료 대기하며 200을 반환한다. 파일이 있으면 비동기 접수한다."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatInput"
+              }
+            }
+          }
+        },
+        "description": "AI 담당자가 제공하고 프론트가 호출합니다.\n\n비동기 접수 202. 파일 없는 동기 요청 200. 동일 requestId·동일 입력이면 기존 작업을 반환하며 다른 입력이면 409. 요청 ID가 없으면 서버 UUID. 파일은 최대 10개·각 10MiB·합계 25MiB, 빈 파일 불가. 지원 확장자는 handoff의 분석 입출력 규칙에 정의돼 있다. 진행 조회는 400ms, 전체 120초이며 동기 텍스트 HTTP 제한은 150초다."
+      }
+    },
+    "/chat/links": {
+      "post": {
+        "operationId": "submitLink",
+        "summary": "[프론트 → AI] 공개 링크 분석 접수",
+        "tags": [
+          "공개 홈 API"
+        ],
+        "x-audience": "frontend",
+        "responses": {
+          "202": {
+            "description": "정상 응답",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponse"
+                },
+                "examples": {
+                  "running": {
+                    "value": {
+                      "jobId": "ai-job-01",
+                      "status": "running",
+                      "analysisProvider": "openai",
+                      "pollAfterMs": 400,
+                      "progress": {
+                        "title": "입력과 기존 기록을 확인하고 있어요.",
+                        "steps": [
+                          {
+                            "label": "입력과 기존 기록을 확인하고 있어요.",
+                            "status": "working"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "completed": {
+                    "value": {
+                      "jobId": "ai-job-01",
+                      "status": "completed",
+                      "analysisProvider": "openai",
+                      "pollAfterMs": 400,
+                      "progress": {
+                        "title": "분석 결과를 준비했어요.",
+                        "steps": [
+                          {
+                            "label": "입력과 기존 기록을 확인하고 있어요.",
+                            "status": "completed"
+                          },
+                          {
+                            "label": "AI가 실제 자료를 분석하고 있어요.",
+                            "status": "completed"
+                          },
+                          {
+                            "label": "분석 결과를 보관하고 있어요.",
+                            "status": "completed"
+                          }
+                        ]
+                      },
+                      "result": {
+                        "analysisId": "draft-01",
+                        "conversationId": "conversation-01",
+                        "message": "안녕",
+                        "reply": {
+                          "id": "reply-draft-01",
+                          "role": "assistant",
+                          "kind": "general",
+                          "content": "안녕하세요! 어떤 경험을 남겨볼까요?",
+                          "analysis": null
+                        },
+                        "attachments": [],
+                        "createdAt": "2026-11-06T09:00:00.000Z"
+                      }
+                    }
+                  },
+                  "failed": {
+                    "value": {
+                      "jobId": "ai-job-01",
+                      "status": "failed",
+                      "analysisProvider": "openai",
+                      "error": "분석 응답 시간이 초과됐어요. 다시 시도해 주세요.",
+                      "code": "openai_timeout"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "요청 검증 실패",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "중복 또는 진행·버전 충돌",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "입력 검증 실패. 기존 프레임워크의 detail 배열도 있을 수 있으며 프론트는 error 문자열이 없으면 일반 오류를 표시한다.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ServiceError"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "detail": {
+                          "type": "array",
+                          "items": {}
+                        }
+                      },
+                      "required": [
+                        "detail"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "설정·DB 또는 작업 예약 실패",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkInput"
+              },
+              "example": {
+                "url": "https://example.org/public-note",
+                "conversationId": "conversation-01",
+                "requestId": "request-link-01"
+              }
+            }
+          }
+        },
+        "description": "AI 담당자가 제공하고 프론트가 호출합니다.\n\nHTTP(S) URL을 trim하고 공개 IP·리다이렉트·포트·본문 크기·MIME을 검증한다. URL 기본/80/443 포트, DNS 5초·HTTP 15초, 대상 요청 최대 네 번, 본문 2MiB·추출 텍스트 100000자 이하. 작업 접수 후 실패는 failed envelope로 전달할 수 있다."
+      }
+    },
+    "/chat/jobs/{jobId}": {
+      "get": {
+        "operationId": "getChatJob",
+        "summary": "[프론트 → AI] AI 분석 진행·결과 재조회",
+        "tags": [
+          "공개 홈 API"
+        ],
+        "x-audience": "frontend",
+        "responses": {
+          "200": {
+            "description": "정상 응답",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponse"
+                },
+                "examples": {
+                  "running": {
+                    "value": {
+                      "jobId": "ai-job-01",
+                      "status": "running",
+                      "analysisProvider": "openai",
+                      "pollAfterMs": 400,
+                      "progress": {
+                        "title": "입력과 기존 기록을 확인하고 있어요.",
+                        "steps": [
+                          {
+                            "label": "입력과 기존 기록을 확인하고 있어요.",
+                            "status": "working"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "completed": {
+                    "value": {
+                      "jobId": "ai-job-01",
+                      "status": "completed",
+                      "analysisProvider": "openai",
+                      "pollAfterMs": 400,
+                      "progress": {
+                        "title": "분석 결과를 준비했어요.",
+                        "steps": [
+                          {
+                            "label": "입력과 기존 기록을 확인하고 있어요.",
+                            "status": "completed"
+                          },
+                          {
+                            "label": "AI가 실제 자료를 분석하고 있어요.",
+                            "status": "completed"
+                          },
+                          {
+                            "label": "분석 결과를 보관하고 있어요.",
+                            "status": "completed"
+                          }
+                        ]
+                      },
+                      "result": {
+                        "analysisId": "draft-01",
+                        "conversationId": "conversation-01",
+                        "message": "안녕",
+                        "reply": {
+                          "id": "reply-draft-01",
+                          "role": "assistant",
+                          "kind": "general",
+                          "content": "안녕하세요! 어떤 경험을 남겨볼까요?",
+                          "analysis": null
+                        },
+                        "attachments": [],
+                        "createdAt": "2026-11-06T09:00:00.000Z"
+                      }
+                    }
+                  },
+                  "failed": {
+                    "value": {
+                      "jobId": "ai-job-01",
+                      "status": "failed",
+                      "analysisProvider": "openai",
+                      "error": "분석 응답 시간이 초과됐어요. 다시 시도해 주세요.",
+                      "code": "openai_timeout"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "대상 없음",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                },
+                "example": {
+                  "error": "분석 작업을 찾을 수 없어요.",
+                  "code": "job_missing"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/JobId"
+            },
+            "description": "경로에 URL 인코딩한다."
+          }
+        ],
+        "description": "AI 담당자가 제공하고 프론트가 호출합니다.\n\n저장된 작업을 조회한다. 없는 작업은 404와 code=job_missing. queued는 running으로 표시한다. 재시작 시 미완료 작업은 failed/server_restarted. 같은 reply 또는 analysisId의 완료 카드는 프론트에서 중복 추가하지 않는다."
+      }
+    },
+    "/analyze/activities/{activityId}": {
+      "post": {
+        "operationId": "analyzeInternalActivity",
+        "summary": "[백엔드 → AI] 활동 전체 정보 분석 요청",
+        "tags": [
+          "서버 간 내부 API"
+        ],
+        "x-audience": "server",
+        "responses": {
+          "200": {
+            "description": "정상 응답",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityAnalysisResult"
+                },
+                "example": {
+                  "sourceFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "recordCount": 1,
+                  "model": "configured-model",
+                  "promptVersion": "activity-metadata-v1",
+                  "metadata": {
+                    "summary": {
+                      "value": "북클럽봄을 시작했어요.",
+                      "evidence": [
+                        {
+                          "recordId": "record-01",
+                          "quote": "북클럽봄을 시작했어요."
+                        }
+                      ]
+                    },
+                    "status": null,
+                    "role": null,
+                    "period": {
+                      "start": null,
+                      "end": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "요청 검증 실패",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "내부 토큰 누락 또는 오류",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "내부 권한 범위 위반",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "대상 없음",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "중복 또는 진행·버전 충돌",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "처리할 기록·근거 없음 또는 입력 한도 초과",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "모델 사용 한도",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "공급자 연결·응답 검증 실패",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "설정·DB 또는 작업 예약 실패",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "시간 초과",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "activityId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/AIIdentifier"
+            },
+            "description": "경로에 URL 인코딩한다."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActivityAnalysisInput"
+              }
+            }
+          }
+        },
+        "description": "AI 담당자가 제공하고 백엔드 서버가 호출합니다.\n\n백엔드 전용. 활동 ID와 스냅샷의 실제 ID를 검증한다. 기록 1~100개·JSON 250000자 이하. 기존 원본을 다시 읽지 않고 전달한 기록의 원문만 근거로 사용한다. 제한 150초. fingerprint와 recordCount를 반환하고 백엔드가 재검증·저장한다.\n\n[서버 간 요청·응답 원문](/swagger/handoff/common/handoff/서버간_데이터_전달_계약.html)",
+        "security": [
+          {
+            "InternalServiceToken": []
+          }
+        ],
+        "servers": [
+          {
+            "url": "https://ai-internal.example.org/api",
+            "description": "서버 전용 설명용 Base. 공개 Base와 같은 호스트 또는 별도 내부 호스트를 사용할 수 있으며 실제 주소는 AI 담당자가 제공합니다."
+          }
+        ]
+      }
+    },
+    "/analyze/journey": {
+      "post": {
+        "operationId": "analyzeInternalJourney",
+        "summary": "[백엔드 → AI] 성장 분석 요청",
+        "tags": [
+          "서버 간 내부 API"
+        ],
+        "x-audience": "server",
+        "responses": {
+          "200": {
+            "description": "정상 응답",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JourneyResult"
+                },
+                "example": {
+                  "sourceFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "recordCount": 1,
+                  "model": "configured-model",
+                  "promptVersion": "journey-v5",
+                  "result": {
+                    "source": "api",
+                    "summary": {
+                      "title": "활동을 시작했어요.",
+                      "description": "성장 변화를 판단하려면 기록이 더 필요해요.",
+                      "evidence": [
+                        {
+                          "recordId": "record-01",
+                          "quote": "북클럽봄을 시작했어요."
+                        }
+                      ]
+                    },
+                    "badges": [],
+                    "typeOptions": [
+                      {
+                        "value": "all",
+                        "label": "전체"
+                      }
+                    ],
+                    "axisOptions": [
+                      {
+                        "value": "all",
+                        "label": "전체 분야"
+                      }
+                    ],
+                    "events": []
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "요청 검증 실패",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "내부 토큰 누락 또는 오류",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "내부 권한 범위 위반",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "대상 없음",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "중복 또는 진행·버전 충돌",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "처리할 기록·근거 없음 또는 입력 한도 초과",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "모델 사용 한도",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "공급자 연결·응답 검증 실패",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "설정·DB 또는 작업 예약 실패",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "시간 초과",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JourneyInput"
+              }
+            }
+          }
+        },
+        "description": "AI 담당자가 제공하고 백엔드 서버가 호출합니다.\n\n백엔드 전용. 기록 1~100개·JSON 250000자 이하. 내부 근거 후보 2000개와 모델 입력 250000자 한도. AI 모델 전용 evidenceId는 실제 recordId·quote로 복원한다. 서버 간 응답에는 원문 근거를 사용하며 백엔드가 fingerprint·원문·활동·월을 검증해 확정 저장한다.\n\n[서버 간 요청·응답 원문](/swagger/handoff/common/handoff/서버간_데이터_전달_계약.html)",
+        "security": [
+          {
+            "InternalServiceToken": []
+          }
+        ],
+        "servers": [
+          {
+            "url": "https://ai-internal.example.org/api",
+            "description": "서버 전용 설명용 Base. 공개 Base와 같은 호스트 또는 별도 내부 호스트를 사용할 수 있으며 실제 주소는 AI 담당자가 제공합니다."
+          }
+        ]
+      }
+    },
+    "/analyze/records/{recordId}/exclude-file": {
+      "post": {
+        "operationId": "analyzeRemainingFiles",
+        "summary": "[백엔드 → AI] 삭제 후 남은 원본 분석 요청",
+        "tags": [
+          "서버 간 내부 API"
+        ],
+        "x-audience": "server",
+        "responses": {
+          "200": {
+            "description": "정상 응답",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExcludeFileResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "요청 검증 실패",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "내부 토큰 누락 또는 오류",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "내부 권한 범위 위반",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "대상 없음",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "중복 또는 진행·버전 충돌",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "처리할 기록·근거 없음 또는 입력 한도 초과",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "모델 사용 한도",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "공급자 연결·응답 검증 실패",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "설정·DB 또는 작업 예약 실패",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "시간 초과",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "recordId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/AIIdentifier"
+            },
+            "description": "경로에 URL 인코딩한다."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExcludeFileInput"
+              }
+            }
+          }
+        },
+        "description": "AI 담당자가 제공하고 백엔드 서버가 호출합니다.\n\n백엔드 전용. 삭제 대상이 없거나 기존 원본이 2개 미만이면 409. 삭제 대상 bytes·기존 기록 요약·대화를 문맥에서 제외한다. 남은 파일 원본만 분석하며 changes=[]와 sourceUrl 생략을 보장한다. recordReply 원문과 fileIds 순서를 그대로 반환한다. 제한 150초.\n\n[서버 간 요청·응답 원문](/swagger/handoff/common/handoff/서버간_데이터_전달_계약.html)",
+        "security": [
+          {
+            "InternalServiceToken": []
+          }
+        ],
+        "servers": [
+          {
+            "url": "https://ai-internal.example.org/api",
+            "description": "서버 전용 설명용 Base. 공개 Base와 같은 호스트 또는 별도 내부 호스트를 사용할 수 있으며 실제 주소는 AI 담당자가 제공합니다."
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AIIdentifier": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200,
+        "pattern": "\\S"
+      },
+      "ActivityAnalysisInput": {
+        "type": "object",
+        "properties": {
+          "activity": {
+            "$ref": "#/components/schemas/AnalysisActivity"
+          },
+          "previous": {
+            "type": "object",
+            "properties": {
+              "summary": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 20000,
+                    "pattern": "\\S"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "role": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 20000,
+                    "pattern": "\\S"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "start_date": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])(?:-(0[1-9]|[12][0-9]|3[01]))?$",
+                    "description": "유효한 달력 월 또는 날짜. 서버에서 실제 날짜와 시작·종료 순서를 검사한다."
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "end_date": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])(?:-(0[1-9]|[12][0-9]|3[01]))?$",
+                    "description": "유효한 달력 월 또는 날짜. 서버에서 실제 날짜와 시작·종료 순서를 검사한다."
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "summary",
+              "status",
+              "role",
+              "start_date",
+              "end_date"
+            ]
+          },
+          "records": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AnalysisRecord"
+            },
+            "minItems": 1,
+            "maxItems": 100
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "$ref": "#/components/schemas/AIIdentifier"
+                },
+                {
+                  "$ref": "#/components/schemas/AIIdentifier"
+                },
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 20000,
+                  "pattern": "\\S"
+                }
+              ],
+              "items": false,
+              "minItems": 3,
+              "maxItems": 3
+            }
+          },
+          "recordCount": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "sourceFingerprint": {
+            "$ref": "#/components/schemas/Fingerprint"
+          }
+        },
+        "required": [
+          "activity",
+          "previous",
+          "records",
+          "files",
+          "recordCount",
+          "sourceFingerprint"
+        ]
+      },
+      "ActivityAnalysisResult": {
+        "type": "object",
+        "properties": {
+          "sourceFingerprint": {
+            "$ref": "#/components/schemas/Fingerprint"
+          },
+          "recordCount": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "model": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "\\S"
+          },
+          "promptVersion": {
+            "const": "activity-metadata-v1"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ActivityMetadataAnalysis"
+          }
+        },
+        "required": [
+          "sourceFingerprint",
+          "recordCount",
+          "model",
+          "promptVersion",
+          "metadata"
+        ]
+      },
+      "ActivityMetadataAnalysis": {
+        "type": "object",
+        "properties": {
+          "summary": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000,
+                "pattern": "\\S"
+              },
+              "evidence": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Evidence"
+                },
+                "minItems": 1,
+                "maxItems": 10,
+                "description": "해당 기록의 message 또는 analysis.summary 연속 원문. 실제 ID와 원문은 서버에서 검증한다."
+              }
+            },
+            "required": [
+              "value",
+              "evidence"
+            ]
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "string",
+                    "enum": [
+                      "진행 중",
+                      "완료"
+                    ]
+                  },
+                  "evidence": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Evidence"
+                    },
+                    "minItems": 1,
+                    "maxItems": 10,
+                    "description": "해당 기록의 message 또는 analysis.summary 연속 원문. 실제 ID와 원문은 서버에서 검증한다."
+                  }
+                },
+                "required": [
+                  "value",
+                  "evidence"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 20000,
+                    "pattern": "\\S"
+                  },
+                  "evidence": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Evidence"
+                    },
+                    "minItems": 1,
+                    "maxItems": 10,
+                    "description": "해당 기록의 message 또는 analysis.summary 연속 원문. 실제 ID와 원문은 서버에서 검증한다."
+                  }
+                },
+                "required": [
+                  "value",
+                  "evidence"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "period": {
+            "type": "object",
+            "properties": {
+              "start": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "value": {
+                        "type": "string",
+                        "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])(?:-(0[1-9]|[12][0-9]|3[01]))?$",
+                        "description": "유효한 달력 월 또는 날짜. 서버에서 실제 날짜와 시작·종료 순서를 검사한다."
+                      },
+                      "evidence": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/components/schemas/Evidence"
+                        },
+                        "minItems": 1,
+                        "maxItems": 10,
+                        "description": "해당 기록의 message 또는 analysis.summary 연속 원문. 실제 ID와 원문은 서버에서 검증한다."
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "evidence"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "end": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "value": {
+                        "type": "string",
+                        "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])(?:-(0[1-9]|[12][0-9]|3[01]))?$",
+                        "description": "유효한 달력 월 또는 날짜. 서버에서 실제 날짜와 시작·종료 순서를 검사한다."
+                      },
+                      "evidence": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/components/schemas/Evidence"
+                        },
+                        "minItems": 1,
+                        "maxItems": 10,
+                        "description": "해당 기록의 message 또는 analysis.summary 연속 원문. 실제 ID와 원문은 서버에서 검증한다."
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "evidence"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "start",
+              "end"
+            ]
+          }
+        },
+        "required": [
+          "summary",
+          "status",
+          "role",
+          "period"
+        ]
+      },
+      "ActivityPeriod": {
+        "type": "object",
+        "properties": {
+          "start": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])(?:-(0[1-9]|[12][0-9]|3[01]))?$",
+                "description": "유효한 달력 월 또는 날짜. 서버에서 실제 날짜와 시작·종료 순서를 검사한다."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "end": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])(?:-(0[1-9]|[12][0-9]|3[01]))?$",
+                "description": "유효한 달력 월 또는 날짜. 서버에서 실제 날짜와 시작·종료 순서를 검사한다."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ],
+        "additionalProperties": false,
+        "description": "양쪽 키 필수. 같은 월의 월·일 혼합은 월 정밀도를 유지하며 실제 날짜 순서는 서버에서 검사한다."
+      },
+      "ActivityProposal": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "\\S"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "high",
+                  "medium",
+                  "low"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Identifier"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "match": {
+            "type": "string",
+            "enum": [
+              "existing",
+              "new",
+              "unresolved"
+            ]
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "pattern": "\\S",
+                "not": {
+                  "enum": [
+                    "all",
+                    "전체"
+                  ]
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "진행 중",
+                  "완료"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000,
+                "pattern": "\\S"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "period": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ActivityPeriod"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000,
+                "pattern": "\\S"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "confidence"
+        ],
+        "allOf": [
+          {
+            "if": {
+              "required": [
+                "match"
+              ],
+              "properties": {
+                "match": {
+                  "const": "existing"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "id"
+              ],
+              "properties": {
+                "id": {
+                  "$ref": "#/components/schemas/Identifier"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "required": [
+                "match"
+              ],
+              "properties": {
+                "match": {
+                  "type": "string",
+                  "enum": [
+                    "new",
+                    "unresolved"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "id"
+              ],
+              "properties": {
+                "id": {
+                  "type": "null"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "ActivityUpdateItem": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string",
+                "enum": [
+                  "role",
+                  "summary"
+                ]
+              },
+              "value": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 20000,
+                    "pattern": "\\S"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "field",
+              "value"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "field": {
+                "const": "status"
+              },
+              "value": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "진행 중",
+                      "완료"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "field",
+              "value"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string",
+                "enum": [
+                  "startDate",
+                  "endDate"
+                ]
+              },
+              "value": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])(?:-(0[1-9]|[12][0-9]|3[01]))?$",
+                    "description": "유효한 달력 월 또는 날짜. 서버에서 실제 날짜와 시작·종료 순서를 검사한다."
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "field",
+              "value"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "ActivityUpdateReply": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "role": {
+            "const": "assistant"
+          },
+          "kind": {
+            "const": "activity-update"
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "\\S"
+          },
+          "analysis": {
+            "type": "null"
+          },
+          "update": {
+            "type": "object",
+            "properties": {
+              "activityId": {
+                "$ref": "#/components/schemas/Identifier",
+                "description": "백엔드에 실제 존재하는 활동 ID. 활동명이나 배열 순서로 대체하지 않는다."
+              },
+              "activityName": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000,
+                "pattern": "\\S"
+              },
+              "updates": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ActivityUpdateItem"
+                },
+                "minItems": 1,
+                "maxItems": 5,
+                "description": "field 중복 금지. null은 명시적 삭제. 서버가 실제 대상과 날짜 순서를 다시 검증한다."
+              }
+            },
+            "required": [
+              "activityId",
+              "activityName",
+              "updates"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "role",
+          "kind",
+          "content",
+          "analysis",
+          "update"
+        ],
+        "example": {
+          "id": "reply-draft-02",
+          "role": "assistant",
+          "kind": "activity-update",
+          "content": "활동 정보를 수정하고 있어요.",
+          "analysis": null,
+          "update": {
+            "activityId": "activity-01",
+            "activityName": "북클럽봄",
+            "updates": [
+              {
+                "field": "role",
+                "value": "팀장"
+              }
+            ]
+          }
+        },
+        "description": "AI가 만든 중간 수정 해석입니다. 완료 result에 포함되면 프론트가 백엔드에 analysisId만 보내 실제 변경을 적용합니다."
+      },
+      "Analysis": {
+        "type": "object",
+        "properties": {
+          "activity": {
+            "$ref": "#/components/schemas/ActivityProposal"
+          },
+          "materialType": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "\\S"
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000,
+                "pattern": "\\S"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "\\S"
+          },
+          "changes": {
+            "type": "array",
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Change"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "evidence": {
+                      "type": "array",
+                      "minItems": 1,
+                      "maxItems": 10
+                    }
+                  }
+                }
+              ]
+            },
+            "maxItems": 10
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AnalyzedFile"
+            },
+            "maxItems": 10
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "materialType": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 20000,
+                  "pattern": "\\S"
+                },
+                "count": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "materialType",
+                "count"
+              ]
+            }
+          },
+          "suggestedSaveMode": {
+            "type": "string",
+            "enum": [
+              "record-change",
+              "version-only",
+              "archive"
+            ]
+          },
+          "noChangeMessage": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "\\S"
+          }
+        },
+        "required": [
+          "activity",
+          "materialType",
+          "stage",
+          "summary",
+          "changes",
+          "files",
+          "groups",
+          "suggestedSaveMode"
+        ]
+      },
+      "AnalysisActivity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/AIIdentifier"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "\\S"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "pattern": "\\S"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "category"
+        ]
+      },
+      "AnalysisRecord": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/AIIdentifier"
+          },
+          "message": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "\\S"
+          },
+          "changes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Change"
+            }
+          },
+          "savedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC ISO 시각"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC ISO 시각"
+          }
+        },
+        "required": [
+          "id",
+          "message",
+          "summary",
+          "changes",
+          "savedAt",
+          "updatedAt"
+        ]
+      },
+      "AnalysisReply": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "role": {
+            "const": "assistant"
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "\\S"
+          },
+          "sourceUrl": {
+            "type": "string",
+            "format": "uri",
+            "minLength": 1,
+            "maxLength": 4096,
+            "pattern": "^https?://[^/?#@]+(?:[/?#].*)?$",
+            "description": "사용자명과 암호가 없는 HTTP(S) URL. 서버에서 URL 의미와 접근 가능 대상을 검증한다."
+          },
+          "activityCreated": {
+            "type": "boolean"
+          },
+          "updatedActivityId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "text-analysis",
+              "file-analysis",
+              "no-change",
+              "batch-analysis",
+              "link-analysis"
+            ]
+          },
+          "analysis": {
+            "$ref": "#/components/schemas/Analysis"
+          }
+        },
+        "required": [
+          "id",
+          "role",
+          "content",
+          "kind",
+          "analysis"
+        ]
+      },
+      "AnalyzedFile": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "\\S"
+          },
+          "materialType": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "\\S"
+          },
+          "previousVersion": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "name",
+          "materialType",
+          "previousVersion"
+        ]
+      },
+      "Attachment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/AIIdentifier"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "\\S"
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "size"
+        ]
+      },
+      "Change": {
+        "type": "object",
+        "properties": {
+          "before": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "\\S"
+          },
+          "after": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "\\S"
+          },
+          "category": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "\\S"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 20000,
+              "pattern": "\\S"
+            },
+            "maxItems": 100
+          }
+        },
+        "required": [
+          "before",
+          "after",
+          "category",
+          "evidence"
+        ]
+      },
+      "ChatHealth": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "unavailable"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "analysisProvider": {
+            "const": "openai"
+          },
+          "network": {
+            "type": "object",
+            "description": "checkConnection=true일 때 추가하는 연결 진단. handoff는 세부 필드를 지정하지 않는다."
+          }
+        },
+        "required": [
+          "status",
+          "label",
+          "analysisProvider"
+        ]
+      },
+      "ChatInput": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "maxLength": 20000,
+            "default": ""
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "binary",
+              "description": "비어 있지 않은 파일. 각 10MiB 이하이며 전체 25MiB 이하"
+            },
+            "maxItems": 10
+          },
+          "conversationId": {
+            "$ref": "#/components/schemas/AIIdentifier",
+            "description": "프론트가 대화 시작 시 생성하는 대화 묶음 ID. 대화 초기화 시 새로 만들며 사용자 인증값으로 사용하지 않는다."
+          },
+          "requestId": {
+            "$ref": "#/components/schemas/AIIdentifier",
+            "description": "프론트가 전송마다 생성하는 중복 접수 판정 ID. 같은 ID·같은 입력은 기존 작업, 같은 ID·다른 입력은 409다."
+          }
+        },
+        "required": [],
+        "description": "공백 아닌 message 또는 파일이 하나 이상 필요하다. multipart boundary는 브라우저가 만든다. 서버가 파일 byte 크기·합계·확장자·인코딩과 ID trim 후 길이를 검증한다. 지원 확장자는 .txt .md .json .csv .tsv .html .xml .py .js .ts .pdf .doc .docx .rtf .odt .ppt .pptx .xls .xlsx .png .jpg .jpeg .webp .gif이다.",
+        "anyOf": [
+          {
+            "required": [
+              "message"
+            ],
+            "properties": {
+              "message": {
+                "type": "string",
+                "pattern": "\\S"
+              }
+            }
+          },
+          {
+            "required": [
+              "files"
+            ],
+            "properties": {
+              "files": {
+                "type": "array",
+                "minItems": 1
+              }
+            }
+          }
+        ]
+      },
+      "ChatReply": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/GeneralReply"
+          },
+          {
+            "$ref": "#/components/schemas/AnalysisReply"
+          }
+        ],
+        "description": "화면용 답변. analysisId·conversationId는 완료 envelope에서 프론트가 카드에 합친다. greeting은 프론트 초기 인사에 사용한다."
+      },
+      "CompletedReply": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ChatReply"
+          },
+          {
+            "$ref": "#/components/schemas/ActivityUpdateReply"
+          }
+        ]
+      },
+      "CompletedResult": {
+        "type": "object",
+        "properties": {
+          "analysisId": {
+            "$ref": "#/components/schemas/AIIdentifier",
+            "description": "AI 서버가 발급한 분석 초안 ID. 완료 초안과 원본을 백엔드가 조회할 수 있어야 하며 프론트는 저장·직접 수정 적용에 이 값을 보낸다."
+          },
+          "conversationId": {
+            "$ref": "#/components/schemas/AIIdentifier",
+            "description": "프론트가 대화 시작 시 생성하는 대화 묶음 ID. 대화 초기화 시 새로 만들며 사용자 인증값으로 사용하지 않는다."
+          },
+          "message": {
+            "type": "string"
+          },
+          "reply": {
+            "$ref": "#/components/schemas/CompletedReply"
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Attachment"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC ISO 시각"
+          }
+        },
+        "required": [
+          "analysisId",
+          "conversationId",
+          "message",
+          "reply",
+          "attachments",
+          "createdAt"
+        ]
+      },
+      "Evidence": {
+        "type": "object",
+        "properties": {
+          "recordId": {
+            "$ref": "#/components/schemas/Identifier",
+            "description": "백엔드가 저장 성공 시 발급한 확정 기록 ID. 저장된 기록 조회·수정에 사용한다."
+          },
+          "quote": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "\\S"
+          }
+        },
+        "required": [
+          "recordId",
+          "quote"
+        ]
+      },
+      "ExcludeFileInput": {
+        "type": "object",
+        "properties": {
+          "fileId": {
+            "$ref": "#/components/schemas/AIIdentifier",
+            "description": "실제 원본 파일 ID. 자료 경로의 논리 ID record:ID 허용 여부는 해당 작업의 경로 설명을 따른다."
+          },
+          "recordReply": {
+            "type": "string",
+            "description": "변경 전 기록 reply의 JSON 원문. 모델 문맥에 포함하지 않으며 응답에 원문 그대로 반환한다."
+          },
+          "activity": {
+            "$ref": "#/components/schemas/AnalysisActivity"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OriginalFile"
+            },
+            "minItems": 1,
+            "maxItems": 10
+          }
+        },
+        "required": [
+          "fileId",
+          "recordReply",
+          "activity",
+          "files"
+        ]
+      },
+      "ExcludeFileResult": {
+        "type": "object",
+        "properties": {
+          "reply": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AnalysisReply"
+              },
+              {
+                "type": "object",
+                "not": {
+                  "required": [
+                    "sourceUrl"
+                  ]
+                },
+                "properties": {
+                  "analysis": {
+                    "type": "object",
+                    "properties": {
+                      "changes": {
+                        "type": "array",
+                        "maxItems": 0
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "recordReply": {
+            "type": "string"
+          },
+          "fileIds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AIIdentifier"
+            },
+            "minItems": 1
+          }
+        },
+        "required": [
+          "reply",
+          "recordReply",
+          "fileIds"
+        ]
+      },
+      "Fingerprint": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$",
+        "description": "백엔드가 발급한 스냅샷 SHA-256. AI는 요청값을 그대로 반환한다."
+      },
+      "FreshJourney": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/SavedJourney"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "summary": {
+                "type": "object",
+                "required": [
+                  "evidence"
+                ],
+                "properties": {
+                  "evidence": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Evidence"
+                    },
+                    "minItems": 1,
+                    "maxItems": 20,
+                    "description": "해당 기록의 message 또는 analysis.summary 연속 원문. 실제 ID와 원문은 서버에서 검증한다."
+                  }
+                }
+              },
+              "badges": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "icon",
+                    "evidence"
+                  ],
+                  "properties": {
+                    "evidence": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Evidence"
+                      },
+                      "minItems": 1,
+                      "maxItems": 5,
+                      "description": "해당 기록의 message 또는 analysis.summary 연속 원문. 실제 ID와 원문은 서버에서 검증한다."
+                    }
+                  }
+                }
+              },
+              "events": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "evidence"
+                  ],
+                  "properties": {
+                    "evidence": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Evidence"
+                      },
+                      "minItems": 1,
+                      "maxItems": 10,
+                      "description": "해당 기록의 message 또는 analysis.summary 연속 원문. 실제 ID와 원문은 서버에서 검증한다."
+                    }
+                  }
+                }
+              },
+              "typeOptions": {
+                "type": "array",
+                "maxItems": 9,
+                "items": {
+                  "if": {
+                    "required": [
+                      "value"
+                    ],
+                    "properties": {
+                      "value": {
+                        "not": {
+                          "const": "all"
+                        }
+                      }
+                    }
+                  },
+                  "then": {
+                    "required": [
+                      "icon"
+                    ]
+                  }
+                }
+              },
+              "axisOptions": {
+                "type": "array",
+                "maxItems": 9
+              }
+            }
+          }
+        ],
+        "description": "새 성장 분석 결과입니다. AI는 근거를 포함한 결과를 반환하고 백엔드는 재검증 뒤 저장합니다. 신규 분석은 요약·배지·이벤트의 실제 근거가 필수다. 비교는 서로 다른 기록 두 개 이상의 근거가 필요하다. 서버는 출력·ID·활동·월·인용을 검증하며 백엔드 저장 시 이벤트·배지 ID를 새로 발급한다.",
+        "examples": [
+          {
+            "source": "api",
+            "summary": {
+              "title": "피드백으로 범위를 조정했어요.",
+              "description": "사용자 인터뷰를 바탕으로 기능을 줄인 기록이 있어요.",
+              "evidence": [
+                {
+                  "recordId": "record-02",
+                  "quote": "인터뷰 후 기능을 3개로 줄였어요."
+                }
+              ]
+            },
+            "badges": [],
+            "typeOptions": [
+              {
+                "value": "all",
+                "label": "전체"
+              },
+              {
+                "value": "feedback",
+                "label": "피드백 반영",
+                "icon": "💬"
+              }
+            ],
+            "axisOptions": [
+              {
+                "value": "all",
+                "label": "전체 분야"
+              },
+              {
+                "value": "product",
+                "label": "제품 기획"
+              }
+            ],
+            "events": [
+              {
+                "id": "event-0",
+                "occurredAt": "2026-11",
+                "activity": {
+                  "id": "activity-01",
+                  "name": "기록 앱"
+                },
+                "type": "feedback",
+                "axis": "product",
+                "title": "인터뷰로 기능 범위를 조정했어요.",
+                "description": "사용자 인터뷰 뒤 초기 계획을 좁혔어요.",
+                "comparison": {
+                  "before": "기능 6개를 계획했어요.",
+                  "after": "인터뷰 후 기능을 3개로 줄였어요.",
+                  "evidence": [
+                    "기능 6개를 계획했어요.",
+                    "인터뷰 후 기능을 3개로 줄였어요."
+                  ]
+                },
+                "evidence": [
+                  {
+                    "recordId": "record-01",
+                    "quote": "기능 6개를 계획했어요."
+                  },
+                  {
+                    "recordId": "record-02",
+                    "quote": "인터뷰 후 기능을 3개로 줄였어요."
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "GeneralReply": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "role": {
+            "const": "assistant"
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "\\S"
+          },
+          "sourceUrl": {
+            "type": "string",
+            "format": "uri",
+            "minLength": 1,
+            "maxLength": 4096,
+            "pattern": "^https?://[^/?#@]+(?:[/?#].*)?$",
+            "description": "사용자명과 암호가 없는 HTTP(S) URL. 서버에서 URL 의미와 접근 가능 대상을 검증한다."
+          },
+          "activityCreated": {
+            "type": "boolean"
+          },
+          "updatedActivityId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "kind": {
+            "const": "general"
+          },
+          "analysis": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "id",
+          "role",
+          "content",
+          "kind",
+          "analysis"
+        ]
+      },
+      "Identifier": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200,
+        "pattern": "\\S"
+      },
+      "JobCompleted": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "$ref": "#/components/schemas/JobId",
+            "description": "AI 서버가 분석 접수 시 발급하는 ai- 작업 ID. 진행·결과 GET에 사용하며 분석 완료 뒤에도 접두사를 제거하지 않는다."
+          },
+          "analysisProvider": {
+            "const": "openai"
+          },
+          "status": {
+            "const": "completed"
+          },
+          "progress": {
+            "$ref": "#/components/schemas/Progress"
+          },
+          "pollAfterMs": {
+            "const": 400
+          },
+          "result": {
+            "$ref": "#/components/schemas/CompletedResult"
+          }
+        },
+        "required": [
+          "jobId",
+          "analysisProvider",
+          "status",
+          "progress",
+          "pollAfterMs",
+          "result"
+        ],
+        "additionalProperties": false
+      },
+      "JobFailed": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "$ref": "#/components/schemas/JobId",
+            "description": "AI 서버가 분석 접수 시 발급하는 ai- 작업 ID. 진행·결과 GET에 사용하며 분석 완료 뒤에도 접두사를 제거하지 않는다."
+          },
+          "analysisProvider": {
+            "const": "openai"
+          },
+          "status": {
+            "const": "failed"
+          },
+          "error": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "\\S"
+          }
+        },
+        "required": [
+          "jobId",
+          "analysisProvider",
+          "status",
+          "error",
+          "code"
+        ],
+        "additionalProperties": false
+      },
+      "JobId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200,
+        "pattern": "^ai-.+",
+        "description": "AI 서버에서 접수 시 발급하는 작업 ID"
+      },
+      "JobResponse": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/JobRunning"
+          },
+          {
+            "$ref": "#/components/schemas/JobCompleted"
+          },
+          {
+            "$ref": "#/components/schemas/JobFailed"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "status",
+          "mapping": {
+            "running": "#/components/schemas/JobRunning",
+            "completed": "#/components/schemas/JobCompleted",
+            "failed": "#/components/schemas/JobFailed"
+          }
+        },
+        "description": "홈 채팅 분석 작업의 상태입니다. jobId로 AI에 조회합니다. HTTP 200/202여도 status=failed면 분석 실패입니다. 실패는 HTTP 200/202에도 status=failed로 전달될 수 있다. 사용하지 않는 선택 필드는 생략한다. 완료 결과의 초안과 원본을 백엔드가 조회 가능하게 영속 게시한 뒤 completed를 반환한다."
+      },
+      "JobRunning": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "$ref": "#/components/schemas/JobId",
+            "description": "AI 서버가 분석 접수 시 발급하는 ai- 작업 ID. 진행·결과 GET에 사용하며 분석 완료 뒤에도 접두사를 제거하지 않는다."
+          },
+          "analysisProvider": {
+            "const": "openai"
+          },
+          "status": {
+            "const": "running"
+          },
+          "progress": {
+            "$ref": "#/components/schemas/Progress"
+          },
+          "pollAfterMs": {
+            "const": 400
+          }
+        },
+        "required": [
+          "jobId",
+          "analysisProvider",
+          "status",
+          "progress",
+          "pollAfterMs"
+        ],
+        "additionalProperties": false
+      },
+      "JourneyBadge": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "\\S"
+          },
+          "icon": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 16,
+            "pattern": "\\S"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Evidence"
+            },
+            "minItems": 1,
+            "description": "해당 기록의 message 또는 analysis.summary 연속 원문. 실제 ID와 원문은 서버에서 검증한다."
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ]
+      },
+      "JourneyEvent": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "occurredAt": {
+            "type": "string",
+            "pattern": "^(?!0000)[0-9]{4}-(0[1-9]|1[0-2])$"
+          },
+          "activity": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000,
+                "pattern": "\\S"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          },
+          "type": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S",
+            "not": {
+              "const": "all"
+            }
+          },
+          "axis": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S",
+            "not": {
+              "const": "all"
+            }
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "\\S"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "\\S"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Evidence"
+            },
+            "minItems": 1,
+            "description": "해당 기록의 message 또는 analysis.summary 연속 원문. 실제 ID와 원문은 서버에서 검증한다."
+          },
+          "comparison": {
+            "type": "object",
+            "properties": {
+              "before": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000,
+                "pattern": "\\S"
+              },
+              "after": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000,
+                "pattern": "\\S"
+              },
+              "evidence": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 20000,
+                  "pattern": "\\S"
+                }
+              }
+            },
+            "required": [
+              "before",
+              "after",
+              "evidence"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "occurredAt",
+          "activity",
+          "type",
+          "axis",
+          "title",
+          "description"
+        ]
+      },
+      "JourneyInput": {
+        "type": "object",
+        "properties": {
+          "records": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JourneyRecord"
+            },
+            "minItems": 1,
+            "maxItems": 100
+          },
+          "recordCount": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "sourceFingerprint": {
+            "$ref": "#/components/schemas/Fingerprint"
+          }
+        },
+        "required": [
+          "records",
+          "recordCount",
+          "sourceFingerprint"
+        ]
+      },
+      "JourneyOption": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "\\S"
+          },
+          "icon": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 16,
+            "pattern": "\\S"
+          }
+        },
+        "required": [
+          "value",
+          "label"
+        ]
+      },
+      "JourneyRecord": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/AIIdentifier"
+          },
+          "activityId": {
+            "$ref": "#/components/schemas/AIIdentifier",
+            "description": "백엔드에 실제 존재하는 활동 ID. 활동명이나 배열 순서로 대체하지 않는다."
+          },
+          "activityName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "\\S"
+          },
+          "message": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "\\S"
+          },
+          "changes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Change"
+            }
+          },
+          "savedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC ISO 시각"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC ISO 시각"
+          },
+          "activity": {
+            "type": "object",
+            "properties": {
+              "category": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "pattern": "\\S"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "role": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 20000,
+                    "pattern": "\\S"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "summary": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 20000,
+                    "pattern": "\\S"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "startDate": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])(?:-(0[1-9]|[12][0-9]|3[01]))?$",
+                    "description": "유효한 달력 월 또는 날짜. 서버에서 실제 날짜와 시작·종료 순서를 검사한다."
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "endDate": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])(?:-(0[1-9]|[12][0-9]|3[01]))?$",
+                    "description": "유효한 달력 월 또는 날짜. 서버에서 실제 날짜와 시작·종료 순서를 검사한다."
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "category",
+              "role",
+              "summary",
+              "startDate",
+              "endDate"
+            ]
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "$ref": "#/components/schemas/AIIdentifier"
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 20000,
+                  "pattern": "\\S"
+                }
+              },
+              "required": [
+                "id",
+                "name"
+              ]
+            }
+          }
+        },
+        "required": [
+          "id",
+          "activityId",
+          "activityName",
+          "message",
+          "summary",
+          "changes",
+          "savedAt",
+          "updatedAt",
+          "activity",
+          "files"
+        ]
+      },
+      "JourneyResult": {
+        "type": "object",
+        "properties": {
+          "sourceFingerprint": {
+            "$ref": "#/components/schemas/Fingerprint"
+          },
+          "recordCount": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "model": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "\\S"
+          },
+          "promptVersion": {
+            "const": "journey-v5"
+          },
+          "result": {
+            "$ref": "#/components/schemas/FreshJourney"
+          }
+        },
+        "required": [
+          "sourceFingerprint",
+          "recordCount",
+          "model",
+          "promptVersion",
+          "result"
+        ]
+      },
+      "JourneySummary": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "\\S"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "\\S"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Evidence"
+            },
+            "minItems": 1,
+            "description": "해당 기록의 message 또는 analysis.summary 연속 원문. 실제 ID와 원문은 서버에서 검증한다."
+          }
+        },
+        "required": [
+          "title",
+          "description"
+        ]
+      },
+      "LinkInput": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "minLength": 1,
+            "maxLength": 4096,
+            "pattern": "^https?://[^/?#@]+(?:[/?#].*)?$",
+            "description": "사용자명과 암호가 없는 HTTP(S) URL. 서버에서 URL 의미와 접근 가능 대상을 검증한다."
+          },
+          "conversationId": {
+            "$ref": "#/components/schemas/AIIdentifier",
+            "description": "프론트가 대화 시작 시 생성하는 대화 묶음 ID. 대화 초기화 시 새로 만들며 사용자 인증값으로 사용하지 않는다."
+          },
+          "requestId": {
+            "$ref": "#/components/schemas/AIIdentifier",
+            "description": "프론트가 전송마다 생성하는 중복 접수 판정 ID. 같은 ID·같은 입력은 기존 작업, 같은 ID·다른 입력은 409다."
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "additionalProperties": false
+      },
+      "OriginalFile": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/AIIdentifier"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "\\S"
+          },
+          "mimeType": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "\\S"
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10485760
+          },
+          "contentBase64": {
+            "type": "string",
+            "contentEncoding": "base64",
+            "description": "디코딩 뒤 실제 size와 대조한다. 공개 응답에 포함하지 않는다."
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "mimeType",
+          "size",
+          "contentBase64"
+        ]
+      },
+      "Progress": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "completed",
+                    "working"
+                  ]
+                }
+              },
+              "required": [
+                "label",
+                "status"
+              ]
+            },
+            "minItems": 1
+          }
+        },
+        "required": [
+          "title",
+          "steps"
+        ]
+      },
+      "SavedJourney": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "const": "api"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/JourneySummary"
+          },
+          "badges": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JourneyBadge"
+            },
+            "maxItems": 10
+          },
+          "typeOptions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JourneyOption"
+            }
+          },
+          "axisOptions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JourneyOption"
+            }
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JourneyEvent"
+            },
+            "maxItems": 20
+          }
+        },
+        "required": [
+          "source",
+          "summary",
+          "badges",
+          "typeOptions",
+          "axisOptions",
+          "events"
+        ],
+        "description": "기존 결과 조회는 evidence·icon 생략을 허용한다. 필드가 존재하면 null·빈 evidence를 거절한다. 선택지 value와 ID는 각각 유일하며 all 선택지를 포함한다. 이벤트 type/axis는 선택지의 실제 value를 참조한다. occurredAt은 근거 중 가장 늦은 최초 저장 월이다."
+      },
+      "ServiceError": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "\\S"
+          }
+        },
+        "required": [
+          "error",
+          "code"
+        ]
+      }
+    },
+    "securitySchemes": {
+      "InternalServiceToken": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "서버 환경에서 설정하는 내부 서비스 토큰. 실제 값을 프론트에 전달하지 않는다."
+      }
+    }
+  }
+}
