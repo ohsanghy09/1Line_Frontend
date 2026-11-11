@@ -70,14 +70,13 @@ export type ActivitySelection =
     | { activityId: string; activityUpdates?: ActivityMetadata }
     | { newActivity: ActivityMetadata & { name: string } }
 
-// 실제 API 응답 형식을 협의하기 전 사용하는 임시 데이터 구조.
-// HTML이나 JSX 대신 값만 전달하므로 목데이터와 API 응답에 같은 화면을 사용할 수 있다.
+// 서비스에서 검증한 AI 응답과 브라우저에 복원할 카드의 데이터 구조.
 export type ChatReply = {
     id: string
     role: 'assistant'
     kind: ChatReplyKind
 
-    // 서버 분석 초안 ID는 이후 기록 저장에 사용한다. 독립 목 카드에는 없다.
+    // 서버 분석 초안 ID는 기록 저장에 필수다. 과거 세션에는 없을 수 있어 선택 필드로 유지한다.
     analysisId?: string
     conversationId?: string
     // 같은 탭에서 복원할 카드의 저장·연결 상태. 서버 응답의 분석 내용과 구분한다.
@@ -87,7 +86,7 @@ export type ChatReply = {
     activityCreated?: boolean
     // 대화로 직접 수정한 활동. 일반 말풍선이며 새 기록 저장 버튼은 표시하지 않는다.
     updatedActivityId?: string
-    // 링크 분석의 실제 입력 URL. 목 분석 내용과 별도로 보존한다.
+    // 링크 분석의 실제 입력 URL을 보존한다.
     sourceUrl?: string
 
     // AI 말풍선 또는 분석 카드 상단에 표시할 답변 문구

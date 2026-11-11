@@ -44,8 +44,11 @@ export async function getChatReply(message: string, files: File[] = [], options:
 // 재진입 시 파일을 재전송하지 않고 기존 작업만 조회한다.
 export async function resumeChatReply(jobId: string, options: ChatRequestOptions = {}): Promise<ChatReply> {
     options.signal?.throwIfAborted()
-    // 기존 세션에 남아 있는 이전 백엔드 작업은 그 서버에서만 조회한다.
-    const data = await (jobId.startsWith('ai-') ? aiRequest : request)(`/chat/jobs/${encodeURIComponent(jobId)}`, { signal: options.signal })
+    if (!jobId.startsWith('ai-')) throw Object.assign(
+        new Error('이전 분석 작업을 복원할 수 없어요. 다시 전송해 주세요.'),
+        { terminalChatJob: true, jobId },
+    )
+    const data = await aiRequest(`/chat/jobs/${encodeURIComponent(jobId)}`, { signal: options.signal })
     if (!isObject(data) || data.jobId !== jobId) throw new Error('진행 응답의 작업 ID가 일치하지 않습니다.')
     return resolveChatReply(data, options)
 }
@@ -70,7 +73,7 @@ async function resolveChatReply(initial: unknown, options: ChatRequestOptions): 
                 if (data.status !== 'running' || !isProgress(data.progress)) throw new Error('진행 응답 형식이 올바르지 않습니다.')
                 options.onProgress?.(data.progress)
                 await waitForPoll(signal)
-                data = await (jobId.startsWith('ai-') ? aiRequest : request)(`/chat/jobs/${encodeURIComponent(jobId)}`, { signal })
+                data = await aiRequest(`/chat/jobs/${encodeURIComponent(jobId)}`, { signal })
             }
         } catch (error) {
             if (timeout.aborted && !options.signal?.aborted) throw new Error('진행 상태 확인 시간이 초과됐어요. 서버에는 작업이 보관되어 있습니다.')

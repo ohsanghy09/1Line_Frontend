@@ -19,10 +19,14 @@ function notifyActivitiesChanged() {
 
 // 실제 분석 초안은 ID로 원본 파일 연결을 유지한다.
 export async function saveRecord(reply: ChatReply, target: string | ActivitySelection): Promise<SavedRecord> {
+    const analysisId = reply.analysisId?.trim()
+    if (!analysisId || analysisId.length > 20_000) {
+        throw new Error('분석 결과를 저장할 수 없어요. 원본을 다시 분석한 뒤 저장해 주세요.')
+    }
     const selection = typeof target === 'string' ? { activityId: target } : target
     const saved = readRecord(await request('/records', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...selection, ...(reply.analysisId ? { analysisId: reply.analysisId } : { reply }), classification: { materialType: reply.analysis?.materialType } }),
+        body: JSON.stringify({ ...selection, analysisId, classification: { materialType: reply.analysis?.materialType } }),
     }))
     notifyActivitiesChanged()
     return saved

@@ -129,19 +129,12 @@ function Home() {
         setSessionError(stored ? '' : '브라우저에 대화를 보관하지 못했어요. 새로고침하면 최근 내역이 사라질 수 있어요.')
     }, [messages, greetingCreatedAt, isReplying, pendingJob])
 
-    // StrictMode 재실행이나 화면 해제 후에도 이전 조회 결과가 반영되지 않게 한다.
-    useEffect(() => {
-        if (restoredSession?.pendingJob) resumeJob(restoredSession.pendingJob)
-        return () => { requestIdRef.current += 1; requestControllerRef.current?.abort() }
-    }, [restoredSession])
-
     function resumeJob(job: PendingChatJob) {
         requestControllerRef.current?.abort()
         const controller = new AbortController()
         requestControllerRef.current = controller
         const requestId = ++requestIdRef.current
         pendingRequestRef.current = true
-        setIsReplying(true); setReplyError('')
         void resumeChatReply(job.jobId, {
             signal: controller.signal,
             onProgress: progress => { if (requestId === requestIdRef.current && job.showProgress !== false) setAnalysisProgress(progress) },
@@ -163,12 +156,11 @@ function Home() {
         })
     }
 
+    // 복원 작업을 재개하고, 복원 여부와 관계없이 화면 해제 시 진행 요청을 무효화한다.
     useEffect(() => {
-        return () => {
-            requestIdRef.current += 1
-            requestControllerRef.current?.abort()
-        }
-    }, [])
+        if (restoredSession?.pendingJob) resumeJob(restoredSession.pendingJob)
+        return () => { requestIdRef.current += 1; requestControllerRef.current?.abort() }
+    }, [restoredSession])
 
     // 새 메시지가 추가되면 채팅 영역의 맨 아래로 이동
     const chatContainerRef = useRef<HTMLDivElement>(null)
@@ -224,7 +216,8 @@ function Home() {
 
         const controller = new AbortController()
         requestControllerRef.current = controller
-        let jobAccepted = false
+        // 접수 여부는 이 전송에만 속한다. 콜백과 오류 처리에서 같은 요청 상태를 읽는다.
+        const requestStatus = { jobAccepted: false }
 
         try {
             // 파일·링크는 접수 즉시 작업 ID를 보관한다. 텍스트는 한 요청의 최종 결과를 기다린다.
@@ -233,7 +226,7 @@ function Home() {
                 signal: controller.signal,
                 onJobStarted: (jobId: string) => {
                     if (requestId !== requestIdRef.current) return
-                    jobAccepted = true
+                    requestStatus.jobAccepted = true
                     setPendingJob({ jobId, userMessageId, showProgress: Boolean(filesToSend.length || sourceUrl) })
                 },
                 onProgress: (progress: ChatProgress) => {
@@ -254,7 +247,7 @@ function Home() {
                 const terminalFailure = isTerminalChatFailure(error)
                 if (terminalFailure) setPendingJob(null)
                 // 실패한 입력은 다시 보낼 수 있게 복원하되 새로 작성한 글은 덮어쓰지 않는다.
-                if ((!jobAccepted || terminalFailure) && !sourceUrl) {
+                if ((!requestStatus.jobAccepted || terminalFailure) && !sourceUrl) {
                     setChatInput(current => current || content)
                     setPendingFiles(current => [...filesToSend.map(file => ({ id: crypto.randomUUID(), file })), ...current])
                 }
@@ -417,7 +410,7 @@ function Home() {
                     ))}
 
                     {replyError && <p role="alert" className="text-sm text-red-600">{replyError}</p>}
-                    {pendingJob && !isReplying && <button type="button" onClick={() => resumeJob(pendingJob)} className="text-xs text-brand-primary hover:underline">진행 상태 다시 확인</button>}
+                    {pendingJob && !isReplying && <button type="button" onClick={() => { setIsReplying(true); setReplyError(''); resumeJob(pendingJob) }} className="text-xs text-brand-primary hover:underline">진행 상태 다시 확인</button>}
                     {sessionError && <p role="alert" className="text-sm text-red-600">{sessionError}</p>}
 
                 </div>

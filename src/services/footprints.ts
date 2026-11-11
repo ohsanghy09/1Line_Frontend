@@ -59,10 +59,6 @@ async function getOrNull(path: string): Promise<unknown> {
     }
 }
 
-export async function getFootprintActivities(): Promise<FootprintActivity[]> {
-    return (await searchFootprintActivities({ search: '', category: 'all', status: 'all', sort: 'recent' })).items
-}
-
 // 정식 서버로 교체할 때도 검색 조건과 응답을 이 경계에서 변환한다.
 export async function searchFootprintActivities(filters: FootprintFilters, signal?: AbortSignal): Promise<{ items: FootprintActivity[]; total: number; categories: string[] }> {
     const query = new URLSearchParams({ q: filters.search, category: filters.category, status: filters.status, sort: filters.sort })

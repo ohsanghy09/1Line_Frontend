@@ -1,31 +1,23 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { stripTypeScriptTypes } from 'node:module'
 import test from 'node:test'
-import { createServer } from 'vite'
-import { createApp } from '../api-server/src/app.js'
-import { openDatabase } from '../api-server/src/database.js'
-import { createMockJourney } from '../api-server/test-support/journey-fixture.js'
+import { createMockJourney } from './fixtures/journey.mjs'
+import { loadFrontend } from './support/frontend.mjs'
 
-test('Journey 서비스 → Vite 프록시 → API와 오류·취소·응답 계약', async t => {
-    const db = openDatabase(':memory:')
-    const api = createApp(db).listen(0, '127.0.0.1')
-    await new Promise(resolve => api.once('listening', resolve))
+test('Journey 프론트 서비스의 HTTP 계약·오류·취소', async t => {
     const originalFetch = globalThis.fetch
-    let vite
+    const empty = createMockJourney()
+    empty.events = []; empty.badges = []
+    empty.analysis = { id: null, generatedAt: null, stale: false, recordCount: 0, currentRecordCount: 0, model: null, promptVersion: null }
+    const emptyResponse = async (url, init) => {
+        assert.equal(url, '/api/journey')
+        init.signal.throwIfAborted()
+        return Response.json(empty)
+    }
+    globalThis.fetch = emptyResponse
     try {
-        vite = await createServer({ server: { host: '127.0.0.1', port: 0, proxy: { '/api': `http://127.0.0.1:${api.address().port}` } } })
-        await vite.listen()
-        const base = `http://127.0.0.1:${vite.httpServer.address().port}`
-        const proxyFetch = (url, init) => originalFetch(new URL(url, base), init)
-        globalThis.fetch = proxyFetch
-        const url = code => `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`
-        const source = path => stripTypeScriptTypes(readFileSync(new URL(path, import.meta.url), 'utf8'))
-        const chatUrl = url(source('../src/services/chat.ts'))
-        const service = await import(url(source('../src/services/journey.ts').replace("from './chat'", `from '${chatUrl}'`)))
-        const { filterJourneyEvents } = await import(url(source('../src/utils/journey.ts')))
-
-        await t.test('실제 DB의 미분석 상태를 반환하며 예시를 표시하지 않는다', async () => {
+        const service = await loadFrontend('src/services/journey.ts')
+        const { filterJourneyEvents } = await loadFrontend('src/utils/journey.ts')
+        await t.test('미분석 응답의 빈 목록을 유지하며 예시를 채우지 않는다', async () => {
             const data = await service.getGrowthJourney()
             assert.equal(data.source, 'api')
             assert.deepEqual(data.events, [])
@@ -89,7 +81,7 @@ test('Journey 서비스 → Vite 프록시 → API와 오류·취소·응답 계
             await assert.rejects(service.getGrowthJourney(), /조회 실패/)
             globalThis.fetch = async () => { throw new TypeError('offline') }
             await assert.rejects(service.getGrowthJourney(), /연결하지 못했어요/)
-            globalThis.fetch = proxyFetch
+            globalThis.fetch = emptyResponse
             assert.equal((await service.getGrowthJourney()).events.length, 0)
         })
         await t.test('이미 취소됐거나 진행 중 취소된 요청을 거절한다', async () => {
@@ -102,10 +94,15 @@ test('Journey 서비스 → Vite 프록시 → API와 오류·취소·응답 계
             controller.abort()
             await assert.rejects(pending, { name: 'AbortError' })
         })
-    } finally {
-        globalThis.fetch = originalFetch
-        await vite?.close()
-        await new Promise(resolve => api.close(resolve))
-        db.close()
-    }
+        await t.test('명시적 재분석만 POST로 보내고 응답 형식을 검증한다', async () => {
+            globalThis.fetch = async (url, init) => {
+                assert.equal(url, '/api/journey/analyze')
+                assert.equal(init.method, 'POST')
+                return Response.json(createMockJourney())
+            }
+            assert.equal((await service.generateGrowthJourney()).events.length, 5)
+            globalThis.fetch = async () => Response.json({})
+            await assert.rejects(service.generateGrowthJourney(), /응답 형식/)
+        })
+    } finally { globalThis.fetch = originalFetch }
 })
