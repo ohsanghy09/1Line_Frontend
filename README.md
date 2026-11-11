@@ -8,31 +8,25 @@
 
 ## 개발 상태
 
-현재 프론트엔드 초기 개발 환경을 구성한 단계입니다.
-아래 주요 기능은 구현 예정입니다.
+프론트 화면과 HTTP API 서비스, 대화 복원, 기록 저장·수정·삭제 요청 흐름을 구현했습니다.
+백엔드·AI 개발 서버와 초기 화면용 목데이터는 제거했으며, 프론트 설치·검사·빌드·Swagger 생성은 독립적으로 실행할 수 있습니다.
+
+실제 분석과 영속 데이터의 저장·조회에는 별도로 제공되는 백엔드·AI 서버가 필요합니다.
+원격 서버 연결과 CORS·인증·업로드·저장·복원 등의 실제 동작 검증은 서버 준비 후 진행합니다.
+현재 작업 상태와 검증 범위는 [프론트 연동 정비 기록](docs/frontend-integration/README.md)에서 확인할 수 있습니다.
 
 ## 주요 기능
 
-- **Growth AI**
-  - 텍스트, 파일, 링크를 통한 경험 기록
-  - AI 기반 활동 분류와 자료 요약
-  - 기존 기록과 비교하여 주요 변화 발견
-
-- **Growth Journey**
-  - 여러 활동에 걸친 개인 성장 흐름 확인
-  - 성장 유형과 분야별 필터링
-
-- **나의 발자국**
-  - 활동 검색, 필터링 및 정렬
-  - 활동별 자료 아카이브 탐색
-
-- **활동 아카이브**
-  - 폴더별 자료와 파일 상세 정보 확인
-  - 자료의 버전과 변경 내용 확인
-
-- **Project Timeline**
-  - 활동별 변화 과정과 주요 전환점 확인
-  - 변화 전후 내용과 근거 자료 확인
+| 화면·기능 | 구현 범위 |
+| --- | --- |
+| Growth AI | 텍스트·파일·링크 전송, 분석 진행·결과 카드 표시, 활동 연결·자료 유형 수정, 명시적 기록 저장 |
+| 대화 복원 | 같은 탭의 대화·카드 복원, AI 작업 재조회, 대화 초기화 |
+| 홈 최근 목록 | 최근 활동·기록 조회, 날짜 표시, 관련 활동·자료 이동 |
+| Growth Journey | 저장된 성장 분석 조회, 유형·분야 필터, 상세 펼침, 수동 분석 요청 |
+| 나의 발자국 | 활동 검색·필터·정렬, 활동별 아카이브 탐색 |
+| 활동 아카이브 | 폴더별 자료, 자료 Drawer, 요약·버전 관계·근거 이벤트 표시 |
+| Project Timeline | 활동별 변화·Turning Point와 근거 자료 이동 |
+| 데이터 관리 | 자료·활동·전체 데이터 삭제 확인 UI와 API 요청 |
 
 주요 변화가 없는 자료도 아카이브에 보관하며,
 모든 기록을 성장이나 전환점으로 분류하지 않습니다.
@@ -49,43 +43,87 @@
 
 ## 시작하기
 
-프로젝트 루트에서 의존성을 설치합니다.
+Node.js 24 이상과 npm을 사용합니다. 새 설치 검증은 Node.js 24.14.0·npm 11.21.1에서 수행했습니다.
+프로젝트 루트에서 lockfile 기준으로 의존성을 설치하고 프론트 개발 서버를 실행합니다.
 
 ```bash
-npm install
-```
-
-개발 서버를 실행합니다.
-
-```bash
+npm ci
 npm run dev
 ```
 
-터미널에 표시된 로컬 주소로 접속합니다.
+터미널에 표시된 로컬 주소로 접속합니다. 화면의 API 기능을 사용하려면 아래 서버 주소 설정이 필요합니다.
+
+## API 서버 연결
+
+백엔드와 AI 서버의 Base URL을 각각 설정합니다. 원격 서버 연결 시 프로젝트 루트의
+`.env.local`에 다음과 같이 작성합니다. 아래 주소는 설명용 예시이며 실제 제공받은 주소로 바꿉니다.
+
+```dotenv
+VITE_API_BASE_URL=https://backend.example.org/api
+VITE_AI_API_BASE_URL=https://ai.example.org/api
+```
+
+두 값은 `/api`를 포함한 Base URL입니다. 개발 서버 실행 전에 설정하고, 변경 후에는 개발 서버를 재시작합니다.
+Vite 빌드에 반영되는 값이므로 배포 환경에서 변경하면 다시 빌드·배포해야 합니다.
+이 변수는 브라우저에 포함되므로 API 주소만 설정하고 서버 비밀키나 내부 토큰은 넣지 않습니다.
+
+미설정 시 `/api`와 `/ai-api`를 사용합니다. 현재 Vite 개발 프록시는 각각
+`127.0.0.1:3001`과 `127.0.0.1:8000`을 대상으로 하지만, 이 저장소에서 서버를 제공하거나 자동 실행하지는 않습니다.
+별도 로컬 서버를 쓰는 경우에만 해당 프록시를 사용합니다. 원격 주소로 직접 요청할 때는 각 서버의 CORS 설정이 필요합니다.
+
+정적 호스팅에서는 Vite 개발 프록시가 적용되지 않습니다. Vercel에서도 원격 Base URL을 빌드 환경변수로 지정하거나
+별도 API 라우팅을 구성해야 합니다. 현재 `vercel.json`은 정적 파일과 SPA 경로를 처리합니다.
+
+## API 문서
 
 API 명세는 같은 프론트 주소의 `/swagger/`로 직접 접속합니다. 개발·프로덕션 빌드 전에 Swagger 정적 파일이 자동 생성되며 Vercel 배포에도 포함됩니다. [Swagger 사용 안내](docs/common/integration/API_계약/Swagger_사용안내.md)를 참고하세요.
+
+`docs/frontend-integration/openapi/`의 독립 OpenAPI와 handoff 문서를 사용합니다.
+백엔드 공개 API 16개·AI 공개 API 4개와 서버 간 내부 API 6개를 문서화했으며, 문서 확인에는 서버 실행·DB·AI 키가 필요 없습니다.
+Swagger는 읽기 전용으로 제공하며 문서의 Base URL은 실제 원격 연결 완료를 뜻하지 않습니다.
 
 ## 주요 명령어
 
 | 명령어 | 설명 |
 | --- | --- |
-| `npm run dev` | 개발 서버 실행 |
+| `npm ci` | lockfile 기준 의존성 설치 |
+| `npm run dev` | Swagger 생성 후 프론트 개발 서버 실행 |
 | `npm test` | 서버·DB·실제 AI 없이 프론트 계약·필터·세션·명세 검사 |
 | `npm run lint` | 코드 검사 |
-| `npm run build` | TypeScript 검사 및 프로덕션 빌드 |
+| `npm run docs:build` | Swagger·handoff 정적 문서 생성 |
+| `npm run build` | Swagger 생성·TypeScript 검사·프로덕션 빌드 |
 | `npm run preview` | 빌드 결과 로컬 확인 |
 
-프론트 검사는 Node.js 24 이상과 루트 의존성만 사용합니다. 테스트 데이터는
-`tests/fixtures/`에 있으며 실제 서비스 응답을 대체하지 않습니다.
-`node scripts/check-chat-api.mjs`로 채팅 계약 검사만 실행할 수도 있습니다.
+Windows PowerShell에서는 `npm` 대신 `npm.cmd`로 실행할 수도 있습니다.
 
-실제 API 기능을 사용하려면 백엔드·AI 서버가 필요합니다. 원격 연결 시
-`VITE_API_BASE_URL=https://백엔드주소/api`와 `VITE_AI_API_BASE_URL=https://AI주소/api`를
-빌드 전에 설정합니다. 미설정 시 `/api`·`/ai-api`를 사용하며 개발 환경에서는
-Vite 로컬 프록시로 연결합니다. 정적 호스팅에서는 별도 API 라우팅 또는 원격 Base가 필요합니다.
+## 검사와 빌드 확인
 
-이 저장소에는 백엔드·AI 개발 서버와 로컬 서버 전용 통합 검사 스크립트가 포함되지 않습니다.
-API 계약·프롬프트 인계 문서는 `docs/`에 유지하며 실제 원격 서버 연결 검증은 서버 준비 후 진행합니다.
+```bash
+npm test
+npm run lint
+npm run build
+npm run preview
+```
+
+프론트 검사는 실제 서비스 함수와 합성 HTTP 응답을 사용합니다. `tests/fixtures/`의 데이터는 검사 전용이며
+실제 서비스 응답을 대체하지 않습니다. `node scripts/check-chat-api.mjs`로 채팅 계약 검사만 실행할 수도 있습니다.
+
+2026-11-11 기준 서버·기존 node_modules 없는 환경에서 새 설치 후 검사 39개·세션 복원·빌드·Swagger 생성을 통과했습니다.
+개발 서버 제거 후에도 검사·빌드를 재확인했습니다. lint는 오류 없이 기존 경고 3개가 있습니다.
+브라우저의 실제 저장·복원과 원격 서버 간 연동 성공은 이 자동 검사 결과에 포함되지 않습니다.
+
+## 폴더 구성
+
+```text
+src/       화면·컴포넌트·HTTP 서비스·타입·유틸
+tests/     프론트 계약·필터·복원·명세 검사와 합성 데이터
+scripts/   Swagger 생성과 개별 검사 진입점
+docs/      구현 기록·백엔드/AI handoff·독립 OpenAPI
+public/    정적 자산과 생성된 Swagger
+```
+
+백엔드·AI 개발 서버 소스와 로컬 서버 전용 통합 검사는 이 저장소에서 제거했습니다.
+API 계약·프롬프트 인계 문서는 `docs/`에 유지합니다. `public/swagger/`와 `dist/`는 생성물이며 Git에서 제외합니다.
 
 ## 브랜치 전략
 
@@ -100,6 +138,9 @@ API 계약·프롬프트 인계 문서는 `docs/`에 유지하며 실제 원격 
 ## 참고 문서
 
 - [문서 목록](docs/README.md)
+- [프론트 연동 정비·최신 검증 기록](docs/frontend-integration/README.md)
+- [백엔드·AI 인수인계 안내](docs/common/handoff/README.md)
+- [Swagger 사용 안내](docs/common/integration/API_계약/Swagger_사용안내.md)
 - [화면 참고 HTML](docs/common/references/1Line_reference.html)
 - [개발 규칙](docs/frontend/개발_규칙.md)
 - [후속 화면 검토사항](docs/frontend/후속_화면_검토사항.md)
