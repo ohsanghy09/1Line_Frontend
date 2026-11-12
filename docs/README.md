@@ -6,6 +6,7 @@
 | --- | --- | --- |
 | 프론트엔드 | [frontend](frontend/README.md) | 개발 규칙, 화면별 구현·API 사용·변경 기록 |
 | 프론트 연동 정비 | [frontend-integration](frontend-integration/README.md) | handoff 기준 API 대조, 독립 Swagger, 로컬 의존성, 변경 협의·검증 기록 |
+| Growth Journey 수정 | [growth-journey-update](growth-journey-update/README.md) | 고정 성장 기준 5종, 공통 JSON 계약 초안, AI 전달사항, 작업·검증 기록 |
 | 백엔드 | [backend](backend/README.md) | API·DB·ERD·저장 및 삭제 계약, 로컬 서버 실행 안내 |
 | AI | [ai](ai/README.md) | 분석 API·검증·프롬프트 정의, 로컬 서버 구현·실행 기록 |
 | 공통 | [common](common/README.md) | 공통 계약, 서버 간 연동, 작업 계획, 서비스 정의와 참고 자료 |
@@ -15,6 +16,11 @@
 ```text
 docs/
   README.md
+  growth-journey-update/
+    README.md
+    공통_JSON_계약.md
+    AI_담당자_전달사항.md
+    작업_및_검증_기록.md
   frontend-integration/
     README.md
     API_계약_대조표.md
