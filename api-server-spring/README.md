@@ -6,7 +6,7 @@ Growth Journey는 [공통 JSON 계약 v2](../docs/growth-journey-update/공통_J
 
 - `POST /api/journey/analyze`는 Spring이 저장 기록·해시·버전을 AI `/api/analyze/journey`에 JSON으로 전달한다.
 - `GET /api/journey`는 저장 결과를 읽는다. `criteria_version` 컬럼은 초기화 시 추가하며 구형 분석 행을 자동 변환·삭제하지 않는다.
-- 프론트와 독립 OpenAPI는 아직 구형 구조다. 후속 수정 전에는 새 Journey 응답과 호환되지 않는다. 실제 AI 구현도 새 계약 적용이 필요하다.
+- 프론트와 독립 OpenAPI·Swagger도 새 Journey 구조를 적용했다. 실제 AI 구현의 새 계약 적용과 실제 연동 확인은 별도 작업이다.
 - 로컬 검증은 임시 DB·가짜 AI HTTP 서버를 사용한다. 실제 AI 연동·EC2 배포는 수행하지 않았다.
 
 JDK 21로 `./gradlew.bat test bootJar --console=plain`을 실행한다. Windows 한글 경로에서 테스트 워커가 시작되지 않으면 ASCII 캐시·임시 경로를 사용한다. PowerShell에서 `-D` 인수는 따옴표로 감싼다.

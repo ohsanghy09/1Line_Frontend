@@ -4,7 +4,7 @@
   "info": {
     "title": "Growth AI 분석 서버 handoff API",
     "version": "2026-11-06",
-    "description": "AI 담당자가 이 문서의 API를 제공합니다. 프론트가 호출하는 공개 홈 API 4개와 백엔드가 호출하는 내부 분석 API 3개가 있습니다. AI는 입력·파일·링크를 분석하고 작업 상태와 결과를 제공합니다. 활동·확정 기록·성장 결과의 확정 저장은 백엔드가 담당합니다.\n\n**구현 기준**\n2026-11-06 handoff의 HTTP·JSON 계약입니다. 각 담당자가 언어·프레임워크·DB를 선택할 수 있습니다. 이 연동 프로파일의 공급자 표기는 analysisProvider=openai입니다. 날짜·원문 근거·실제 ID·동시 변경·원자성 규칙도 함께 구현합니다.\n\n**주소와 호출 범위**\nServers의 example.org는 설명용 주소이며 실제 주소는 각 서버 담당자가 제공합니다. 공개 Base는 /api까지 포함하고 목록의 /chat·/records 같은 경로를 이어 붙입니다. 내부 API에는 별도 서버용 Base를 사용할 수 있으며 해당 작업의 Servers에 설명용 내부 주소를 표시했습니다. 공개 API의 인증·사용자 식별은 연결 전에 협의하며 내부 API는 서버 간 Bearer 토큰과 권한 범위를 검증합니다.\n\n**홈 분석에서 기록 저장까지**\n\n1. 프론트가 AI에 요청하며 requestId와 conversationId를 보냅니다.\n2. AI가 접수 시 ai- jobId와 analysisId를 발급하고 작업·초안·원본을 백엔드에서 조회 가능하게 보관·게시합니다.\n3. AI가 분석 결과와 완료 상태를 영속 게시한 뒤 completed와 result를 반환합니다. 파일·링크는 jobId로 상태를 조회하고 파일 없는 respond-sync는 완료까지 기다립니다.\n4. 사용자가 분석 카드의 저장 버튼을 누르면 프론트가 완료 결과의 analysisId로 백엔드 POST /records를 요청합니다. 백엔드는 완료 초안과 원본을 확인해 기록을 확정하고 recordId를 반환합니다.\n5. AI 결과가 activity-update이면 프론트가 analysisId로 백엔드 POST /activities/apply-chat-update를 호출합니다. 백엔드는 활동 정보를 변경하고 완료 답변을 반환합니다.\n\n일반 답변은 말풍선으로 표시합니다. 분석 카드의 기록 확정은 사용자 저장 동작으로 실행하고, activity-update는 활동 정보 수정 흐름으로 처리합니다.\n\n**ID와 예시**\njobId는 분석 진행 조회, analysisId는 분석 초안 조회와 저장 요청, recordId는 확정 기록 조회·수정에 사용합니다. activityId는 실제 활동, fileId는 실제 원본을 가리킵니다. 예시 ID·시각·도메인·해시는 설명용 값이며 실제 데이터로 교체합니다. 상태별 null·생략·빈 배열 규칙은 각 Schema와 JSON 예시를 확인합니다. 문서 화면에서 API 실행은 비활성화되어 있습니다.\n\n**함께 읽을 원문**\n[담당 파트 API](/swagger/handoff/ai/handoff/API_정의서.html) · [역할과 요청 순서](/swagger/handoff/common/handoff/서버별_역할과_요청_흐름.html) · [공통 데이터](/swagger/handoff/common/handoff/공통_데이터_계약.html) · [서버 간 전달](/swagger/handoff/common/handoff/서버간_데이터_전달_계약.html) · [상태와 오류](/swagger/handoff/common/handoff/상태와_오류_처리.html) · [구현 환경](/swagger/handoff/common/handoff/개발환경과_구현_범위.html) · [배포와 연결](/swagger/handoff/common/integration/handoff/배포와_서버_연결.html)"
+    "description": "AI 담당자가 이 문서의 API를 제공합니다. 프론트가 호출하는 공개 홈 API 4개와 백엔드가 호출하는 내부 분석 API 3개가 있습니다. AI는 입력·파일·링크를 분석하고 작업 상태와 결과를 제공합니다. 활동·확정 기록·성장 결과의 확정 저장은 백엔드가 담당합니다.\n\n**구현 기준**\n2026-11-06 handoff의 HTTP·JSON 계약입니다. 각 담당자가 언어·프레임워크·DB를 선택할 수 있습니다. 이 연동 프로파일의 공급자 표기는 analysisProvider=openai입니다. 날짜·원문 근거·실제 ID·동시 변경·원자성 규칙도 함께 구현합니다.\n\n**주소와 호출 범위**\nServers의 example.org는 설명용 주소이며 실제 주소는 각 서버 담당자가 제공합니다. 공개 Base는 /api까지 포함하고 목록의 /chat·/records 같은 경로를 이어 붙입니다. 내부 API에는 별도 서버용 Base를 사용할 수 있으며 해당 작업의 Servers에 설명용 내부 주소를 표시했습니다. 공개 API의 인증·사용자 식별은 연결 전에 협의하며 내부 API는 서버 간 Bearer 토큰과 권한 범위를 검증합니다.\n\n**홈 분석에서 기록 저장까지**\n\n1. 프론트가 AI에 요청하며 requestId와 conversationId를 보냅니다.\n2. AI가 접수 시 ai- jobId와 analysisId를 발급하고 작업·초안·원본을 백엔드에서 조회 가능하게 보관·게시합니다.\n3. AI가 분석 결과와 완료 상태를 영속 게시한 뒤 completed와 result를 반환합니다. 파일·링크는 jobId로 상태를 조회하고 파일 없는 respond-sync는 완료까지 기다립니다.\n4. 사용자가 분석 카드의 저장 버튼을 누르면 프론트가 완료 결과의 analysisId로 백엔드 POST /records를 요청합니다. 백엔드는 완료 초안과 원본을 확인해 기록을 확정하고 recordId를 반환합니다.\n5. AI 결과가 activity-update이면 프론트가 analysisId로 백엔드 POST /activities/apply-chat-update를 호출합니다. 백엔드는 활동 정보를 변경하고 완료 답변을 반환합니다.\n\n일반 답변은 말풍선으로 표시합니다. 분석 카드의 기록 확정은 사용자 저장 동작으로 실행하고, activity-update는 활동 정보 수정 흐름으로 처리합니다.\n\n**ID와 예시**\njobId는 분석 진행 조회, analysisId는 분석 초안 조회와 저장 요청, recordId는 확정 기록 조회·수정에 사용합니다. activityId는 실제 활동, fileId는 실제 원본을 가리킵니다. 예시 ID·시각·도메인·해시는 설명용 값이며 실제 데이터로 교체합니다. 상태별 null·생략·빈 배열 규칙은 각 Schema와 JSON 예시를 확인합니다. 문서 화면에서 API 실행은 비활성화되어 있습니다.\n\n**함께 읽을 원문**\n[담당 파트 API](/swagger/handoff/ai/handoff/API_정의서.html) · [역할과 요청 순서](/swagger/handoff/common/handoff/서버별_역할과_요청_흐름.html) · [공통 데이터](/swagger/handoff/common/handoff/공통_데이터_계약.html) · [서버 간 전달](/swagger/handoff/common/handoff/서버간_데이터_전달_계약.html) · [상태와 오류](/swagger/handoff/common/handoff/상태와_오류_처리.html) · [구현 환경](/swagger/handoff/common/handoff/개발환경과_구현_범위.html) · [배포와 연결](/swagger/handoff/common/integration/handoff/배포와_서버_연결.html)\n\nGrowth Journey v2: 고정 5종과 유형별 판단·비교·경험 전이. Spring·프론트 로컬 검사는 완료했으나 실제 AI 구현·연동·배포는 미검증입니다. [최신 공통 JSON 계약](/swagger/handoff/growth-journey-update/공통_JSON_계약.html) · [AI 담당자 전달사항](/swagger/handoff/growth-journey-update/AI_담당자_전달사항.html) · [Growth Journey 작업 안내](/swagger/handoff/growth-journey-update/README.html)"
   },
   "servers": [
     {
@@ -28,7 +28,10 @@
     "docs/ai/handoff/분석_입출력과_검증_규칙.md",
     "docs/common/handoff/공통_데이터_계약.md",
     "docs/common/handoff/상태와_오류_처리.md",
-    "docs/common/handoff/서버간_데이터_전달_계약.md"
+    "docs/common/handoff/서버간_데이터_전달_계약.md",
+    "docs/growth-journey-update/README.md",
+    "docs/growth-journey-update/공통_JSON_계약.md",
+    "docs/growth-journey-update/AI_담당자_전달사항.md"
   ],
   "paths": {
     "/chat/health": {
@@ -792,37 +795,202 @@
                 "schema": {
                   "$ref": "#/components/schemas/JourneyResult"
                 },
-                "example": {
-                  "sourceFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                  "recordCount": 1,
-                  "model": "configured-model",
-                  "promptVersion": "journey-v5",
-                  "result": {
-                    "source": "api",
-                    "summary": {
-                      "title": "활동을 시작했어요.",
-                      "description": "성장 변화를 판단하려면 기록이 더 필요해요.",
-                      "evidence": [
-                        {
-                          "recordId": "record-01",
-                          "quote": "북클럽봄을 시작했어요."
-                        }
-                      ]
-                    },
-                    "badges": [],
-                    "typeOptions": [
-                      {
-                        "value": "all",
-                        "label": "전체"
+                "examples": {
+                  "analyzed": {
+                    "summary": "한 문장 복수 유형",
+                    "value": {
+                      "schemaVersion": "journey-result-v2",
+                      "criteriaVersion": "growth-criteria-v1",
+                      "sourceFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                      "recordCount": 1,
+                      "model": "configured-model",
+                      "promptVersion": "journey-v6",
+                      "result": {
+                        "schemaVersion": "journey-result-v2",
+                        "criteriaVersion": "growth-criteria-v1",
+                        "source": "api",
+                        "summary": {
+                          "title": "배포 경험을 활용해 시간을 줄였어요.",
+                          "description": "같은 테스트를 통과하며 배포 경험을 다른 활동에 적용했어요.",
+                          "evidence": [
+                            {
+                              "recordId": "record-01",
+                              "quote": "개인 프로젝트에서 익힌 EC2 설정을 Growth AI에 적용했고, 배포 자동화로 30분에서 5분으로 줄이면서 같은 기능 테스트 10개를 모두 통과했다."
+                            }
+                          ]
+                        },
+                        "badges": [],
+                        "typeOptions": [
+                          {
+                            "value": "all",
+                            "label": "전체"
+                          },
+                          {
+                            "value": "capability_expansion",
+                            "label": "능력 확장"
+                          },
+                          {
+                            "value": "performance_improvement",
+                            "label": "성과 향상"
+                          },
+                          {
+                            "value": "experience_accumulation",
+                            "label": "경험 축적"
+                          },
+                          {
+                            "value": "efficiency_improvement",
+                            "label": "효율성"
+                          },
+                          {
+                            "value": "experience_transfer",
+                            "label": "경험 전이"
+                          }
+                        ],
+                        "axisOptions": [
+                          {
+                            "value": "all",
+                            "label": "전체 분야"
+                          },
+                          {
+                            "value": "backend",
+                            "label": "백엔드 개발"
+                          }
+                        ],
+                        "events": [
+                          {
+                            "id": "event-0",
+                            "occurredAt": "2026-11",
+                            "activity": {
+                              "id": "activity-01",
+                              "name": "Growth AI"
+                            },
+                            "axis": "backend",
+                            "title": "경험을 활용해 배포 시간을 줄였어요.",
+                            "description": "기존 배포 경험을 적용하고 자동화했어요.",
+                            "growthAssessments": [
+                              {
+                                "type": "efficiency_improvement",
+                                "reason": "같은 테스트를 통과하면서 배포 시간을 30분에서 5분으로 줄였어요.",
+                                "evidence": [
+                                  {
+                                    "recordId": "record-01",
+                                    "quote": "개인 프로젝트에서 익힌 EC2 설정을 Growth AI에 적용했고, 배포 자동화로 30분에서 5분으로 줄이면서 같은 기능 테스트 10개를 모두 통과했다."
+                                  }
+                                ],
+                                "comparison": {
+                                  "before": "배포 30분",
+                                  "after": "배포 5분",
+                                  "condition": "같은 기능 테스트 10개 모두 통과",
+                                  "beforeEvidence": [
+                                    {
+                                      "recordId": "record-01",
+                                      "quote": "개인 프로젝트에서 익힌 EC2 설정을 Growth AI에 적용했고, 배포 자동화로 30분에서 5분으로 줄이면서 같은 기능 테스트 10개를 모두 통과했다."
+                                    }
+                                  ],
+                                  "afterEvidence": [
+                                    {
+                                      "recordId": "record-01",
+                                      "quote": "개인 프로젝트에서 익힌 EC2 설정을 Growth AI에 적용했고, 배포 자동화로 30분에서 5분으로 줄이면서 같은 기능 테스트 10개를 모두 통과했다."
+                                    }
+                                  ]
+                                }
+                              },
+                              {
+                                "type": "experience_transfer",
+                                "reason": "개인 프로젝트의 EC2 설정 경험을 Growth AI에 적용했어요.",
+                                "evidence": [
+                                  {
+                                    "recordId": "record-01",
+                                    "quote": "개인 프로젝트에서 익힌 EC2 설정을 Growth AI에 적용했고, 배포 자동화로 30분에서 5분으로 줄이면서 같은 기능 테스트 10개를 모두 통과했다."
+                                  }
+                                ],
+                                "transfer": {
+                                  "sourceActivity": {
+                                    "id": null,
+                                    "name": "개인 프로젝트"
+                                  },
+                                  "experience": "EC2 설정 경험",
+                                  "targetActivityId": "activity-01",
+                                  "application": "Growth AI 배포에 EC2 설정 경험 적용",
+                                  "sourceEvidence": [
+                                    {
+                                      "recordId": "record-01",
+                                      "quote": "개인 프로젝트에서 익힌 EC2 설정을 Growth AI에 적용했고, 배포 자동화로 30분에서 5분으로 줄이면서 같은 기능 테스트 10개를 모두 통과했다."
+                                    }
+                                  ],
+                                  "applicationEvidence": [
+                                    {
+                                      "recordId": "record-01",
+                                      "quote": "개인 프로젝트에서 익힌 EC2 설정을 Growth AI에 적용했고, 배포 자동화로 30분에서 5분으로 줄이면서 같은 기능 테스트 10개를 모두 통과했다."
+                                    }
+                                  ]
+                                }
+                              }
+                            ]
+                          }
+                        ]
                       }
-                    ],
-                    "axisOptions": [
-                      {
-                        "value": "all",
-                        "label": "전체 분야"
+                    }
+                  },
+                  "insufficient": {
+                    "summary": "근거 부족 정상 결과",
+                    "value": {
+                      "schemaVersion": "journey-result-v2",
+                      "criteriaVersion": "growth-criteria-v1",
+                      "sourceFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                      "recordCount": 1,
+                      "model": "configured-model",
+                      "promptVersion": "journey-v6",
+                      "result": {
+                        "schemaVersion": "journey-result-v2",
+                        "criteriaVersion": "growth-criteria-v1",
+                        "source": "api",
+                        "summary": {
+                          "title": "성장 판단을 유보했어요.",
+                          "description": "성장 근거가 부족해요.",
+                          "evidence": [
+                            {
+                              "recordId": "record-01",
+                              "quote": "개인 프로젝트에서 익힌 EC2 설정을 Growth AI에 적용했고, 배포 자동화로 30분에서 5분으로 줄이면서 같은 기능 테스트 10개를 모두 통과했다."
+                            }
+                          ]
+                        },
+                        "badges": [],
+                        "typeOptions": [
+                          {
+                            "value": "all",
+                            "label": "전체"
+                          },
+                          {
+                            "value": "capability_expansion",
+                            "label": "능력 확장"
+                          },
+                          {
+                            "value": "performance_improvement",
+                            "label": "성과 향상"
+                          },
+                          {
+                            "value": "experience_accumulation",
+                            "label": "경험 축적"
+                          },
+                          {
+                            "value": "efficiency_improvement",
+                            "label": "효율성"
+                          },
+                          {
+                            "value": "experience_transfer",
+                            "label": "경험 전이"
+                          }
+                        ],
+                        "axisOptions": [
+                          {
+                            "value": "all",
+                            "label": "전체 분야"
+                          }
+                        ],
+                        "events": []
                       }
-                    ],
-                    "events": []
+                    }
                   }
                 }
               }
@@ -879,7 +1047,7 @@
             }
           },
           "422": {
-            "description": "처리할 기록·근거 없음 또는 입력 한도 초과",
+            "description": "요청 형식·지원 버전·입력 한도 오류. 성장 판단 유보는 정상 200",
             "content": {
               "application/json": {
                 "schema": {
@@ -935,11 +1103,37 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/JourneyInput"
+              },
+              "example": {
+                "schemaVersion": "journey-result-v2",
+                "criteriaVersion": "growth-criteria-v1",
+                "sourceFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "recordCount": 1,
+                "records": [
+                  {
+                    "id": "record-01",
+                    "activityId": "activity-01",
+                    "activityName": "Growth AI",
+                    "message": "개인 프로젝트에서 익힌 EC2 설정을 Growth AI에 적용했고, 배포 자동화로 30분에서 5분으로 줄이면서 같은 기능 테스트 10개를 모두 통과했다.",
+                    "summary": "개인 프로젝트에서 익힌 EC2 설정을 Growth AI에 적용했고, 배포 자동화로 30분에서 5분으로 줄이면서 같은 기능 테스트 10개를 모두 통과했다.",
+                    "changes": [],
+                    "savedAt": "2026-11-12T03:00:00Z",
+                    "updatedAt": "2026-11-12T03:00:00Z",
+                    "activity": {
+                      "category": "개발",
+                      "role": null,
+                      "summary": null,
+                      "startDate": null,
+                      "endDate": null
+                    },
+                    "files": []
+                  }
+                ]
               }
             }
           }
         },
-        "description": "AI 담당자가 제공하고 백엔드 서버가 호출합니다.\n\n백엔드 전용. 기록 1~100개·JSON 250000자 이하. 내부 근거 후보 2000개와 모델 입력 250000자 한도. AI 모델 전용 evidenceId는 실제 recordId·quote로 복원한다. 서버 간 응답에는 원문 근거를 사용하며 백엔드가 fingerprint·원문·활동·월을 검증해 확정 저장한다.\n\n[서버 간 요청·응답 원문](/swagger/handoff/common/handoff/서버간_데이터_전달_계약.html)",
+        "description": "AI 담당자가 제공하고 백엔드 서버가 호출합니다.\n\n백엔드 전용. 기록 1~100개·JSON 250000자 이하. 내부 근거 후보 2000개와 모델 입력 250000자 한도. AI 모델 전용 evidenceId는 실제 recordId·quote로 복원한다. 서버 간 응답에는 원문 근거를 사용하며 백엔드가 fingerprint·원문·활동·월을 검증해 확정 저장한다.\n\n[서버 간 요청·응답 원문](/swagger/handoff/common/handoff/서버간_데이터_전달_계약.html)\n\njourney-result-v2 / growth-criteria-v1, promptVersion=journey-v6. 한 기록 비교와 미등록 출발 활동을 허용합니다. [최신 공통 JSON 계약](/swagger/handoff/growth-journey-update/공통_JSON_계약.html). 실제 AI 구현·원격 연동 검증 완료를 뜻하지 않습니다.",
         "security": [
           {
             "InternalServiceToken": []
@@ -2371,112 +2565,20 @@
         "description": "백엔드가 발급한 스냅샷 SHA-256. AI는 요청값을 그대로 반환한다."
       },
       "FreshJourney": {
-        "allOf": [
-          {
-            "$ref": "#/components/schemas/SavedJourney"
-          },
-          {
-            "type": "object",
-            "properties": {
-              "summary": {
-                "type": "object",
-                "required": [
-                  "evidence"
-                ],
-                "properties": {
-                  "evidence": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/components/schemas/Evidence"
-                    },
-                    "minItems": 1,
-                    "maxItems": 20,
-                    "description": "해당 기록의 message 또는 analysis.summary 연속 원문. 실제 ID와 원문은 서버에서 검증한다."
-                  }
-                }
-              },
-              "badges": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "required": [
-                    "icon",
-                    "evidence"
-                  ],
-                  "properties": {
-                    "evidence": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/Evidence"
-                      },
-                      "minItems": 1,
-                      "maxItems": 5,
-                      "description": "해당 기록의 message 또는 analysis.summary 연속 원문. 실제 ID와 원문은 서버에서 검증한다."
-                    }
-                  }
-                }
-              },
-              "events": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "required": [
-                    "evidence"
-                  ],
-                  "properties": {
-                    "evidence": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/Evidence"
-                      },
-                      "minItems": 1,
-                      "maxItems": 10,
-                      "description": "해당 기록의 message 또는 analysis.summary 연속 원문. 실제 ID와 원문은 서버에서 검증한다."
-                    }
-                  }
-                }
-              },
-              "typeOptions": {
-                "type": "array",
-                "maxItems": 9,
-                "items": {
-                  "if": {
-                    "required": [
-                      "value"
-                    ],
-                    "properties": {
-                      "value": {
-                        "not": {
-                          "const": "all"
-                        }
-                      }
-                    }
-                  },
-                  "then": {
-                    "required": [
-                      "icon"
-                    ]
-                  }
-                }
-              },
-              "axisOptions": {
-                "type": "array",
-                "maxItems": 9
-              }
-            }
-          }
-        ],
-        "description": "새 성장 분석 결과입니다. AI는 근거를 포함한 결과를 반환하고 백엔드는 재검증 뒤 저장합니다. 신규 분석은 요약·배지·이벤트의 실제 근거가 필수다. 비교는 서로 다른 기록 두 개 이상의 근거가 필요하다. 서버는 출력·ID·활동·월·인용을 검증하며 백엔드 저장 시 이벤트·배지 ID를 새로 발급한다.",
+        "$ref": "#/components/schemas/SavedJourney",
+        "description": "새 AI 분석 본문. summary 근거는 유보 시에도 필수. 근거 부족은 빈 events/badges로 정상 반환한다. analysis/evidenceSources는 Spring이 추가하므로 공급자 result에 금지한다. 분야는 실제 사용한 것만 반환한다.",
         "examples": [
           {
+            "schemaVersion": "journey-result-v2",
+            "criteriaVersion": "growth-criteria-v1",
             "source": "api",
             "summary": {
-              "title": "피드백으로 범위를 조정했어요.",
-              "description": "사용자 인터뷰를 바탕으로 기능을 줄인 기록이 있어요.",
+              "title": "배포 경험을 활용해 시간을 줄였어요.",
+              "description": "같은 테스트를 통과하며 배포 경험을 다른 활동에 적용했어요.",
               "evidence": [
                 {
-                  "recordId": "record-02",
-                  "quote": "인터뷰 후 기능을 3개로 줄였어요."
+                  "recordId": "record-01",
+                  "quote": "개인 프로젝트에서 익힌 EC2 설정을 Growth AI에 적용했고, 배포 자동화로 30분에서 5분으로 줄이면서 같은 기능 테스트 10개를 모두 통과했다."
                 }
               ]
             },
@@ -2487,9 +2589,24 @@
                 "label": "전체"
               },
               {
-                "value": "feedback",
-                "label": "피드백 반영",
-                "icon": "💬"
+                "value": "capability_expansion",
+                "label": "능력 확장"
+              },
+              {
+                "value": "performance_improvement",
+                "label": "성과 향상"
+              },
+              {
+                "value": "experience_accumulation",
+                "label": "경험 축적"
+              },
+              {
+                "value": "efficiency_improvement",
+                "label": "효율성"
+              },
+              {
+                "value": "experience_transfer",
+                "label": "경험 전이"
               }
             ],
             "axisOptions": [
@@ -2498,8 +2615,8 @@
                 "label": "전체 분야"
               },
               {
-                "value": "product",
-                "label": "제품 기획"
+                "value": "backend",
+                "label": "백엔드 개발"
               }
             ],
             "events": [
@@ -2508,28 +2625,69 @@
                 "occurredAt": "2026-11",
                 "activity": {
                   "id": "activity-01",
-                  "name": "기록 앱"
+                  "name": "Growth AI"
                 },
-                "type": "feedback",
-                "axis": "product",
-                "title": "인터뷰로 기능 범위를 조정했어요.",
-                "description": "사용자 인터뷰 뒤 초기 계획을 좁혔어요.",
-                "comparison": {
-                  "before": "기능 6개를 계획했어요.",
-                  "after": "인터뷰 후 기능을 3개로 줄였어요.",
-                  "evidence": [
-                    "기능 6개를 계획했어요.",
-                    "인터뷰 후 기능을 3개로 줄였어요."
-                  ]
-                },
-                "evidence": [
+                "axis": "backend",
+                "title": "경험을 활용해 배포 시간을 줄였어요.",
+                "description": "기존 배포 경험을 적용하고 자동화했어요.",
+                "growthAssessments": [
                   {
-                    "recordId": "record-01",
-                    "quote": "기능 6개를 계획했어요."
+                    "type": "efficiency_improvement",
+                    "reason": "같은 테스트를 통과하면서 배포 시간을 30분에서 5분으로 줄였어요.",
+                    "evidence": [
+                      {
+                        "recordId": "record-01",
+                        "quote": "개인 프로젝트에서 익힌 EC2 설정을 Growth AI에 적용했고, 배포 자동화로 30분에서 5분으로 줄이면서 같은 기능 테스트 10개를 모두 통과했다."
+                      }
+                    ],
+                    "comparison": {
+                      "before": "배포 30분",
+                      "after": "배포 5분",
+                      "condition": "같은 기능 테스트 10개 모두 통과",
+                      "beforeEvidence": [
+                        {
+                          "recordId": "record-01",
+                          "quote": "개인 프로젝트에서 익힌 EC2 설정을 Growth AI에 적용했고, 배포 자동화로 30분에서 5분으로 줄이면서 같은 기능 테스트 10개를 모두 통과했다."
+                        }
+                      ],
+                      "afterEvidence": [
+                        {
+                          "recordId": "record-01",
+                          "quote": "개인 프로젝트에서 익힌 EC2 설정을 Growth AI에 적용했고, 배포 자동화로 30분에서 5분으로 줄이면서 같은 기능 테스트 10개를 모두 통과했다."
+                        }
+                      ]
+                    }
                   },
                   {
-                    "recordId": "record-02",
-                    "quote": "인터뷰 후 기능을 3개로 줄였어요."
+                    "type": "experience_transfer",
+                    "reason": "개인 프로젝트의 EC2 설정 경험을 Growth AI에 적용했어요.",
+                    "evidence": [
+                      {
+                        "recordId": "record-01",
+                        "quote": "개인 프로젝트에서 익힌 EC2 설정을 Growth AI에 적용했고, 배포 자동화로 30분에서 5분으로 줄이면서 같은 기능 테스트 10개를 모두 통과했다."
+                      }
+                    ],
+                    "transfer": {
+                      "sourceActivity": {
+                        "id": null,
+                        "name": "개인 프로젝트"
+                      },
+                      "experience": "EC2 설정 경험",
+                      "targetActivityId": "activity-01",
+                      "application": "Growth AI 배포에 EC2 설정 경험 적용",
+                      "sourceEvidence": [
+                        {
+                          "recordId": "record-01",
+                          "quote": "개인 프로젝트에서 익힌 EC2 설정을 Growth AI에 적용했고, 배포 자동화로 30분에서 5분으로 줄이면서 같은 기능 테스트 10개를 모두 통과했다."
+                        }
+                      ],
+                      "applicationEvidence": [
+                        {
+                          "recordId": "record-01",
+                          "quote": "개인 프로젝트에서 익힌 EC2 설정을 Growth AI에 적용했고, 배포 자동화로 30분에서 5분으로 줄이면서 같은 기능 테스트 10개를 모두 통과했다."
+                        }
+                      ]
+                    }
                   }
                 ]
               }
@@ -2714,12 +2872,15 @@
         "type": "object",
         "properties": {
           "id": {
-            "$ref": "#/components/schemas/Identifier"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S"
           },
           "label": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 20000,
+            "maxLength": 80,
             "pattern": "\\S"
           },
           "icon": {
@@ -2731,65 +2892,60 @@
           "evidence": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/Evidence"
+              "$ref": "#/components/schemas/JourneyEvidence"
             },
             "minItems": 1,
-            "description": "해당 기록의 message 또는 analysis.summary 연속 원문. 실제 ID와 원문은 서버에서 검증한다."
+            "maxItems": 5
           }
         },
         "required": [
           "id",
-          "label"
-        ]
+          "label",
+          "icon",
+          "evidence"
+        ],
+        "additionalProperties": false
       },
       "JourneyEvent": {
         "type": "object",
         "properties": {
           "id": {
-            "$ref": "#/components/schemas/Identifier"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S"
           },
           "occurredAt": {
             "type": "string",
-            "pattern": "^(?!0000)[0-9]{4}-(0[1-9]|1[0-2])$"
+            "pattern": "^(?!0000)[0-9]{4}-(0[1-9]|1[0-2])$",
+            "description": "이벤트 전체 근거 중 가장 늦은 저장 시각의 UTC 월. 실제 경험 발생 월이 아니다."
           },
           "activity": {
             "type": "object",
             "properties": {
               "id": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/Identifier"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "pattern": "\\S"
               },
               "name": {
                 "type": "string",
                 "minLength": 1,
-                "maxLength": 20000,
+                "maxLength": 200,
                 "pattern": "\\S"
               }
             },
             "required": [
               "id",
               "name"
-            ]
-          },
-          "type": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 200,
-            "pattern": "\\S",
-            "not": {
-              "const": "all"
-            }
+            ],
+            "additionalProperties": false
           },
           "axis": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 200,
+            "maxLength": 80,
             "pattern": "\\S",
             "not": {
               "const": "all"
@@ -2798,68 +2954,45 @@
           "title": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 20000,
+            "maxLength": 120,
             "pattern": "\\S"
           },
           "description": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 20000,
+            "maxLength": 1000,
             "pattern": "\\S"
           },
-          "evidence": {
+          "growthAssessments": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/Evidence"
+              "$ref": "#/components/schemas/JourneyAssessment"
             },
             "minItems": 1,
-            "description": "해당 기록의 message 또는 analysis.summary 연속 원문. 실제 ID와 원문은 서버에서 검증한다."
-          },
-          "comparison": {
-            "type": "object",
-            "properties": {
-              "before": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 20000,
-                "pattern": "\\S"
-              },
-              "after": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 20000,
-                "pattern": "\\S"
-              },
-              "evidence": {
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 20000,
-                  "pattern": "\\S"
-                }
-              }
-            },
-            "required": [
-              "before",
-              "after",
-              "evidence"
-            ]
+            "maxItems": 5
           }
         },
         "required": [
           "id",
           "occurredAt",
           "activity",
-          "type",
           "axis",
           "title",
-          "description"
-        ]
+          "description",
+          "growthAssessments"
+        ],
+        "additionalProperties": false,
+        "description": "기존 최상위 type/evidence/comparison은 금지. 실제 근거·활동·날짜·분야 참조 및 유형 중복은 서버에서 검증한다."
       },
       "JourneyInput": {
         "type": "object",
         "properties": {
+          "schemaVersion": {
+            "const": "journey-result-v2"
+          },
+          "criteriaVersion": {
+            "const": "growth-criteria-v1"
+          },
           "records": {
             "type": "array",
             "items": {
@@ -2878,10 +3011,14 @@
           }
         },
         "required": [
+          "schemaVersion",
+          "criteriaVersion",
           "records",
           "recordCount",
           "sourceFingerprint"
-        ]
+        ],
+        "additionalProperties": false,
+        "description": "recordCount=records.length. 요청 JSON 250000 유니코드 코드 포인트 이하. 초과 시 절삭 없이 422. AI는 전달 해시를 재계산하지 않고 반환한다."
       },
       "JourneyOption": {
         "type": "object",
@@ -2889,41 +3026,41 @@
           "value": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 200,
+            "maxLength": 80,
             "pattern": "\\S"
           },
           "label": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 20000,
-            "pattern": "\\S"
-          },
-          "icon": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 16,
+            "maxLength": 40,
             "pattern": "\\S"
           }
         },
         "required": [
           "value",
           "label"
-        ]
+        ],
+        "additionalProperties": false
       },
       "JourneyRecord": {
         "type": "object",
         "properties": {
           "id": {
-            "$ref": "#/components/schemas/AIIdentifier"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S"
           },
           "activityId": {
-            "$ref": "#/components/schemas/AIIdentifier",
-            "description": "백엔드에 실제 존재하는 활동 ID. 활동명이나 배열 순서로 대체하지 않는다."
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S"
           },
           "activityName": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 20000,
+            "maxLength": 200,
             "pattern": "\\S"
           },
           "message": {
@@ -2932,14 +3069,15 @@
           "summary": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 20000,
+            "maxLength": 250000,
             "pattern": "\\S"
           },
           "changes": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/Change"
-            }
+            },
+            "maxItems": 100
           },
           "savedAt": {
             "type": "string",
@@ -2957,10 +3095,7 @@
               "category": {
                 "anyOf": [
                   {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 200,
-                    "pattern": "\\S"
+                    "type": "string"
                   },
                   {
                     "type": "null"
@@ -2970,10 +3105,7 @@
               "role": {
                 "anyOf": [
                   {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 20000,
-                    "pattern": "\\S"
+                    "type": "string"
                   },
                   {
                     "type": "null"
@@ -2983,10 +3115,7 @@
               "summary": {
                 "anyOf": [
                   {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 20000,
-                    "pattern": "\\S"
+                    "type": "string"
                   },
                   {
                     "type": "null"
@@ -2996,9 +3125,7 @@
               "startDate": {
                 "anyOf": [
                   {
-                    "type": "string",
-                    "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])(?:-(0[1-9]|[12][0-9]|3[01]))?$",
-                    "description": "유효한 달력 월 또는 날짜. 서버에서 실제 날짜와 시작·종료 순서를 검사한다."
+                    "type": "string"
                   },
                   {
                     "type": "null"
@@ -3008,9 +3135,7 @@
               "endDate": {
                 "anyOf": [
                   {
-                    "type": "string",
-                    "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])(?:-(0[1-9]|[12][0-9]|3[01]))?$",
-                    "description": "유효한 달력 월 또는 날짜. 서버에서 실제 날짜와 시작·종료 순서를 검사한다."
+                    "type": "string"
                   },
                   {
                     "type": "null"
@@ -3024,7 +3149,8 @@
               "summary",
               "startDate",
               "endDate"
-            ]
+            ],
+            "additionalProperties": false
           },
           "files": {
             "type": "array",
@@ -3032,19 +3158,20 @@
               "type": "object",
               "properties": {
                 "id": {
-                  "$ref": "#/components/schemas/AIIdentifier"
-                },
-                "name": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 20000,
+                  "maxLength": 200,
                   "pattern": "\\S"
+                },
+                "name": {
+                  "type": "string"
                 }
               },
               "required": [
                 "id",
                 "name"
-              ]
+              ],
+              "additionalProperties": false
             }
           }
         },
@@ -3059,11 +3186,18 @@
           "updatedAt",
           "activity",
           "files"
-        ]
+        ],
+        "additionalProperties": false
       },
       "JourneyResult": {
         "type": "object",
         "properties": {
+          "schemaVersion": {
+            "const": "journey-result-v2"
+          },
+          "criteriaVersion": {
+            "const": "growth-criteria-v1"
+          },
           "sourceFingerprint": {
             "$ref": "#/components/schemas/Fingerprint"
           },
@@ -3075,23 +3209,26 @@
           "model": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 20000,
+            "maxLength": 200,
             "pattern": "\\S"
           },
           "promptVersion": {
-            "const": "journey-v5"
+            "const": "journey-v6"
           },
           "result": {
             "$ref": "#/components/schemas/FreshJourney"
           }
         },
         "required": [
+          "schemaVersion",
+          "criteriaVersion",
           "sourceFingerprint",
           "recordCount",
           "model",
           "promptVersion",
           "result"
-        ]
+        ],
+        "additionalProperties": false
       },
       "JourneySummary": {
         "type": "object",
@@ -3099,28 +3236,29 @@
           "title": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 20000,
+            "maxLength": 120,
             "pattern": "\\S"
           },
           "description": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 20000,
+            "maxLength": 2000,
             "pattern": "\\S"
           },
           "evidence": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/Evidence"
+              "$ref": "#/components/schemas/JourneyEvidence"
             },
             "minItems": 1,
-            "description": "해당 기록의 message 또는 analysis.summary 연속 원문. 실제 ID와 원문은 서버에서 검증한다."
+            "maxItems": 20
           }
         },
         "required": [
           "title",
           "description"
-        ]
+        ],
+        "additionalProperties": false
       },
       "LinkInput": {
         "type": "object",
@@ -3222,40 +3360,109 @@
       "SavedJourney": {
         "type": "object",
         "properties": {
+          "schemaVersion": {
+            "const": "journey-result-v2"
+          },
+          "criteriaVersion": {
+            "const": "growth-criteria-v1"
+          },
           "source": {
             "const": "api"
           },
           "summary": {
-            "$ref": "#/components/schemas/JourneySummary"
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120,
+                "pattern": "\\S"
+              },
+              "description": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000,
+                "pattern": "\\S"
+              },
+              "evidence": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/JourneyEvidence"
+                },
+                "minItems": 1,
+                "maxItems": 20
+              }
+            },
+            "required": [
+              "title",
+              "description",
+              "evidence"
+            ],
+            "additionalProperties": false
           },
           "badges": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/JourneyBadge"
             },
+            "minItems": 0,
             "maxItems": 10
           },
           "typeOptions": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/JourneyOption"
-            }
+            },
+            "minItems": 6,
+            "maxItems": 6,
+            "const": [
+              {
+                "value": "all",
+                "label": "전체"
+              },
+              {
+                "value": "capability_expansion",
+                "label": "능력 확장"
+              },
+              {
+                "value": "performance_improvement",
+                "label": "성과 향상"
+              },
+              {
+                "value": "experience_accumulation",
+                "label": "경험 축적"
+              },
+              {
+                "value": "efficiency_improvement",
+                "label": "효율성"
+              },
+              {
+                "value": "experience_transfer",
+                "label": "경험 전이"
+              }
+            ],
+            "description": "전체+5종 순서·ID·라벨 고정. 아이콘은 프론트 표시 전용이다."
           },
           "axisOptions": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/JourneyOption"
-            }
+            },
+            "minItems": 1,
+            "maxItems": 9
           },
           "events": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/JourneyEvent"
             },
+            "minItems": 0,
             "maxItems": 20
           }
         },
         "required": [
+          "schemaVersion",
+          "criteriaVersion",
           "source",
           "summary",
           "badges",
@@ -3263,7 +3470,29 @@
           "axisOptions",
           "events"
         ],
-        "description": "기존 결과 조회는 evidence·icon 생략을 허용한다. 필드가 존재하면 null·빈 evidence를 거절한다. 선택지 value와 ID는 각각 유일하며 all 선택지를 포함한다. 이벤트 type/axis는 선택지의 실제 value를 참조한다. occurredAt은 근거 중 가장 늦은 최초 저장 월이다."
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "events": {
+                  "maxItems": 0
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "badges": {
+                  "maxItems": 0
+                },
+                "axisOptions": {
+                  "maxItems": 1
+                }
+              }
+            }
+          }
+        ],
+        "description": "새 AI 분석 본문. summary 근거는 유보 시에도 필수. 근거 부족은 빈 events/badges로 정상 반환한다. analysis/evidenceSources는 Spring이 추가하므로 공급자 result에 금지한다. 분야는 실제 사용한 것만 반환한다."
       },
       "ServiceError": {
         "type": "object",
@@ -3282,6 +3511,376 @@
           "error",
           "code"
         ]
+      },
+      "JourneyEvidence": {
+        "type": "object",
+        "properties": {
+          "recordId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S"
+          },
+          "quote": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 800,
+            "pattern": "\\S"
+          }
+        },
+        "required": [
+          "recordId",
+          "quote"
+        ],
+        "additionalProperties": false,
+        "description": "message 또는 reply.analysis.summary의 연속 원문. 원문을 trim/재작성하지 않는다. 중복 키는 recordId+quote다."
+      },
+      "JourneyComparison": {
+        "type": "object",
+        "properties": {
+          "before": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "pattern": "\\S"
+          },
+          "after": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "pattern": "\\S"
+          },
+          "condition": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "pattern": "\\S"
+          },
+          "beforeEvidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JourneyEvidence"
+            },
+            "minItems": 1,
+            "maxItems": 10
+          },
+          "afterEvidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JourneyEvidence"
+            },
+            "minItems": 1,
+            "maxItems": 10
+          }
+        },
+        "required": [
+          "before",
+          "after",
+          "condition",
+          "beforeEvidence",
+          "afterEvidence"
+        ],
+        "additionalProperties": false,
+        "description": "한 문장·동일 기록·같은 인용문으로 양쪽 상태를 뒷받침해도 허용한다. 역할별 근거는 판단 evidence에 포함한다. 효율성은 결과 수준 유지 근거도 필요하다."
+      },
+      "JourneyTransfer": {
+        "type": "object",
+        "properties": {
+          "sourceActivity": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "pattern": "\\S"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "pattern": "\\S"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ],
+            "additionalProperties": false
+          },
+          "experience": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "pattern": "\\S"
+          },
+          "targetActivityId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S"
+          },
+          "application": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "pattern": "\\S"
+          },
+          "sourceEvidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JourneyEvidence"
+            },
+            "minItems": 1,
+            "maxItems": 10
+          },
+          "applicationEvidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JourneyEvidence"
+            },
+            "minItems": 1,
+            "maxItems": 10
+          }
+        },
+        "required": [
+          "sourceActivity",
+          "experience",
+          "targetActivityId",
+          "application",
+          "sourceEvidence",
+          "applicationEvidence"
+        ],
+        "additionalProperties": false,
+        "description": "출발 활동의 경험을 다른 활동에 실제 적용한 연결. 미등록 출발 활동은 id:null 허용. 대상은 event.activity.id와 같고 적용 근거가 있어야 한다. 등록 출발 활동은 대상과 다르고 출발 근거와 연결돼야 한다. 역할별 근거는 판단 evidence의 부분집합이다."
+      },
+      "JourneyBasicAssessment": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "enum": [
+              "capability_expansion",
+              "experience_accumulation"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "pattern": "\\S"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JourneyEvidence"
+            },
+            "minItems": 1,
+            "maxItems": 10
+          },
+          "comparison": {
+            "$ref": "#/components/schemas/JourneyComparison"
+          }
+        },
+        "required": [
+          "type",
+          "reason",
+          "evidence"
+        ],
+        "additionalProperties": false
+      },
+      "JourneyComparisonAssessment": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "enum": [
+              "performance_improvement",
+              "efficiency_improvement"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "pattern": "\\S"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JourneyEvidence"
+            },
+            "minItems": 1,
+            "maxItems": 10
+          },
+          "comparison": {
+            "$ref": "#/components/schemas/JourneyComparison"
+          }
+        },
+        "required": [
+          "type",
+          "reason",
+          "evidence",
+          "comparison"
+        ],
+        "additionalProperties": false
+      },
+      "JourneyTransferAssessment": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "const": "experience_transfer"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "pattern": "\\S"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JourneyEvidence"
+            },
+            "minItems": 1,
+            "maxItems": 10
+          },
+          "comparison": {
+            "$ref": "#/components/schemas/JourneyComparison"
+          },
+          "transfer": {
+            "$ref": "#/components/schemas/JourneyTransfer"
+          }
+        },
+        "required": [
+          "type",
+          "reason",
+          "evidence",
+          "transfer"
+        ],
+        "additionalProperties": false
+      },
+      "JourneyAssessment": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/JourneyBasicAssessment"
+          },
+          {
+            "$ref": "#/components/schemas/JourneyComparisonAssessment"
+          },
+          {
+            "$ref": "#/components/schemas/JourneyTransferAssessment"
+          }
+        ],
+        "description": "고정 5종만 허용. 모든 유형은 reason/evidence 필수. 성과 향상·효율성은 comparison, 경험 전이는 transfer 필수. 같은 이벤트의 type 중복은 서버에서 거절한다."
+      },
+      "JourneyEvidenceSource": {
+        "type": "object",
+        "properties": {
+          "recordId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S"
+          },
+          "activityId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S"
+          },
+          "activityName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S"
+          }
+        },
+        "required": [
+          "recordId",
+          "activityId",
+          "activityName"
+        ],
+        "additionalProperties": false
+      },
+      "JourneyAnalysis": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "pattern": "\\S"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "generatedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "recordCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "currentRecordCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "pattern": "\\S"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "promptVersion": {
+            "anyOf": [
+              {
+                "const": "journey-v6"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "generatedAt",
+          "stale",
+          "recordCount",
+          "currentRecordCount",
+          "model",
+          "promptVersion"
+        ],
+        "additionalProperties": false
       }
     },
     "securitySchemes": {

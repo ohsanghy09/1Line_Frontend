@@ -8,6 +8,8 @@
 
 ## 개발 상태
 
+2026-11-12 Growth Journey에 고정 5종 성장 판단과 유형별 이유·비교·경험 전이·원문 근거 추가 펼침을 적용했습니다. Spring·DB와 프론트의 구현 기준 및 검증 범위는 [Growth Journey 수정 기록](docs/growth-journey-update/README.md)에 있습니다. OpenAPI·Swagger도 같은 계약으로 갱신했으며 Swagger에서 최신 계약과 JSON 예시를 확인할 수 있습니다. 실제 AI 연동과 배포는 수행하지 않았습니다.
+
 프론트 화면과 HTTP API 서비스, 대화 복원, 기록 저장·수정·삭제 요청 흐름을 구현했습니다.
 백엔드·AI 개발 서버와 초기 화면용 목데이터는 제거했으며, 프론트 설치·검사·빌드·Swagger 생성은 독립적으로 실행할 수 있습니다.
 

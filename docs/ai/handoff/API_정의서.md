@@ -1,5 +1,8 @@
 # AI API 정의서
 
+> Growth Journey v2 (2026-11-12): [최신 공통 JSON 계약](../../growth-journey-update/공통_JSON_계약.md)과 [전체 요청·응답 예시](../../growth-journey-update/examples/journey-exchange.json)를 따른다. Spring·프론트 및 OpenAPI·Swagger는 반영했으나 실제 AI 구현·원격 연동·배포는 미검증이다.
+
+
 기준일: 2026-11-06. [공통 계약](../../common/handoff/공통_데이터_계약.md) · [서버 간 전달](../../common/handoff/서버간_데이터_전달_계약.md)
 
 Base는 AI 파트가 제공하는 HTTPS 주소이며 /api까지 포함한다. 프론트 개발용 /ai-api는 별칭이었으며 실제 AI API 접두사가 아니다. 아래 경로는 Base 뒤 경로다. 현재 사용자 인증·내부 전용 토큰 검증은 없다. ‘내부’는 현재 호출자를 뜻하며 네트워크 차단이 구현됐다는 의미가 아니다.
@@ -64,7 +67,7 @@ multipart의 Content-Type과 boundary는 브라우저가 생성한다. 별도로
 | 메서드·경로 | 요청 | 응답·저장 책임 |
 | --- | --- | --- |
 | POST /analyze/activities/:activityId | JSON 활동 스냅샷. activity/previous/records/files/recordCount/sourceFingerprint, 상세는 서버 간 전달 계약 | {sourceFingerprint,recordCount,model,promptVersion:activity-metadata-v1,metadata}. 백엔드가 근거·해시 재검증 후 activities 갱신 |
-| POST /analyze/journey | JSON {records,recordCount,sourceFingerprint}, 상세는 서버 간 전달 계약 | {sourceFingerprint,recordCount,model,promptVersion:journey-v5,result:SavedJourney}. 백엔드가 저장 |
+| POST /analyze/journey | JSON {schemaVersion,criteriaVersion,records,recordCount,sourceFingerprint} | {schemaVersion,criteriaVersion,sourceFingerprint,recordCount,model,promptVersion:journey-v6,result:FreshJourney}. Spring이 검증·출처 추가 후 저장 |
 | POST /analyze/records/:recordId/exclude-file | JSON {fileId,recordReply,activity,files:남은 원본[]}, 상세는 서버 간 전달 계약 | {reply,recordReply:string,fileIds:string[]}. recordReply는 기존 records.reply JSON 원문. fileIds는 요청의 남은 원본 순서. 백엔드가 검증·삭제 |
 
 Journey v5는 AI 내부 모델에만 evidenceCatalog와 evidenceId 선택을 사용한다. 위 요청에는 카탈로그가 필요 없고 응답의 summary/badges/events 근거는 계속 [{recordId,quote}]다. 내부 입력·선택·복원·한도는 [분석 규칙](분석_입출력과_검증_규칙.md)의 Journey 절을 따른다. 기존 버전 결과를 새 내부 모델 스키마로 다시 검증하거나 마이그레이션하지 않는다.
@@ -79,16 +82,144 @@ metadata 객체는 summary:{value,evidence}, status:{value:진행 중/완료,evi
 {"sourceFingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","recordCount":1,"model":"configured-model","promptVersion":"activity-metadata-v1","metadata":{"summary":{"value":"북클럽봄을 시작했어요.","evidence":[{"recordId":"record-01","quote":"북클럽봄을 시작했어요."}]},"status":null,"role":null,"period":{"start":null,"end":null}}}
 ```
 
-성장 근거가 부족한 정상 응답:
+### Growth Journey v2 응답
+
+고정 5종, 유형별 판단 배열, 한 기록의 비교와 미등록 출발 활동을 지원한다. 전체 입력과 공개 응답은 위 JSON 예시를 참고한다. 근거 부족은 근거를 갖춘 요약과 빈 events/badges로 정상 반환한다. analysis와 evidenceSources는 AI가 반환하지 않고 Spring이 추가한다.
+
+한 문장의 효율성·경험 전이 응답 예시(해시는 형식 예시):
 
 ```json
-{"sourceFingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","recordCount":1,"model":"configured-model","promptVersion":"journey-v5","result":{"source":"api","summary":{"title":"활동을 시작했어요.","description":"성장 변화를 판단하려면 기록이 더 필요해요.","evidence":[{"recordId":"record-01","quote":"북클럽봄을 시작했어요."}]},"badges":[],"typeOptions":[{"value":"all","label":"전체"}],"axisOptions":[{"value":"all","label":"전체 분야"}],"events":[]}}
-```
-
-### 성장 이벤트 result 예시
-
-사전 조건: record-01의 message 또는 summary에 ‘기능 6개를 계획했어요.’, record-02에 ‘인터뷰 후 기능을 3개로 줄였어요.’가 포함되고 두 기록이 activity-01에 속하며, 가장 늦은 최초 저장 월이 2026-11이다. 임시 ID는 백엔드 저장 시 UUID로 바뀐다.
-
-```json
-{"source":"api","summary":{"title":"피드백으로 범위를 조정했어요.","description":"사용자 인터뷰를 바탕으로 기능을 줄인 기록이 있어요.","evidence":[{"recordId":"record-02","quote":"인터뷰 후 기능을 3개로 줄였어요."}]},"badges":[],"typeOptions":[{"value":"all","label":"전체"},{"value":"feedback","label":"피드백 반영","icon":"💬"}],"axisOptions":[{"value":"all","label":"전체 분야"},{"value":"product","label":"제품 기획"}],"events":[{"id":"event-0","occurredAt":"2026-11","activity":{"id":"activity-01","name":"기록 앱"},"type":"feedback","axis":"product","title":"인터뷰로 기능 범위를 조정했어요.","description":"사용자 인터뷰 뒤 초기 계획을 좁혔어요.","comparison":{"before":"기능 6개를 계획했어요.","after":"인터뷰 후 기능을 3개로 줄였어요.","evidence":["기능 6개를 계획했어요.","인터뷰 후 기능을 3개로 줄였어요."]},"evidence":[{"recordId":"record-01","quote":"기능 6개를 계획했어요."},{"recordId":"record-02","quote":"인터뷰 후 기능을 3개로 줄였어요."}]}]}
+{
+  "schemaVersion": "journey-result-v2",
+  "criteriaVersion": "growth-criteria-v1",
+  "sourceFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "recordCount": 1,
+  "model": "configured-model",
+  "promptVersion": "journey-v6",
+  "result": {
+    "schemaVersion": "journey-result-v2",
+    "criteriaVersion": "growth-criteria-v1",
+    "source": "api",
+    "summary": {
+      "title": "배포 경험을 활용해 시간을 줄였어요.",
+      "description": "같은 테스트를 통과하며 배포 경험을 다른 활동에 적용했어요.",
+      "evidence": [
+        {
+          "recordId": "record-01",
+          "quote": "개인 프로젝트에서 익힌 EC2 설정을 Growth AI에 적용했고, 배포 자동화로 30분에서 5분으로 줄이면서 같은 기능 테스트 10개를 모두 통과했다."
+        }
+      ]
+    },
+    "badges": [],
+    "typeOptions": [
+      {
+        "value": "all",
+        "label": "전체"
+      },
+      {
+        "value": "capability_expansion",
+        "label": "능력 확장"
+      },
+      {
+        "value": "performance_improvement",
+        "label": "성과 향상"
+      },
+      {
+        "value": "experience_accumulation",
+        "label": "경험 축적"
+      },
+      {
+        "value": "efficiency_improvement",
+        "label": "효율성"
+      },
+      {
+        "value": "experience_transfer",
+        "label": "경험 전이"
+      }
+    ],
+    "axisOptions": [
+      {
+        "value": "all",
+        "label": "전체 분야"
+      },
+      {
+        "value": "backend",
+        "label": "백엔드 개발"
+      }
+    ],
+    "events": [
+      {
+        "id": "event-0",
+        "occurredAt": "2026-11",
+        "activity": {
+          "id": "activity-01",
+          "name": "Growth AI"
+        },
+        "axis": "backend",
+        "title": "경험을 활용해 배포 시간을 줄였어요.",
+        "description": "기존 배포 경험을 적용하고 자동화했어요.",
+        "growthAssessments": [
+          {
+            "type": "efficiency_improvement",
+            "reason": "같은 테스트를 통과하면서 배포 시간을 30분에서 5분으로 줄였어요.",
+            "evidence": [
+              {
+                "recordId": "record-01",
+                "quote": "개인 프로젝트에서 익힌 EC2 설정을 Growth AI에 적용했고, 배포 자동화로 30분에서 5분으로 줄이면서 같은 기능 테스트 10개를 모두 통과했다."
+              }
+            ],
+            "comparison": {
+              "before": "배포 30분",
+              "after": "배포 5분",
+              "condition": "같은 기능 테스트 10개 모두 통과",
+              "beforeEvidence": [
+                {
+                  "recordId": "record-01",
+                  "quote": "개인 프로젝트에서 익힌 EC2 설정을 Growth AI에 적용했고, 배포 자동화로 30분에서 5분으로 줄이면서 같은 기능 테스트 10개를 모두 통과했다."
+                }
+              ],
+              "afterEvidence": [
+                {
+                  "recordId": "record-01",
+                  "quote": "개인 프로젝트에서 익힌 EC2 설정을 Growth AI에 적용했고, 배포 자동화로 30분에서 5분으로 줄이면서 같은 기능 테스트 10개를 모두 통과했다."
+                }
+              ]
+            }
+          },
+          {
+            "type": "experience_transfer",
+            "reason": "개인 프로젝트의 EC2 설정 경험을 Growth AI에 적용했어요.",
+            "evidence": [
+              {
+                "recordId": "record-01",
+                "quote": "개인 프로젝트에서 익힌 EC2 설정을 Growth AI에 적용했고, 배포 자동화로 30분에서 5분으로 줄이면서 같은 기능 테스트 10개를 모두 통과했다."
+              }
+            ],
+            "transfer": {
+              "sourceActivity": {
+                "id": null,
+                "name": "개인 프로젝트"
+              },
+              "experience": "EC2 설정 경험",
+              "targetActivityId": "activity-01",
+              "application": "Growth AI 배포에 EC2 설정 경험 적용",
+              "sourceEvidence": [
+                {
+                  "recordId": "record-01",
+                  "quote": "개인 프로젝트에서 익힌 EC2 설정을 Growth AI에 적용했고, 배포 자동화로 30분에서 5분으로 줄이면서 같은 기능 테스트 10개를 모두 통과했다."
+                }
+              ],
+              "applicationEvidence": [
+                {
+                  "recordId": "record-01",
+                  "quote": "개인 프로젝트에서 익힌 EC2 설정을 Growth AI에 적용했고, 배포 자동화로 30분에서 5분으로 줄이면서 같은 기능 테스트 10개를 모두 통과했다."
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
 ```

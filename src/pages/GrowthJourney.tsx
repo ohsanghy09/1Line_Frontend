@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import { Sparkles } from 'lucide-react'
 import { generateGrowthJourney, getGrowthJourney } from '../services/journey'
-import type { GrowthJourneyData } from '../types/journey'
+import { JOURNEY_TYPE_OPTIONS } from '../types/journey'
+import type { GrowthJourneyData, JourneyTypeFilter } from '../types/journey'
 import JourneyEventCard from '../components/journey/JourneyEventCard'
-import { filterJourneyEvents } from '../utils/journey'
+import { filterJourneyEvents, journeyTypeIcon } from '../utils/journey'
 
 function GrowthJourney() {
     const [journey, setJourney] = useState<GrowthJourneyData | null>(null)
     const [error, setError] = useState<string | null>(null)
     const [retryKey, setRetryKey] = useState(0)
-    const [typeFilter, setTypeFilter] = useState('all')
+    const [typeFilter, setTypeFilter] = useState<JourneyTypeFilter>('all')
     const [axisFilter, setAxisFilter] = useState('all')
     const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set())
     const [generating, setGenerating] = useState(false)
@@ -37,7 +38,16 @@ function GrowthJourney() {
             if (!controller.signal.aborted) {
                 setGenerationError(error instanceof Error ? error.message : '성장 분석에 실패했어요.')
                 // 통신이 끊겨도 서버에 저장됐을 수 있으므로 모델 재호출 없이 재조회한다.
-                try { setJourney(await getGrowthJourney(controller.signal)) } catch { /* 기존 결과를 유지한다. */ }
+                try {
+                    const recovered = await getGrowthJourney(controller.signal)
+                    if (!controller.signal.aborted) {
+                        setJourney(recovered)
+                        // 저장된 결과 또는 삭제 상태로 바뀌었을 수 있어 사라진 분야 선택을 남기지 않는다.
+                        setExpandedIds(new Set())
+                        setTypeFilter('all')
+                        setAxisFilter('all')
+                    }
+                } catch { /* 조회도 실패하면 마지막 표시 결과와 실패 안내를 유지한다. */ }
             }
         } finally {
             if (generationController.current === controller) generationController.current = null
@@ -89,7 +99,7 @@ function GrowthJourney() {
                         {journey.analysis?.generatedAt && <p>마지막 분석: {new Date(journey.analysis.generatedAt).toLocaleString('ko-KR')}</p>}
                         {journey.analysis?.stale && <p>기록이 변경됐어요. 최신 기록으로 분석을 갱신해 주세요.</p>}
                         {journey.analysis?.currentRecordCount === 0 && <p>홈에서 기록을 먼저 저장해 주세요.</p>}
-                        <p>날짜는 근거 기록의 저장 월을 기준으로 표시합니다.</p>
+                        <p>날짜는 근거 기록의 저장 월(UTC)을 기준으로 표시합니다.</p>
                     </div>
                     <button type="button" disabled={generating || journey.analysis?.currentRecordCount === 0} onClick={() => void generate()} className="px-4 py-2 text-sm font-medium bg-brand-primary text-white rounded-xl disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-brand-primary focus-visible:outline-offset-2">
                         {generating ? '성장 분석 중...' : journey.analysis?.id ? '분석 갱신' : '성장 분석하기'}
@@ -97,7 +107,7 @@ function GrowthJourney() {
                 </div>
                 {generating && <p role="status" className="text-sm text-brand-muted">저장된 기록으로 성장 흐름을 분석하고 있어요.</p>}
                 {generationError && <div role="alert" className="space-y-1 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-                    <p className="font-semibold">분석을 갱신하지 못했어요. 표시된 결과는 마지막으로 저장된 분석이에요.</p>
+                    <p className="font-semibold">분석 요청을 완료하지 못했어요. 표시된 결과와 저장 상태를 확인해 주세요.</p>
                     <p>{generationError}</p>
                 </div>}
                 {/* 전체 성장 흐름과 첫 경험 배지는 응답으로 표시한다. */}
@@ -120,7 +130,7 @@ function GrowthJourney() {
                 {/* 유형과 성장 축은 각각의 선택을 유지하며 함께 적용한다. */}
                 <div aria-label="성장 필터" className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
                     <div role="group" aria-label="성장 유형" className="flex flex-wrap gap-2">
-                        {journey.typeOptions.map(option => <button key={option.value} type="button" aria-pressed={option.value === typeFilter} onClick={() => setTypeFilter(option.value)} className={`px-3.5 py-1.5 rounded-full text-xs font-medium cursor-pointer focus-visible:outline-2 focus-visible:outline-brand-primary focus-visible:outline-offset-2 ${option.value === typeFilter ? 'bg-brand-primary text-white' : 'bg-white border border-brand-border text-slate-700 hover:bg-slate-50'}`}>{option.icon && <span aria-hidden="true" className="mr-1">{option.icon}</span>}{option.label}</button>)}
+                        {JOURNEY_TYPE_OPTIONS.map(option => <button key={option.value} type="button" aria-pressed={option.value === typeFilter} onClick={() => setTypeFilter(option.value)} className={`px-3.5 py-1.5 rounded-full text-xs font-medium cursor-pointer focus-visible:outline-2 focus-visible:outline-brand-primary focus-visible:outline-offset-2 ${option.value === typeFilter ? 'bg-brand-primary text-white' : 'bg-white border border-brand-border text-slate-700 hover:bg-slate-50'}`}>{option.value !== 'all' && <span aria-hidden="true" className="mr-1">{journeyTypeIcon(option.value)}</span>}{option.label}</button>)}
                     </div>
                     <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-brand-border text-xs shrink-0">
                         <label htmlFor="journey-axis" className="text-brand-muted font-medium">성장 축:</label>
@@ -138,7 +148,7 @@ function GrowthJourney() {
                         {events.map(event => <li key={event.id} className="relative group pl-6">
                             {/* 선과 원을 같은 왼쪽 기준으로 배치하고 원을 선 위에 표시한다. */}
                             <span aria-hidden="true" className="absolute left-[3px] top-1.5 z-10 block w-4 h-4 rounded-full border-2 border-brand-primary bg-white group-hover:bg-brand-primary transition-colors" />
-                            <JourneyEventCard event={event} typeOptions={journey.typeOptions} axisOptions={journey.axisOptions} expanded={expandedIds.has(event.id)} onToggle={() => toggleEvent(event.id)} />
+                            <JourneyEventCard event={event} axisOptions={journey.axisOptions} evidenceSources={journey.evidenceSources} expanded={expandedIds.has(event.id)} onToggle={() => toggleEvent(event.id)} />
                         </li>)}
                     </ol>
                 )}
