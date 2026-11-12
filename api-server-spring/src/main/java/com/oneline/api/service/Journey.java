@@ -6,35 +6,16 @@ import com.oneline.api.js.Json;
 import com.oneline.api.support.EventLoop;
 import com.oneline.api.support.Fetch;
 import com.oneline.api.zod.Z;
-import com.oneline.api.zod.Z.ZObject;
-import com.oneline.api.zod.Z.ZString;
-
-import java.text.Normalizer;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.regex.Pattern;
-
-import static com.oneline.api.js.Js.arr;
-import static com.oneline.api.js.Js.obj;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.*;
+import static com.oneline.api.js.Js.*;
 import static com.oneline.api.web.HttpError.publicFail;
-import static com.oneline.api.zod.Z.array;
-import static com.oneline.api.zod.Z.bool;
-import static com.oneline.api.zod.Z.literal;
-import static com.oneline.api.zod.Z.number;
-import static com.oneline.api.zod.Z.object;
-import static com.oneline.api.zod.Z.string;
+import static com.oneline.api.zod.Z.*;
 
-/** 기존 src/journey.js 와 src/journey-context.js */
+/** 저장 기록의 성장 분석. 원본 기록·Timeline은 변경하지 않고 분석 스냅샷만 저장한다. */
 public final class Journey {
-    private Journey() {
-    }
-
-    // ---------------------------------------------------------------- journey-context.js
+    private Journey() { }
 
     public record Snapshot(List<Object> records, List<Object> files, String fingerprint) {
     }
@@ -58,179 +39,88 @@ public final class Journey {
         return new Snapshot(records, files, Js.sha256Hex(Json.stringify(arr(records, files))));
     }
 
-    // ---------------------------------------------------------------- journey.js
 
-    private static ZString text() {
-        return string().trim().min(1);
+    private static final Z.ZObject INPUT_RECORD = object(
+            "id", JourneyContract.id(), "activityId", JourneyContract.id(), "activityName", JourneyContract.text(200),
+            "message", string(), "summary", JourneyContract.text(250000),
+            "changes", array(object("before", string(), "after", string(), "category", string(),
+                    "evidence", array(string())).strict()).max(100),
+            "savedAt", JourneyContract.timestamp(), "updatedAt", JourneyContract.timestamp(),
+            "activity", object("category", string().nullable(), "role", string().nullable(),
+                    "summary", string().nullable(), "startDate", string().nullable(), "endDate", string().nullable()).strict(),
+            "files", array(object("id", JourneyContract.id(), "name", string()).strict())).strict();
+
+    /** 레거시 호환 데이터가 아니라 미분석·삭제 무효화 상태에 사용하는 새 계약의 빈 결과. */
+    public static LinkedHashMap<String, Object> emptyResult(String title, String description) {
+        return obj("schemaVersion", JourneyContract.SCHEMA, "criteriaVersion", JourneyContract.CRITERIA,
+                "source", "api", "summary", obj("title", title, "description", description),
+                "badges", arr(), "typeOptions", JourneyContract.typeOptions(),
+                "axisOptions", arr(obj("value", "all", "label", "전체 분야")), "events", arr(), "evidenceSources", arr());
     }
-
-    private static ZString icon() {
-        return string().trim().min(1).max(16);
-    }
-
-    // 이전 저장 결과에는 icon이 없을 수 있다. 새 분석의 아이콘은 공급자 경계에서 필수 검사한다.
-    private static Z.ZArray options() {
-        return array(object("value", text(), "label", text(), "icon", icon().optional()));
-    }
-
-    private static Z.ZArray evidence() {
-        return array(object("recordId", text(), "quote", text())).min(1).max(20);
-    }
-
-    private static List<Object> values(Object options, String key) {
-        List<Object> result = new ArrayList<>();
-        for (Object option : Js.iterate(options)) result.add(Js.get(option, key));
-        return result;
-    }
-
-    private static boolean includes(List<Object> list, Object value) {
-        for (Object item : list) {
-            if (Js.sameValueZero(item, value)) return true;
-        }
-        return false;
-    }
-
-    // 실제 공급자 응답과 저장 결과를 같은 계약으로 검증한다.
-    public static final ZObject JOURNEY = object(
-            "source", literal("api"),
-            "summary", object("title", text(), "description", text(), "evidence", evidence().optional()),
-            "badges", array(object("id", text(), "label", text(), "icon", icon().optional(), "evidence", evidence().optional())).max(10),
-            "typeOptions", options(),
-            "axisOptions", options(),
-            "events", array(object(
-                    "id", text(),
-                    "occurredAt", string().regex(Pattern.compile("^(?!0000)\\d{4}-(0[1-9]|1[0-2])\\z"), "/^(?!0000)\\d{4}-(0[1-9]|1[0-2])$/"),
-                    "activity", object("id", text().nullable(), "name", text()),
-                    "type", text().refine(value -> !Js.strictEquals(value, "all"), null),
-                    "axis", text().refine(value -> !Js.strictEquals(value, "all"), null),
-                    "title", text(), "description", text(),
-                    "comparison", object("before", text(), "after", text(), "evidence", array(text())).optional(),
-                    "evidence", evidence().optional()
-            )).max(20),
-            "analysis", object(
-                    "id", text().nullable(), "generatedAt", text().nullable(), "stale", bool(),
-                    "recordCount", number().integer().nonnegative(), "currentRecordCount", number().integer().nonnegative(),
-                    "model", text().nullable(), "promptVersion", text().nullable()
-            ).optional()
-    ).superRefine((raw, ctx) -> {
-        Map<String, Object> data = Js.asObject(raw);
-        List<Object> types = values(data.get("typeOptions"), "value");
-        List<Object> axes = values(data.get("axisOptions"), "value");
-        boolean invalidEvent = false;
-        for (Object event : Js.iterate(data.get("events"))) {
-            if (!includes(types, Js.get(event, "type")) || !includes(axes, Js.get(event, "axis"))) {
-                invalidEvent = true;
-                break;
-            }
-        }
-        if (!includes(types, "all") || !includes(axes, "all") || !Js.unique(types) || !Js.unique(axes)
-                || !Js.unique(values(data.get("events"), "id")) || !Js.unique(values(data.get("badges"), "id"))
-                || invalidEvent) {
-            ctx.addIssue("성장 이벤트 ID 또는 분류 선택지가 올바르지 않습니다.");
-        }
-    });
 
     public static LinkedHashMap<String, Object> readJourney(Database db) {
         return db.transaction(() -> {
             Snapshot snapshot = journeySnapshot(db);
             Map<String, Object> saved = db.get("SELECT * FROM journey_analyses ORDER BY created_at DESC, rowid DESC LIMIT 1");
-            LinkedHashMap<String, Object> data = saved != null
-                    ? new LinkedHashMap<>(Js.asObject(JOURNEY.parse(Json.parse((String) saved.get("result_json")))))
-                    : obj("source", "api",
-                    "summary", obj("title", "아직 성장 분석이 없어요.", "description", "홈에서 기록을 저장한 뒤 성장 분석을 실행해 주세요."),
-                    "badges", new ArrayList<>(),
-                    "typeOptions", arr(obj("value", "all", "label", "전체")),
-                    "axisOptions", arr(obj("value", "all", "label", "전체 분야")),
-                    "events", new ArrayList<>());
+            LinkedHashMap<String, Object> data;
+            if (saved == null) {
+                data = emptyResult("아직 성장 분석이 없어요.", "홈에서 기록을 저장한 뒤 성장 분석을 실행해 주세요.");
+            } else {
+                Z.SafeParseResult parsed = JourneyContract.STORED.safeParse(Json.parse((String) saved.get("result_json")));
+                if (!parsed.success() || !JourneyContract.CRITERIA.equals(saved.get("criteria_version")))
+                    throw publicFail(500, "저장된 성장 분석의 계약 버전을 확인해 주세요.");
+                data = new LinkedHashMap<>(asObject(parsed.data()));
+                if (!((String) saved.get("source_fingerprint")).startsWith("deleted:")
+                        && !asObject(data.get("summary")).containsKey("evidence"))
+                    throw publicFail(500, "저장된 성장 분석의 근거가 없어요.");
+            }
             data.put("analysis", obj(
-                    "id", saved != null ? Js.coalesce(saved.get("id"), null) : null,
-                    "generatedAt", saved != null ? Js.coalesce(saved.get("created_at"), null) : null,
-                    "stale", saved != null && !Js.strictEquals(saved.get("source_fingerprint"), snapshot.fingerprint()),
-                    "recordCount", saved != null ? Js.coalesce(saved.get("record_count"), 0.0) : 0.0,
+                    "id", saved == null ? null : saved.get("id"),
+                    "generatedAt", saved == null ? null : saved.get("created_at"),
+                    "stale", saved != null && !snapshot.fingerprint().equals(saved.get("source_fingerprint")),
+                    "recordCount", saved == null ? 0.0 : saved.get("record_count"),
                     "currentRecordCount", (double) snapshot.records().size(),
-                    "model", saved != null ? Js.coalesce(saved.get("model"), null) : null,
-                    "promptVersion", saved != null ? Js.coalesce(saved.get("prompt_version"), null) : null));
+                    "model", saved == null ? null : saved.get("model"),
+                    "promptVersion", saved == null ? null : saved.get("prompt_version")));
             return data;
         });
     }
 
-    private static String nfkcLabel(Object label, boolean collapse) {
-        String value = Js.trim(Normalizer.normalize(Js.requireString(label, "normalize"), Normalizer.Form.NFKC));
-        if (collapse) value = Js.collapseWhitespace(value);
-        return Js.toLowerCase(value);
+    /** 한 스냅샷에서 요청을 구성한다. 해시용 열·직렬화는 기존 규칙을 보존한다. */
+    static Map<String, Object> requestBody(Snapshot snapshot) {
+        if (snapshot.records().isEmpty() || snapshot.records().size() > 100)
+            throw publicFail(422, "성장 분석에는 저장 기록 1~100개가 필요해요.");
+        List<Object> records = new ArrayList<>();
+        for (Object raw : snapshot.records()) {
+            List<Object> row = asArray(raw);
+            Object analysis = get(Json.parse((String) row.get(4)), "analysis");
+            List<Object> files = new ArrayList<>();
+            for (Object f : snapshot.files()) {
+                List<Object> file = asArray(f);
+                if (row.getFirst().equals(file.getFirst())) files.add(obj("id", file.get(1), "name", file.get(2)));
+            }
+            Map<String, Object> record = obj("id", row.get(0), "activityId", row.get(1), "activityName", row.get(2),
+                    "message", row.get(3), "summary", get(analysis, "summary"), "changes", get(analysis, "changes"),
+                    "savedAt", row.get(5), "updatedAt", row.get(6),
+                    "activity", obj("category", row.get(7), "role", row.get(8), "summary", row.get(9),
+                            "startDate", row.get(10), "endDate", row.get(11)), "files", files);
+            if (!INPUT_RECORD.safeParse(record).success())
+                throw publicFail(422, "저장 기록의 성장 분석 입력 형식을 확인해 주세요.");
+            records.add(record);
+        }
+        Map<String, Object> body = obj("schemaVersion", JourneyContract.SCHEMA, "criteriaVersion", JourneyContract.CRITERIA,
+                "sourceFingerprint", snapshot.fingerprint(), "recordCount", (double) records.size(), "records", records);
+        String json = Json.stringify(body);
+        if (json.codePointCount(0, json.length()) > 250000) throw publicFail(422, "성장 분석 입력 크기 한도를 초과했어요.");
+        return body;
     }
 
-    private static final ZObject PROVIDER = object(
-            "sourceFingerprint", string().regex(Pattern.compile("^[a-f0-9]{64}\\z"), "/^[a-f0-9]{64}$/"),
-            "recordCount", number().integer().min(1).max(100),
-            "model", text(),
-            "promptVersion", text(),
-            "result", JOURNEY
-    ).superRefine((raw, ctx) -> {
-        Map<String, Object> result = Js.asObject(Js.get(raw, "result"));
-        List<Object> types = new ArrayList<>();
-        for (Object option : Js.iterate(result.get("typeOptions"))) {
-            if (!Js.strictEquals(Js.get(option, "value"), "all")) types.add(option);
-        }
-        List<Object> labels = new ArrayList<>();
-        for (Object option : types) labels.add(nfkcLabel(Js.get(option, "label"), false));
-        Set<Object> used = new HashSet<>();
-        for (Object event : Js.iterate(result.get("events"))) used.add(Js.setKey(Js.get(event, "type")));
-        List<Object> axes = new ArrayList<>();
-        for (Object option : Js.iterate(result.get("axisOptions"))) {
-            if (!Js.strictEquals(Js.get(option, "value"), "all")) axes.add(option);
-        }
-        List<Object> axisLabels = new ArrayList<>();
-        for (Object option : axes) axisLabels.add(nfkcLabel(Js.get(option, "label"), true));
-        Set<Object> usedAxes = new HashSet<>();
-        for (Object event : Js.iterate(result.get("events"))) usedAxes.add(Js.setKey(Js.get(event, "axis")));
-
-        boolean typeProblem = types.size() > 8 || !Js.unique(labels);
-        if (!typeProblem) {
-            for (Object option : types) {
-                if (!Js.truthy(Js.get(option, "icon")) || !used.contains(Js.setKey(Js.get(option, "value")))) {
-                    typeProblem = true;
-                    break;
-                }
-            }
-        }
-        if (!typeProblem) {
-            for (Object badge : Js.iterate(result.get("badges"))) {
-                if (!Js.truthy(Js.get(badge, "icon"))) {
-                    typeProblem = true;
-                    break;
-                }
-            }
-        }
-        if (typeProblem) ctx.addIssue("분석 분류·아이콘이 누락되거나 중복됐습니다.");
-
-        // 저장 결과 조회는 과거 고정 분야도 허용하고, 새 공급자 결과에만 동적 분야 계약을 적용한다.
-        boolean axisProblem = axes.size() > 8 || !Js.unique(axisLabels);
-        if (!axisProblem) {
-            for (Object label : axisLabels) {
-                if (List.of("전체", "전체 분야", "전체분야").contains(label)) {
-                    axisProblem = true;
-                    break;
-                }
-            }
-        }
-        if (!axisProblem) {
-            for (Object option : axes) {
-                if (Js.requireString(Js.get(option, "label"), "length").length() > 40
-                        || !usedAxes.contains(Js.setKey(Js.get(option, "value")))) {
-                    axisProblem = true;
-                    break;
-                }
-            }
-        }
-        if (!axisProblem && usedAxes.size() != axes.size()) axisProblem = true;
-        if (axisProblem) ctx.addIssue("성장 분야가 중복되거나 이벤트와 일치하지 않습니다.");
-    });
-
     public static LinkedHashMap<String, Object> generateJourney(Database db, EventLoop loop, String aiBaseUrl) {
+        Snapshot sent = db.transaction(() -> journeySnapshot(db));
+        String input = Json.stringify(requestBody(sent));
         Fetch.Response response;
         try {
-            response = Fetch.post(loop, Fetch.aiBase(aiBaseUrl) + "/api/analyze/journey", null, 135_000, null);
+            response = Fetch.post(loop, Fetch.aiBase(aiBaseUrl) + "/api/analyze/journey", input, 135_000, null);
         } catch (Fetch.FetchError error) {
             throw publicFail(error.timeout ? 504 : 502, error.timeout
                     ? "성장 분석 응답 시간이 초과됐어요. 다시 조회한 뒤 갱신해 주세요." : "AI 서버에 연결하지 못했어요. 실행 상태를 확인해 주세요.");
@@ -241,79 +131,97 @@ public final class Journey {
             Object error = Js.opt(body, "error");
             throw publicFail(status, error instanceof String s ? s : "성장 분석 요청에 실패했어요.");
         }
-        Z.SafeParseResult parsed = PROVIDER.safeParse(body);
+        Z.SafeParseResult parsed = JourneyContract.PROVIDER.safeParse(body);
         if (!parsed.success()) throw publicFail(502, "성장 분석 응답 형식을 확인할 수 없어요.");
-        Map<String, Object> output = Js.asObject(parsed.data());
-        Map<String, Object> result = Js.asObject(output.get("result"));
+        Map<String, Object> output = asObject(parsed.data());
+        Map<String, Object> result = asObject(output.get("result"));
         db.transaction(() -> {
-            Snapshot snapshot = journeySnapshot(db);
-            if (!snapshot.fingerprint().equals(output.get("sourceFingerprint"))
-                    || snapshot.records().size() != ((Number) output.get("recordCount")).doubleValue()) {
+            Snapshot current = journeySnapshot(db);
+            if (!sent.fingerprint().equals(output.get("sourceFingerprint"))
+                    || !sent.fingerprint().equals(current.fingerprint())
+                    || sent.records().size() != ((Number) output.get("recordCount")).doubleValue())
                 throw publicFail(409, "분석 중 기록이 변경됐어요. 최신 기록으로 다시 분석해 주세요.");
+            Map<String, List<Object>> records = new LinkedHashMap<>();
+            for (Object raw : current.records()) {
+                List<Object> row = asArray(raw);
+                records.put((String) row.getFirst(), row);
             }
-            Map<Object, List<Object>> records = new HashMap<>();
-            for (Object row : snapshot.records()) records.put(Js.asArray(row).get(0), Js.asArray(row));
-            java.util.function.Consumer<Object> check = references -> {
-                if (!Js.truthy(Js.opt(references, "length"))) throw publicFail(502, "성장 분석의 근거 기록이 없어요.");
-                for (Object item : Js.iterate(references)) {
-                    List<Object> row = records.get(Js.get(item, "recordId"));
-                    boolean matched = false;
-                    if (row != null) {
-                        Object quote = Js.get(item, "quote");
-                        for (Object value : arr(row.get(3), Js.path(Json.parse((String) row.get(4)), "analysis", "summary"))) {
-                            if (value instanceof String s && s.contains(Js.str(quote))) {
-                                matched = true;
-                                break;
-                            }
-                        }
-                    }
-                    if (!matched) throw publicFail(502, "성장 분석의 근거가 실제 기록과 일치하지 않아요.");
-                }
-            };
-            check.accept(Js.get(result.get("summary"), "evidence"));
-            for (Object badge : Js.iterate(result.get("badges"))) check.accept(Js.get(badge, "evidence"));
-            for (Object event : Js.iterate(result.get("events"))) {
-                Object evidence = Js.get(event, "evidence");
-                check.accept(evidence);
-                List<Object> evidenceRows = new ArrayList<>();
-                for (Object item : Js.iterate(evidence)) evidenceRows.add(records.get(Js.get(item, "recordId")));
-                List<Object> target = null;
-                Object activityId = Js.get(Js.get(event, "activity"), "id");
-                for (Object row : evidenceRows) {
-                    if (Js.strictEquals(Js.asArray(row).get(1), activityId)) {
-                        target = Js.asArray(row);
-                        break;
-                    }
-                }
-                List<Object> createdAt = new ArrayList<>();
-                for (Object row : evidenceRows) createdAt.add(Js.asArray(row).get(5));
-                Set<Object> recordIds = new HashSet<>();
-                for (Object item : Js.iterate(evidence)) recordIds.add(Js.setKey(Js.get(item, "recordId")));
-                boolean mismatch = target == null;
-                if (!mismatch) {
-                    List<Object> sorted = Js.defaultSort(createdAt);
-                    Object latest = sorted.isEmpty() ? Js.UNDEFINED : sorted.get(sorted.size() - 1);
-                    String month = Js.slice(Js.requireString(latest, "slice"), 0, 7);
-                    mismatch = !Js.strictEquals(Js.get(event, "occurredAt"), month)
-                            || Js.truthy(Js.get(event, "comparison")) && recordIds.size() < 2;
-                }
-                if (mismatch) throw publicFail(502, "성장 이벤트의 활동·날짜·비교 근거가 실제 기록과 일치하지 않아요.");
-                Js.set(Js.get(event, "activity"), "name", target.get(2));
-                Object comparison = Js.get(event, "comparison");
-                if (Js.truthy(comparison)) {
-                    List<Object> quotes = new ArrayList<>();
-                    for (Object item : Js.iterate(evidence)) quotes.add(Js.get(item, "quote"));
-                    Js.set(comparison, "evidence", quotes);
-                }
-            }
-            String id = Js.randomUUID();
-            // 재분석 결과는 별도 스냅샷이며 홈 기록과 Timeline을 수정하지 않는다.
-            for (Object event : Js.iterate(result.get("events"))) Js.set(event, "id", Js.randomUUID());
-            for (Object badge : Js.iterate(result.get("badges"))) Js.set(badge, "id", Js.randomUUID());
-            db.run("INSERT INTO journey_analyses VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    id, snapshot.fingerprint(), output.get("recordCount"), Json.stringify(result), output.get("model"),
-                    output.get("promptVersion"), Js.nowIso());
+            Map<String, Object> sources = new LinkedHashMap<>();
+            checkEvidence(get(result.get("summary"), "evidence"), records, sources);
+            for (Object badge : asArray(result.get("badges")))
+                checkEvidence(get(badge, "evidence"), records, sources);
+            for (Object event : asArray(result.get("events"))) validateEvent(event, records, sources);
+            result.put("evidenceSources", new ArrayList<>(sources.values()));
+            for (Object event : asArray(result.get("events"))) set(event, "id", Js.randomUUID());
+            for (Object badge : asArray(result.get("badges"))) set(badge, "id", Js.randomUUID());
+            db.run("""
+                    INSERT INTO journey_analyses
+                    (id, source_fingerprint, record_count, result_json, model, prompt_version, created_at, criteria_version)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    Js.randomUUID(), sent.fingerprint(), output.get("recordCount"), Json.stringify(result),
+                    output.get("model"), output.get("promptVersion"), Js.nowIso(), JourneyContract.CRITERIA);
         });
         return readJourney(db);
+    }
+
+    private static void checkEvidence(Object refs, Map<String, List<Object>> records, Map<String, Object> sources) {
+        for (Object ref : asArray(refs)) {
+            String id = (String) get(ref, "recordId");
+            String quote = (String) get(ref, "quote");
+            List<Object> row = records.get(id);
+            if (row == null || !(((String) row.get(3)).contains(quote)
+                    || ((String) path(Json.parse((String) row.get(4)), "analysis", "summary")).contains(quote)))
+                throw publicFail(502, "성장 분석의 근거가 실제 기록과 일치하지 않아요.");
+            sources.putIfAbsent(id, obj("recordId", id, "activityId", row.get(1), "activityName", row.get(2)));
+        }
+    }
+
+    private static boolean hasActivity(Object refs, Object activityId, Map<String, List<Object>> records) {
+        for (Object ref : asArray(refs))
+            if (records.get(get(ref, "recordId")).get(1).equals(activityId)) return true;
+        return false;
+    }
+
+    private static void validateEvent(Object event, Map<String, List<Object>> records, Map<String, Object> sources) {
+        Object activityId = get(get(event, "activity"), "id");
+        List<Object> refs = new ArrayList<>();
+        for (Object assessment : asArray(get(event, "growthAssessments"))) {
+            Object evidence = get(assessment, "evidence");
+            checkEvidence(evidence, records, sources);
+            refs.addAll(asArray(evidence));
+            Object comparison = opt(assessment, "comparison");
+            if (comparison instanceof Map) {
+                checkEvidence(get(comparison, "beforeEvidence"), records, sources);
+                checkEvidence(get(comparison, "afterEvidence"), records, sources);
+            }
+            Object transfer = opt(assessment, "transfer");
+            if (transfer instanceof Map) {
+                Object source = get(transfer, "sourceActivity");
+                Object sourceId = get(source, "id");
+                Object sourceRefs = get(transfer, "sourceEvidence");
+                Object applicationRefs = get(transfer, "applicationEvidence");
+                checkEvidence(sourceRefs, records, sources);
+                checkEvidence(applicationRefs, records, sources);
+                if (!activityId.equals(get(transfer, "targetActivityId")) || !hasActivity(applicationRefs, activityId, records)
+                        || sourceId != null && (sourceId.equals(activityId) || !hasActivity(sourceRefs, sourceId, records)))
+                    throw publicFail(502, "경험 전이의 출발·적용 활동 근거가 일치하지 않아요.");
+                if (sourceId != null) {
+                    for (Object ref : asArray(sourceRefs)) {
+                        List<Object> row = records.get(get(ref, "recordId"));
+                        if (row.get(1).equals(sourceId)) { set(source, "name", row.get(2)); break; }
+                    }
+                }
+            }
+        }
+        if (!hasActivity(refs, activityId, records)) throw publicFail(502, "성장 이벤트의 활동 근거가 일치하지 않아요.");
+        OffsetDateTime latest = null;
+        for (Object ref : refs) {
+            List<Object> row = records.get(get(ref, "recordId"));
+            OffsetDateTime time = OffsetDateTime.parse((String) row.get(5));
+            if (latest == null || time.toInstant().isAfter(latest.toInstant())) latest = time;
+            if (row.get(1).equals(activityId)) set(get(event, "activity"), "name", row.get(2));
+        }
+        String month = latest.withOffsetSameInstant(ZoneOffset.UTC).toLocalDate().toString().substring(0, 7);
+        if (!month.equals(get(event, "occurredAt"))) throw publicFail(502, "성장 이벤트의 날짜가 근거 기록과 일치하지 않아요.");
     }
 }

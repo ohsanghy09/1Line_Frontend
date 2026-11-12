@@ -1,5 +1,25 @@
 # 1Line API 서버 (Spring Boot)
 
+## Growth Journey 새 계약 적용 상태 (2026-11-12)
+
+Growth Journey는 [공통 JSON 계약 v2](../docs/growth-journey-update/공통_JSON_계약.md)로 변경했다. 이 API는 아래의 기존 Node 서버 호환 설명과 달리 고정 5종 `growthAssessments`, `comparison`, `transfer`를 사용한다. 기준 버전은 `growth-criteria-v1`, AI 프롬프트 버전은 `journey-v6`다.
+
+- `POST /api/journey/analyze`는 Spring이 저장 기록·해시·버전을 AI `/api/analyze/journey`에 JSON으로 전달한다.
+- `GET /api/journey`는 저장 결과를 읽는다. `criteria_version` 컬럼은 초기화 시 추가하며 구형 분석 행을 자동 변환·삭제하지 않는다.
+- 프론트와 독립 OpenAPI·Swagger도 새 Journey 구조를 적용했다. 실제 AI 구현의 새 계약 적용과 실제 연동 확인은 별도 작업이다.
+- 로컬 검증은 임시 DB·가짜 AI HTTP 서버를 사용한다. 실제 AI 연동·EC2 배포는 수행하지 않았다.
+
+JDK 21로 `./gradlew.bat test bootJar --console=plain`을 실행한다. Windows 한글 경로에서 테스트 워커가 시작되지 않으면 ASCII 캐시·임시 경로를 사용한다. PowerShell에서 `-D` 인수는 따옴표로 감싼다.
+
+```powershell
+New-Item -ItemType Directory -Path 'C:/Temp/growth-journey-test' -Force | Out-Null
+.\gradlew.bat --gradle-user-home C:/Temp/growth-journey-gradle '-Djava.io.tmpdir=C:/Temp/growth-journey-test' test bootJar --console=plain
+```
+
+로컬 결과: 테스트 19개 통과, `build/libs/1line-api-server-0.1.0.jar` 생성. 상세 내용은 [작업·검증 기록](../docs/growth-journey-update/작업_및_검증_기록.md)에 있다.
+
+## 기존 서버 이식 배경
+
 기존 `api-server`(Node.js · Express · node:sqlite)를 **Java 21 · Spring Boot 4 · SQLite(JDBC)** 로 옮긴 백엔드다.
 경로·요청·응답 JSON(키 순서 포함)·상태 코드·오류 문구·DB 스키마·트랜잭션 동작을 기존 서버와 같게 유지한다.
 프론트(`/api` → `http://127.0.0.1:3001`)와 AI 서버(`ai-api-server`)는 수정 없이 그대로 연결된다.

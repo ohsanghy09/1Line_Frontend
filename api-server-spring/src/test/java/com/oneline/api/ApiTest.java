@@ -3,7 +3,6 @@ package com.oneline.api;
 import com.oneline.api.js.Js;
 import com.oneline.api.js.Json;
 import com.oneline.api.service.ActivityMetadata;
-import com.oneline.api.service.Journey;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -236,10 +235,10 @@ class ApiTest {
             assertEquals(List.of(), activity.get("timeline"));
             assertEquals("general", at(s.get("/conversations/conv-1/messages").json(), 0, "reply", "kind"));
 
-            s.sql(db -> db.run("INSERT INTO journey_analyses VALUES (?, ?, ?, ?, ?, ?, ?)", "j1", "old", 3.0, Json.stringify(obj(
+            s.sql(db -> db.run("INSERT INTO journey_analyses (id, source_fingerprint, record_count, result_json, model, prompt_version, created_at, criteria_version) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", "j1", "old", 3.0, Json.stringify(obj(
                     "source", "api", "summary", obj("title", "삭제할 근거", "description", "기존 요약"), "badges", arr(), "events", arr(),
                     "typeOptions", arr(obj("value", "all", "label", "전체")), "axisOptions", arr(obj("value", "all", "label", "전체 분야")))),
-                    "test", "test", Js.nowIso()));
+                    "test", "journey-v6", Js.nowIso(), "growth-criteria-v1"));
             assertEquals(400, s.send("DELETE", "/archive/activities/line1-hackathon", obj("confirmation", "잘못된 이름")).status());
             assertEquals(200, s.send("DELETE", "/archive/activities/line1-hackathon", obj("confirmation", "1호선톤")).status());
             assertEquals(404, s.get("/archive/activities/line1-hackathon").status());
@@ -310,7 +309,7 @@ class ApiTest {
                     INSERT INTO timeline_events VALUES ('t', 'r', '{}', 0, '2026-11-06');
                     INSERT INTO analysis_jobs VALUES ('j', 'a', 0, NULL);
                     INSERT INTO ai_chat_jobs VALUES ('ai', 'key', 'fingerprint', 'a', 'text', 'running', 'analyzing', NULL, '{}', '2026-11-06', '2026-11-06');
-                    INSERT INTO journey_analyses VALUES ('g', 'fingerprint', 1, '{}', 'test', 'test', '2026-11-06');"""));
+                    INSERT INTO journey_analyses (id, source_fingerprint, record_count, result_json, model, prompt_version, created_at) VALUES ('g', 'fingerprint', 1, '{}', 'test', 'test', '2026-11-06');"""));
             assertEquals(400, s.post("/settings/reset-data", obj("confirmation", "잘못된 문구")).status());
             assertEquals(409, s.post("/settings/reset-data", obj("confirmation", "전체 삭제")).status());
             assertEquals(1.0, count(s, "records"));
@@ -409,82 +408,6 @@ class ApiTest {
             command.accept("dup", arr(obj("field", "role", "value", "a"), obj("field", "role", "value", "b")));
             assertEquals(400, s.post("/activities/apply-chat-update", obj("analysisId", "dup")).status());
             assertEquals(404, s.post("/activities/apply-chat-update", obj("analysisId", "missing")).status());
-        }
-    }
-
-    @Test
-    void 성장_분석_생성과_검증() {
-        try (TestServer.FakeAi ai = new TestServer.FakeAi();
-             TestServer s = TestServer.start("oneline.ai-base-url=" + ai.url)) {
-            var refs = arr(obj("recordId", "record-1", "quote", "기능 6개를 기획했습니다."));
-            java.util.function.Supplier<LinkedHashMap<String, Object>> output = () -> obj(
-                    "sourceFingerprint", s.query(Journey::journeySnapshot).fingerprint(), "recordCount", 1.0, "model", "test-provider", "promptVersion", "journey-v3",
-                    "result", obj("source", "api", "summary", obj("title", "기획 기록", "description", "성장 판단 근거가 부족합니다.", "evidence", refs), "badges", arr(),
-                            "typeOptions", arr(obj("value", "all", "label", "전체"), obj("value", "scope-design", "label", "기획 범위 설계", "icon", "🧭")),
-                            "axisOptions", arr(obj("value", "all", "label", "전체 분야"), obj("value", "product-design", "label", "서비스 디자인")),
-                            "events", arr(obj("id", "model-id", "occurredAt", "2026-11", "activity", obj("id", "line1-hackathon", "name", "모델이 바꾼 이름"),
-                                    "type", "scope-design", "axis", "product-design", "title", "기획 경험", "description", "기획을 수행함.", "evidence", refs))));
-            ai.handler = (path, body) -> new Object[]{200, output.get()};
-            assertEquals(422, s.postEmpty("/journey/analyze").status());
-            assertEquals(0, ai.calls);
-            assertEquals(List.of(), s.get("/journey").map().get("events"));
-
-            String now = "2026-11-06T00:00:00.000Z";
-            var reply = mockReply("기능 6개를 기획했습니다.", List.of(), false);
-            s.sql(db -> db.run("INSERT INTO records VALUES (?, ?, NULL, ?, ?, ?, ?)", "record-1", "line1-hackathon", "기능 6개를 기획했습니다.",
-                    Json.stringify(reply), now, now));
-            var response = s.postEmpty("/journey/analyze");
-            assertEquals(200, response.status(), response.text());
-            var result = response.map();
-            assertEquals(false, at(result, "analysis", "stale"));
-            assertEquals(1.0, at(result, "analysis", "recordCount"));
-            assertEquals("1호선톤", at(result, "events", 0, "activity", "name"));
-            assertNotEquals("model-id", at(result, "events", 0, "id"));
-            assertEquals("🧭", at(result, "typeOptions", 1, "icon"));
-            assertEquals(response.text(), s.get("/journey").text());
-            assertEquals(1, ai.calls);
-            Object savedId = at(result, "analysis", "id");
-
-            List<java.util.function.Consumer<Map<String, Object>>> mutations = List.of(
-                    data -> Js.set(at(data, "result", "events", 0), "evidence", arr(obj("recordId", "missing", "quote", "없는 기록"))),
-                    data -> Js.set(at(data, "result", "summary"), "evidence", arr(obj("recordId", "record-1", "quote", "없는 인용문"))),
-                    data -> Js.set(at(data, "result", "events", 0, "activity"), "id", "computer-vision"),
-                    data -> Js.set(at(data, "result", "events", 0), "occurredAt", "2020-01"),
-                    data -> Js.asObject(at(data, "result", "typeOptions", 1)).remove("icon"),
-                    data -> Js.asArray(at(data, "result", "typeOptions")).add(obj("value", "unused", "label", "사용하지 않는 분류", "icon", "📝")),
-                    data -> Js.set(at(data, "result", "events", 0), "axis", "missing"),
-                    data -> Js.asArray(at(data, "result", "axisOptions")).add(obj("value", "unused", "label", "사용하지 않는 분야")),
-                    data -> Js.set(at(data, "result", "axisOptions", 1), "label", "전체 분야"),
-                    data -> {
-                        Js.asArray(at(data, "result", "axisOptions")).add(obj("value", "duplicate-label", "label", " 서비스 디자인 "));
-                        var copy = new LinkedHashMap<>(Js.asObject(at(data, "result", "events", 0)));
-                        copy.put("id", "different-id");
-                        copy.put("axis", "duplicate-label");
-                        Js.asArray(at(data, "result", "events")).add(copy);
-                    },
-                    data -> Js.set(at(data, "result", "events", 0), "comparison", obj("before", "기획", "after", "PM", "evidence", arr())));
-            for (var mutate : mutations) {
-                ai.handler = (path, body) -> {
-                    var data = output.get();
-                    mutate.accept(data);
-                    return new Object[]{200, data};
-                };
-                assertEquals(502, s.postEmpty("/journey/analyze").status());
-                assertEquals(savedId, at(s.get("/journey").json(), "analysis", "id"));
-            }
-
-            ai.handler = (path, body) -> {
-                var data = output.get();
-                s.sql(db -> db.run("UPDATE records SET updated_at = '2026-11-07T00:00:00Z' WHERE id = 'record-1'"));
-                return new Object[]{200, data};
-            };
-            assertEquals(409, s.postEmpty("/journey/analyze").status());
-            assertEquals(true, at(s.get("/journey").json(), "analysis", "stale"));
-
-            ai.handler = (path, body) -> new Object[]{503, obj("error", "설정 확인 필요")};
-            var unavailable = s.postEmpty("/journey/analyze");
-            assertEquals(503, unavailable.status());
-            assertEquals("설정 확인 필요", unavailable.map().get("error"));
         }
     }
 

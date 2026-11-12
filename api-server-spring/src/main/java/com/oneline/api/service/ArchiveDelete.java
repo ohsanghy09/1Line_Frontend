@@ -48,12 +48,7 @@ public final class ArchiveDelete {
     // 삭제된 근거를 포함한 전체 요약/배지를 부분적으로 신뢰할 수 없으므로 스냅샷 전체를 비운다.
     private static void invalidateJourney(Database db) {
         for (Map<String, Object> row : db.all("SELECT id, result_json FROM journey_analyses")) {
-            Object result = Json.parse((String) row.get("result_json"));
-            Js.set(result, "summary", obj("title", "기록이 삭제됐어요.", "description", "남은 기록으로 성장 분석을 갱신해 주세요."));
-            Js.set(result, "badges", new ArrayList<>());
-            Js.set(result, "events", new ArrayList<>());
-            Js.set(result, "typeOptions", arr(obj("value", "all", "label", "전체")));
-            Js.set(result, "axisOptions", arr(obj("value", "all", "label", "전체 분야")));
+            Object result = Journey.emptyResult("기록이 삭제됐어요.", "남은 기록으로 성장 분석을 갱신해 주세요.");
             db.run("UPDATE journey_analyses SET source_fingerprint = ?, result_json = ? WHERE id = ?",
                     "deleted:" + Js.randomUUID(), Json.stringify(result), row.get("id"));
         }

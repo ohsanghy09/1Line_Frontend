@@ -1,5 +1,8 @@
 # 백엔드 API 정의서
 
+> Growth Journey v2 (2026-11-12): [최신 공통 JSON 계약](../../growth-journey-update/공통_JSON_계약.md)과 [전체 요청·응답 예시](../../growth-journey-update/examples/journey-exchange.json)를 따른다. Spring·프론트 및 OpenAPI·Swagger는 반영했으나 실제 AI 구현·원격 연동·배포는 미검증이다.
+
+
 기준일: 2026-11-06. [공통 응답 객체](../../common/handoff/공통_데이터_계약.md) · [오류](../../common/handoff/상태와_오류_처리.md)
 
 Base는 백엔드가 제공하는 HTTPS 주소이며 /api까지 포함한다. 프론트 담당자가 연결 설정에 반영한다. 아래는 Base 뒤에 붙이는 경로다. 현재 Authorization·사용자 식별·credentials 설정 없음. JSON 본문은 Content-Type: application/json. id는 경로에 URL 인코딩한다. 정상 JSON은 별도 data wrapper 없이 반환한다. 아래 목록은 현재 프론트에 필요한 공개 계약이다. 개발용 진단·원시 조회·직접 카드 JSON 저장 경로는 요구하지 않는다.

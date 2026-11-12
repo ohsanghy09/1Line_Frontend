@@ -105,9 +105,13 @@ test('Swagger에서 연결한 handoff 원문과 문서 사이 링크를 정적 �
     async function checkPage(url) {
         const parsed = new URL(url, 'https://docs.example.org/swagger/')
         if (!parsed.pathname.startsWith('/swagger/handoff/') || visited.has(parsed.pathname)) return
-        visited.add(parsed.pathname)
         const relative = decodeURIComponent(parsed.pathname.slice('/swagger/'.length))
         const html = await readFile(path.join(directory, relative), 'utf8')
+        if (relative.endsWith('.json')) {
+            assert.ok(JSON.parse(html).publicResponse)
+            return
+        }
+        visited.add(parsed.pathname)
         assert.ok(html.includes('<html lang="ko">'))
         for (const [, href] of html.matchAll(/href="([^"]+)"/g)) {
             await checkPage(new URL(href, parsed).href)
@@ -127,5 +131,10 @@ test('Swagger에서 연결한 handoff 원문과 문서 사이 링크를 정적 �
             }
         }
     }
-    assert.equal(visited.size, 21)
+    assert.equal(visited.size, 25)
+    assert.ok(visited.has(encodeURI('/swagger/handoff/growth-journey-update/공통_JSON_계약.html')))
+    const example = JSON.parse(await readFile(path.join(directory, 'handoff/growth-journey-update/examples/journey-exchange.json'), 'utf8'))
+    assert.equal(example.publicResponse.schemaVersion, 'journey-result-v2')
+    const contract = await readFile(path.join(directory, 'handoff/growth-journey-update/공통_JSON_계약.html'), 'utf8')
+    assert.ok(contract.includes('href="examples/journey-exchange.json"'))
 })
