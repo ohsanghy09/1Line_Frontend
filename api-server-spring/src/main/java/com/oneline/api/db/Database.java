@@ -85,9 +85,14 @@ public final class Database implements AutoCloseable {
                     CREATE TABLE IF NOT EXISTS journey_analyses (
                       id TEXT PRIMARY KEY, source_fingerprint TEXT NOT NULL,
                       record_count INTEGER NOT NULL, result_json TEXT NOT NULL,
-                      model TEXT NOT NULL, prompt_version TEXT NOT NULL, created_at TEXT NOT NULL
+                      model TEXT NOT NULL, prompt_version TEXT NOT NULL, created_at TEXT NOT NULL,
+                      criteria_version TEXT
                     );
                     """);
+            // 빈 기존 테이블도 지원한다. 구형 분석 행을 변환하거나 삭제하지 않는다.
+            boolean hasCriteria = db.all("PRAGMA table_info(journey_analyses)").stream()
+                    .anyMatch(column -> "criteria_version".equals(column.get("name")));
+            if (!hasCriteria) db.exec("ALTER TABLE journey_analyses ADD COLUMN criteria_version TEXT");
             // 기존 DB의 활동·기록·원본을 보존하며 상세 메타정보 자리만 추가한다.
             Set<String> columns = new HashSet<>();
             for (Map<String, Object> column : db.all("PRAGMA table_info(activities)")) columns.add((String) column.get("name"));

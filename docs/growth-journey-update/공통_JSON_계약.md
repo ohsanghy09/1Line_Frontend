@@ -1,6 +1,6 @@
 # Growth Journey 공통 JSON 계약
 
-갱신일: 2026-11-12 · 상태: 정책 확정, 구현 대상 계약. 현재 기능 코드·기존 OpenAPI에는 미적용이다.
+갱신일: 2026-11-12 · 상태: Spring·DB 적용 및 로컬 검증 완료. 프론트·기존 OpenAPI는 미적용이다. 실제 AI 구현·연동·배포는 미검증이다.
 
 이번 Growth Journey 구현은 이 문서를 기준으로 한다. 기존 handoff의 자유 유형 생성·서로 다른 기록 2개 필수 규칙을 대체한다. 홈·활동 메타정보·Timeline 계약은 유지한다. 기존 OpenAPI 스키마는 구현과 함께 갱신한다.
 
@@ -122,7 +122,7 @@ targetActivityId는 event.activity.id와 같고 applicationEvidence 중 하나 �
 - 판단 evidence는 그 판단의 전체 근거이며 comparison/transfer 역할별 근거를 모두 포함해야 한다.
 - 중복 제거 키는 recordId+quote. 배열 내부 중복은 제거하되 before/after·출발/적용 역할을 합쳐 없애지 않는다.
 - Spring은 모든 중첩 근거의 기록 ID와 실제 원문을 검사한다. 판단 전체 근거를 합쳐 이벤트의 대상 활동 근거가 있는지 확인한다.
-- occurredAt은 이벤트 전체 근거 중 가장 늦은 savedAt의 YYYY-MM이다. 실제 활동 시점이라고 주장하지 않는다. 시각은 정규화해 비교한다.
+- occurredAt은 이벤트 전체 근거 중 가장 늦은 savedAt을 UTC로 정규화한 YYYY-MM이다. 실제 활동 시점이라고 주장하지 않는다. 날짜 비교는 문자열 순서가 아닌 실제 시각을 사용한다.
 - 이벤트가 없으면 axisOptions는 전체 분야만 반환한다. typeOptions는 항상 전체+5종이다.
 - 기존 공급자 검증 중 미사용 유형 금지는 제거하고 미사용 분야 금지는 유지한다.
 
