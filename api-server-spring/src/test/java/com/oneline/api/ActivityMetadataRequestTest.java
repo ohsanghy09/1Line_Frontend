@@ -22,7 +22,7 @@ class ActivityMetadataRequestTest {
         Object quote = message.isBlank() ? first.get("summary") : message;
         var evidence = List.of(obj("recordId", first.get("id"), "quote", quote));
         return obj("sourceFingerprint", request.get("sourceFingerprint"), "recordCount", request.get("recordCount"),
-                "model", "test-json-only-model", "promptVersion", "activity-metadata-v1",
+                "model", "test-json-only-model", "promptVersion", "activity-metadata-analysis",
                 "metadata", obj("summary", obj("value", "전달된 기록을 종합했습니다.", "evidence", evidence),
                         "status", null, "role", null, "period", obj("start", null, "end", null)));
     }
@@ -165,6 +165,29 @@ class ActivityMetadataRequestTest {
             assertEquals("변경된 원문", Js.get(Js.asArray(captured.get(1).get("records")).get(0), "message"));
             assertNotEquals(captured.get(0).get("sourceFingerprint"), captured.get(1).get("sourceFingerprint"));
             assertEquals(captured.get(1).get("sourceFingerprint"), s.row("SELECT metadata_fingerprint FROM activities WHERE id = ?", ID).get("metadata_fingerprint"));
+        }
+    }
+
+    @Test
+    void rejectsOtherPromptVersionsWithoutReplacingSavedMetadata() {
+        try (var ai = new TestServer.FakeAi(); var s = TestServer.start("oneline.ai-base-url=" + ai.url, "oneline.activity-analysis-delay-ms=5")) {
+            previous(s); seed(s, "record", "실제 기록 원문");
+            ai.handler = (path, raw) -> new Object[]{200, output(Js.asObject(raw))};
+            analyze(s); await(s, "ready");
+            var saved = s.row("SELECT summary, role, status, start_date, end_date, metadata_fingerprint, metadata_model, metadata_updated_at FROM activities WHERE id = ?", ID);
+            assertEquals("전달된 기록을 종합했습니다.", saved.get("summary"));
+            for (String version : Arrays.asList("activity-metadata-v1", "journey-v6", "", null, "__missing__")) {
+                ai.handler = (path, raw) -> {
+                    var response = output(Js.asObject(raw));
+                    if ("__missing__".equals(version)) response.remove("promptVersion");
+                    else response.put("promptVersion", version);
+                    return new Object[]{200, response};
+                };
+                analyze(s); await(s, "failed");
+                assertEquals(saved, s.row("SELECT summary, role, status, start_date, end_date, metadata_fingerprint, metadata_model, metadata_updated_at FROM activities WHERE id = ?", ID), String.valueOf(version));
+                assertEquals("실제 기록 원문", s.row("SELECT message FROM records WHERE id = 'record'").get("message"));
+            }
+            assertEquals(6, ai.calls);
         }
     }
 }

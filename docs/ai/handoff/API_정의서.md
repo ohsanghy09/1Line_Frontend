@@ -68,7 +68,7 @@ multipart의 Content-Type과 boundary는 브라우저가 생성한다. 별도로
 
 | 메서드·경로 | 요청 | 응답·저장 책임 |
 | --- | --- | --- |
-| POST /analyze/activities/:activityId | JSON 활동 스냅샷. activity/previous/records/files/recordCount/sourceFingerprint, 상세는 서버 간 전달 계약 | {sourceFingerprint,recordCount,model,promptVersion:activity-metadata-v1,metadata}. 백엔드가 근거·해시 재검증 후 activities 갱신 |
+| POST /analyze/activities/:activityId | JSON 활동 스냅샷. activity/previous/records/files/recordCount/sourceFingerprint, 상세는 서버 간 전달 계약 | {sourceFingerprint,recordCount,model,promptVersion:activity-metadata-analysis,metadata}. 백엔드가 근거·해시 재검증 후 activities 갱신 |
 | POST /analyze/journey | JSON {schemaVersion,criteriaVersion,records,recordCount,sourceFingerprint} | {schemaVersion,criteriaVersion,sourceFingerprint,recordCount,model,promptVersion:journey-v6,result:FreshJourney}. Spring이 검증·출처 추가 후 저장 |
 | POST /analyze/records/:recordId/exclude-file | JSON {fileId,recordReply,activity,files:남은 원본[]}, 상세는 서버 간 전달 계약 | {reply,recordReply:string,fileIds:string[]}. recordReply는 기존 records.reply JSON 원문. fileIds는 요청의 남은 원본 순서. 백엔드가 검증·삭제 |
 
@@ -81,7 +81,7 @@ metadata 객체는 summary:{value,evidence}, status:{value:진행 중/완료,evi
 위 내부 요청 본문은 공유 로컬 DB가 없는 새 서버를 위한 분리 구현 규격이다. 기존 개발 서버의 ID 전용 요청이 그대로 동작하는 것처럼 해석하지 않는다. 요청·원본·완료 게시에 필요한 모든 필드는 [서버 간 전달 계약](../../common/handoff/서버간_데이터_전달_계약.md)에 정의했다. 아래 응답의 sourceFingerprint는 백엔드가 요청에 보낸 64자리 hex를 그대로 돌려준다. 임의 예시 해시는 실제 저장 검증을 통과하지 않으며 model도 실제 설정값으로 대체한다.
 
 ```json
-{"sourceFingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","recordCount":1,"model":"configured-model","promptVersion":"activity-metadata-v1","metadata":{"summary":{"value":"북클럽봄을 시작했어요.","evidence":[{"recordId":"record-01","quote":"북클럽봄을 시작했어요."}]},"status":null,"role":null,"period":{"start":null,"end":null}}}
+{"sourceFingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","recordCount":1,"model":"configured-model","promptVersion":"activity-metadata-analysis","metadata":{"summary":{"value":"북클럽봄을 시작했어요.","evidence":[{"recordId":"record-01","quote":"북클럽봄을 시작했어요."}]},"status":null,"role":null,"period":{"start":null,"end":null}}}
 ```
 
 ### Growth Journey v2 응답

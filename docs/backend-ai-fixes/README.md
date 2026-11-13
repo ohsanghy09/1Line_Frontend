@@ -1,14 +1,14 @@
 # 백엔드·AI 호환 및 실패 처리 보완
 
-작성일: 2026-11-13 · 상태: 문제 조사·수정 방향 정리, 기능 구현 전
+작성일: 2026-11-13 · 상태: 활동 분석 버전 정합화 완료, Spring 검사 48개·JAR 빌드 통과. 나머지 3개 기능은 구현 전
 
 ## 목적과 작업 범위
 
-기존 [분리 서버 연동 구현](../backend-ai-integration/README.md)을 바탕으로, 실제 AI 저장소와 Spring 사이의 형식 불일치와 중단된 작업 처리를 보완한다. AI 코드를 변경하지 않고 백엔드에서 대응하는 방향을 논의했다. 이번 작업은 문서 작성이며 기능 코드·DB·배포 설정은 변경하지 않았다.
+기존 [분리 서버 연동 구현](../backend-ai-integration/README.md)을 바탕으로, 실제 AI 저장소와 Spring 사이의 형식 불일치와 중단된 작업 처리를 보완한다. AI 코드를 변경하지 않고 백엔드에서 대응한다. 사용자 요청으로 첫 작업인 활동 분석 버전 정합화를 시작했다. DB·배포 설정은 변경하지 않았다.
 
 관련 이슈 제목: `fix: AI 연동 계약 호환 및 분석 작업 실패·만료 처리 보완`
 
-이 폴더를 새 작업의 계획·결정·검증 기록 진입점으로 사용한다. 기존 연동 구현 이력은 backend-ai-integration에 유지한다. 기존 계약은 현재 구현 기준이며, 향후 변경을 실제 구현할 때 관련 계약·OpenAPI·검사도 함께 맞춘다. 아래 계획을 구현 완료로 해석하지 않는다.
+이 폴더를 새 작업의 계획·결정·검증 기록 진입점으로 사용한다. 기존 연동 구현 이력은 backend-ai-integration에 유지한다. 변경한 계약·OpenAPI·검사는 구현과 함께 갱신하며 항목별 완료 상태를 구분한다. 미구현 항목을 완료로 해석하지 않는다.
 
 ## 조사 기준과 한계
 
@@ -27,18 +27,22 @@
 
 | 항목 | 현재 불일치·누락 | 백엔드에서 논의한 변경 | 결정 상태 |
 | --- | --- | --- | --- |
-| 활동 분석 버전 | Spring은 activity-metadata-v1만 허용하고 AI는 activity-metadata-analysis 반환 | 허용 버전을 AI 응답 기준으로 정합화하고 계약 갱신 | 방향 논의, 세부 정책·구현 전 |
+| 활동 분석 버전 | 조사 시 Spring v1과 AI 반환값 불일치. 현재 Spring을 activity-metadata-analysis로 변경 | AI 기준 허용값·계약·검사 갱신 | 구현·로컬 검증 완료 |
 | 빈 기록 본문 | 파일·링크 기록의 message는 빈 문자열인데 AI Text 검증은 이를 거절 | DB 값은 유지하고 홈 문맥 응답에서 빈 문자열만 null로 변환 | 방향 논의, 구현 전 |
 | 실패 요청 reply | AI가 failed로 전환할 때 남긴 reply를 Spring이 거절 | failed 요청의 reply를 백엔드에서 null로 정규화 | 채택한 방향. 사용자의 중단 지시 후 수정하지 않음 |
 | 작업 만료 | AI만 종료되면 백엔드 queued/running이 남음 | 오래 갱신되지 않은 작업을 failed로 종료하고 늦은 완료 거절 | 시간 기준 확정, 세부 구현·검증 전 |
 
 ### 1. 활동 정보 분석 버전
 
-AI [activity_metadata.py](https://github.com/hongdabomi/GrowthArchive_ai/blob/3f2e9907396d728ea37aeafa189bac92c0159a24/activity_metadata.py)는 promptVersion=activity-metadata-analysis를 반환한다. Spring [ActivityMetadata.java](../../api-server-spring/src/main/java/com/oneline/api/service/ActivityMetadata.java)의 OUTPUT은 activity-metadata-v1만 허용하므로 정상 내용도 거절된다.
+AI [activity_metadata.py](https://github.com/hongdabomi/GrowthArchive_ai/blob/3f2e9907396d728ea37aeafa189bac92c0159a24/activity_metadata.py)는 promptVersion=activity-metadata-analysis를 반환한다. 조사 당시 Spring OUTPUT은 activity-metadata-v1만 허용해 정상 내용도 거절했다. 현재 [ActivityMetadata.java](../../api-server-spring/src/main/java/com/oneline/api/service/ActivityMetadata.java)의 허용값을 activity-metadata-analysis로 변경했다.
 
-- [ ] AI 기준 버전으로 맞추는 정책과 기존 버전 수용 여부를 정한다.
-- [ ] 버전명 검증·관련 계약·OpenAPI·검사를 갱신한다.
-- [ ] 응답 구조·원문 근거·기록 수·해시 검증은 유지한다.
+- [x] AI 반환값 activity-metadata-analysis만 허용한다. 기존 버전·임의 버전은 허용하지 않는다.
+- [x] 버전명 검증·관련 계약·OpenAPI·검사를 갱신한다.
+- [x] 응답 구조·원문 근거·기록 수·해시 검증은 유지한다.
+
+실제 AI 응답 버전이 현재도 같은지 GitHub 파일을 재확인했다 (blob `53062290d4d03bf42ac718baca8f4d49028138d4`). 기존 활동 메타정보의 조회·DB 구조·자동/수동 분석 요청 본문은 변경하지 않았다. 구형 응답을 새 결과로 받는 호환 처리는 추가하지 않는다.
+
+신규 버전의 자동/수동 저장과 기존 정보 보존을 검사하고, 구버전·다른 분석 버전·빈 값·null·누락은 실패 처리하되 마지막 유효 메타정보를 유지하는 검사를 추가했다. Spring 전체 48개·JAR 빌드, OpenAPI/정적 문서 검사 4개 통과. 실제 AI 모델·EC2·브라우저 통합 검증은 미수행이다.
 
 ### 2. 빈 기록 본문
 
@@ -92,13 +96,13 @@ AI는 preparing → analyzing → persisting 등 단계 전환 시 상태를 갱
 
 ## 검증·완료 기준
 
-- [ ] 실제 AI 응답 구조를 사용하는 활동 종합 저장 검사.
+- [x] 실제 AI 응답 버전·구조를 사용하는 활동 종합 저장 검사 (로컬 HTTP AI 대역).
 - [ ] 파일·링크 저장 후 빈 message를 포함한 홈 문맥의 AI 검증 통과.
 - [ ] failed+reply 결과 요청의 정규화·저장·재조회·중복 처리 검사.
 - [ ] 완료 미저장 후 실패 게시, 완료 저장 후 응답 유실, stale revision을 구분한 검사.
 - [ ] AI 중단을 가정한 만료, 갱신 직전/직후·완료 동시 요청·늦은 완료·사용자 재전송 검사.
-- [ ] 기존 공개 API·저장·수정·삭제·인증·원본 보관 회귀 검사.
-- [ ] 계약·OpenAPI·작업 기록을 실제 구현과 일치하도록 갱신.
+- [x] 활동 버전 변경 후 기존 공개 API·저장·수정·삭제·인증·원본 보관 회귀 검사.
+- [x] 활동 버전 범위의 계약·OpenAPI·작업 기록을 실제 구현과 일치하도록 갱신. 나머지 변경은 구현 시 진행.
 
 로컬 검사, 실제 두 서버의 계약 통합 검사, 실제 모델·브라우저·EC2 검증은 별도로 기록한다. 성공할 수 없는 분석을 성공으로 위장하지 않고 실패 안내·재전송이 가능한 상태로 정리한다. 토큰·키는 코드·문서·프론트에 넣지 않는다.
 

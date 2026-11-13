@@ -90,7 +90,7 @@ public final class ActivityMetadata {
             "sourceFingerprint", text(),
             "recordCount", number().integer().positive(),
             "model", text(),
-            "promptVersion", literal("activity-metadata-v1"),
+            "promptVersion", literal("activity-metadata-analysis"),
             "metadata", object(
                     "summary", fact(),
                     "role", fact().nullable(),

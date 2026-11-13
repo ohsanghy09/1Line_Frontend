@@ -30,6 +30,8 @@ PowerShell 설정 형식은 `$env:INTERNAL_SERVICE_TOKEN = '<서버 비밀 설�
 
 ## 활동 정보 분석 JSON 전달 (2026-11-13)
 
+응답의 promptVersion은 실제 AI 반환값인 `activity-metadata-analysis`만 허용한다. 이전 activity-metadata-v1 응답은 거절하지만 이미 저장한 활동 메타정보를 삭제하거나 변환하지 않는다. 구조·근거·해시·기간 검증은 유지한다. 버전 정합화 후 Spring 검사 48개·JAR 빌드를 통과했으며 실제 AI/EC2 연동은 미검증이다. [호환 보완 작업](../docs/backend-ai-fixes/README.md)에 진행 상태를 기록한다.
+
 자동·수동 활동 분석은 `POST /api/analyze/activities/:activityId`에 activity·previous·records·files·recordCount·sourceFingerprint를 JSON 본문으로 보낸다. files는 [recordId,fileId,name] 메타정보이며 원본 bytes는 포함하지 않는다. 기존 스냅샷 정렬·해시·응답 근거 검증과 실패 시 이전 정보 보존은 유지한다.
 
 기록 1~100개·직렬화 JSON 250000 코드 포인트 한도를 AI HTTP 호출 전에 검사한다. 비동기 공개 API의 기존 202 접수 후 상태 조회 흐름은 유지한다. 한도 초과 시 작업은 failed가 되며 기존 정보와 기록은 보존한다. AI는 요청 본문으로만 종합하고 sourceFingerprint를 그대로 반환해야 한다. 실제 AI 측 JSON 수신·모델 평가·EC2 연동은 별도 확인 대상이다.

@@ -621,7 +621,7 @@
                   "sourceFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                   "recordCount": 1,
                   "model": "configured-model",
-                  "promptVersion": "activity-metadata-v1",
+                  "promptVersion": "activity-metadata-analysis",
                   "metadata": {
                     "summary": {
                       "value": "북클럽봄을 시작했어요.",
@@ -1456,7 +1456,7 @@
             "pattern": "\\S"
           },
           "promptVersion": {
-            "const": "activity-metadata-v1"
+            "const": "activity-metadata-analysis"
           },
           "metadata": {
             "$ref": "#/components/schemas/ActivityMetadataAnalysis"

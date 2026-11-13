@@ -66,7 +66,7 @@ docs/
 
 ## 작업을 이어갈 때
 
-- [백엔드·AI 호환 및 실패 처리 보완](backend-ai-fixes/README.md): 실제 AI와의 불일치 4건, 백엔드 수정 방향과 확정·제안 상태. 기능 구현 전이다.
+- [백엔드·AI 호환 및 실패 처리 보완](backend-ai-fixes/README.md): 불일치 4건의 진행 상태. 활동 분석 버전 정합화는 완료했으며 나머지 3개 기능은 구현 전이다.
 - [백엔드·AI 분리 서버 연동](backend-ai-integration/README.md): 공유 DB 의존성 해소, 내부 데이터 전달·인증 구현 계획과 검증 기록.
 - [프론트 API 연동 정비](frontend-integration/README.md): 이번 작업의 상세 조사·사용자 확인·검증 기록 진입점.
 - [프론트 독립 및 원격 서버 연동 정비](common/integration/프론트엔드_독립_및_원격_서버_연동_정비.md): 현재 작업 계획. 실제 원격 서버 연동 검증은 별도 후속 작업이다.

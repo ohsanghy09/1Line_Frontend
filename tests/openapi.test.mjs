@@ -89,6 +89,7 @@ test('저장·분석 필수 필드와 상태별 생략 규칙을 명시한다', 
     assert.ok(ai.paths['/chat'].post.requestBody.content['multipart/form-data'])
     assert.ok(ai.paths['/chat'].post.responses['200'])
     assert.ok(ai.paths['/chat'].post.responses['202'])
+    assert.equal(ai.components.schemas.ActivityAnalysisResult.properties.promptVersion.const, 'activity-metadata-analysis')
 })
 
 test('Swagger에서 연결한 handoff 원문과 문서 사이 링크를 정적 파일로 제공한다', async t => {
