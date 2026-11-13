@@ -32,6 +32,7 @@ public final class ArchiveDelete {
         db.run("UPDATE analyses SET reply = ? WHERE id = ?", Json.stringify(obj(
                 "id", Js.get(reply, "id"), "role", "assistant", "kind", "general", "analysis", null,
                 "content", Js.str(Js.get(reply, "content")) + "\n\n" + content)), analysisId);
+        InternalChatJobs.changed(db, analysisId);
     }
 
     private static void retireDraft(Database db, Object analysisId) {

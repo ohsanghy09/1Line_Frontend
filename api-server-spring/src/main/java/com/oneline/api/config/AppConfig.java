@@ -2,6 +2,7 @@ package com.oneline.api.config;
 
 import com.oneline.api.db.Database;
 import com.oneline.api.service.ActivityMetadataQueue;
+import com.oneline.api.service.InternalChatJobs;
 import com.oneline.api.support.EventLoop;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,7 +41,14 @@ public class AppConfig implements WebMvcConfigurer {
         String path = configuredPath;
         if (path == null) path = System.getenv("DB_PATH");
         if (path == null) path = defaultDatabasePath();
-        return Database.open(path);
+        Database db = Database.open(path);
+        try {
+            InternalChatJobs.recover(db);
+            return db;
+        } catch (RuntimeException e) {
+            db.close();
+            throw e;
+        }
     }
 
     /** 기존 서버와 같은 DB 파일(api-server/data/1line.db)을 기본으로 사용한다. */

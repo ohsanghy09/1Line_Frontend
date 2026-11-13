@@ -90,6 +90,16 @@ public final class Database implements AutoCloseable {
                     );
                     """);
             // 빈 기존 테이블도 지원한다. 구형 분석 행을 변환하거나 삭제하지 않는다.
+            db.exec("""
+                    CREATE TABLE IF NOT EXISTS internal_chat_publications (
+                      job_id TEXT PRIMARY KEY REFERENCES ai_chat_jobs(id) ON DELETE CASCADE,
+                      revision INTEGER NOT NULL CHECK(revision >= 1),
+                      input_signature TEXT NOT NULL, publish_signature TEXT
+                    );
+                    CREATE TABLE IF NOT EXISTS internal_job_tombstones (
+                      job_id TEXT PRIMARY KEY, request_id TEXT NOT NULL UNIQUE, analysis_id TEXT NOT NULL UNIQUE
+                    );
+                    """);
             boolean hasCriteria = db.all("PRAGMA table_info(journey_analyses)").stream()
                     .anyMatch(column -> "criteria_version".equals(column.get("name")));
             if (!hasCriteria) db.exec("ALTER TABLE journey_analyses ADD COLUMN criteria_version TEXT");

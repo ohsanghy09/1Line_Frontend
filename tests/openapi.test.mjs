@@ -108,7 +108,8 @@ test('Swagger에서 연결한 handoff 원문과 문서 사이 링크를 정적 �
         const relative = decodeURIComponent(parsed.pathname.slice('/swagger/'.length))
         const html = await readFile(path.join(directory, relative), 'utf8')
         if (relative.endsWith('.json')) {
-            assert.ok(JSON.parse(html).publicResponse)
+            const example = JSON.parse(html)
+            assert.ok(example.publicResponse || example.completedResponse)
             return
         }
         visited.add(parsed.pathname)
@@ -131,7 +132,11 @@ test('Swagger에서 연결한 handoff 원문과 문서 사이 링크를 정적 �
             }
         }
     }
-    assert.equal(visited.size, 25)
+    assert.equal(visited.size, 27)
+    assert.ok(visited.has('/swagger/handoff/backend-ai-integration/README.html'))
+    const homeExample = JSON.parse(await readFile(path.join(directory, 'handoff/backend-ai-integration/examples/home-job-exchange.json'), 'utf8'))
+    assert.equal(homeExample.queuedPublication.expectedRevision, 0)
+    assert.equal(homeExample.completedResponse.job.revision, 2)
     assert.ok(visited.has(encodeURI('/swagger/handoff/growth-journey-update/공통_JSON_계약.html')))
     const example = JSON.parse(await readFile(path.join(directory, 'handoff/growth-journey-update/examples/journey-exchange.json'), 'utf8'))
     assert.equal(example.publicResponse.schemaVersion, 'journey-result-v2')

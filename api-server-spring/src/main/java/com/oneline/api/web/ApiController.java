@@ -12,6 +12,7 @@ import com.oneline.api.service.Archive;
 import com.oneline.api.service.ArchiveDelete;
 import com.oneline.api.service.ArchiveSearch;
 import com.oneline.api.service.Home;
+import com.oneline.api.service.InternalChatJobs;
 import com.oneline.api.service.Journey;
 import com.oneline.api.support.EventLoop;
 import com.oneline.api.validation.Schemas;
@@ -142,6 +143,7 @@ public class ApiController {
                     || db.get("SELECT id FROM ai_chat_jobs WHERE status IN ('queued', 'running') LIMIT 1") != null) {
                 throw fail(409, "AI 분석이 진행 중이에요. 분석이 끝난 뒤 다시 삭제해 주세요.");
             }
+            InternalChatJobs.rememberReset(db);
             for (String table : List.of("timeline_events", "records", "files", "analysis_jobs", "ai_chat_jobs", "journey_analyses", "analyses", "activities")) {
                 db.exec("DELETE FROM " + table);
             }

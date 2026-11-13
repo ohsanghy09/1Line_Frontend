@@ -20,6 +20,8 @@ docs/
   backend-ai-integration/
     README.md
     작업_및_검증_기록.md
+    examples/
+      home-job-exchange.json
   growth-journey-update/
     README.md
     공통_JSON_계약.md

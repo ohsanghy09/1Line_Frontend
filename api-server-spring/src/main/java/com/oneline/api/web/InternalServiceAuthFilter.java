@@ -26,9 +26,13 @@ public final class InternalServiceAuthFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
+        return !isInternal(request);
+    }
+
+    public static boolean isInternal(HttpServletRequest request) {
         // 컨테이너가 디코딩·정규화한 경로 사용. context-path는 포함하지 않는다.
         String path = request.getServletPath().toLowerCase(Locale.ROOT);
-        return !(path.equals("/api/internal") || path.startsWith("/api/internal/"));
+        return path.equals("/api/internal") || path.startsWith("/api/internal/");
     }
 
     @Override

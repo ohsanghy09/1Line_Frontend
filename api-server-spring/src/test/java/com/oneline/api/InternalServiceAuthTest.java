@@ -45,8 +45,9 @@ class InternalServiceAuthTest {
                 assertEquals("no-store", missing.header("Cache-Control"));
                 assertEquals(401, server.request("GET", path, null, null,
                         Map.of("Authorization", "Bearer wrong")).status(), path);
-                // 내부 컨트롤러는 후속 작업이다. 인증 통과 후 현재는 404가 맞다.
-                assertEquals(404, server.request("GET", path, null, null,
+                // home-context는 필수 query 누락 400, 없는 작업/경로는 404.
+                int expected = path.toLowerCase(java.util.Locale.ROOT).contains("home-context") ? 400 : 404;
+                assertEquals(expected, server.request("GET", path, null, null,
                         Map.of("Authorization", "Bearer " + TestServer.TOKEN)).status(), path);
             }
             assertEquals(401, server.request("PUT", "/internal/chat-jobs/test", "application/json", "{",

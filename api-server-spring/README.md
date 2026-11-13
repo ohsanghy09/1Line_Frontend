@@ -6,13 +6,27 @@
 
 - 백엔드 → AI의 활동·Journey·남은 파일 분석 요청에 `Authorization: Bearer <INTERNAL_SERVICE_TOKEN>`을 보낸다.
 - AI → 백엔드의 `/api/internal` 및 하위 경로는 토큰을 검사하고 누락·오류·중복 Authorization 헤더를 401로 거절한다. 공개 프론트 API에는 적용하지 않는다.
-- 홈 내부 API 컨트롤러는 아직 구현하지 않았다. 정상 토큰으로 해당 미구현 경로를 요청하면 404다.
+- 홈 내부 API 3개를 구현했다. 정상 토큰으로 문맥 조회·작업 게시·정본 재조회를 사용한다. 없는 작업은 404다.
 - 인증 요청은 HTTP 리다이렉트를 자동 추적하지 않는다. `AI_API_BASE_URL`은 리다이렉트 없는 최종 주소로 지정한다. 기존 설정대로 이 값은 `/api`를 제외한 AI 서버 주소이며 각 호출에서 `/api/analyze/...`를 붙인다.
 - 실제 배포는 HTTPS와 AI 측 토큰 송신·검증을 함께 구성해야 한다. 이 변경만으로 실제 AI 연동·TLS 설정·사용자 인증이 완료되는 것은 아니다.
 
 PowerShell 설정 형식은 `$env:INTERNAL_SERVICE_TOKEN = '<서버 비밀 설정에서 받은 값>'`이다. 문서의 자리표시자를 실제 토큰으로 사용하지 않는다. 로컬 자동 검사는 별도 테스트 전용 값을 사용한다.
 
 작업 범위·결과는 [분리 서버 연동 기록](../docs/backend-ai-integration/작업_및_검증_기록.md)에 기록한다.
+
+## 홈 분석 내부 API (2026-11-13)
+
+- `GET /api/internal/home-context?conversationId=...`: 최근 활동 50개·확정 기록 50개와 최근 완료 대화 6회, 현재 활동 문맥을 반환한다.
+- `PUT /api/internal/chat-jobs/:jobId`: 게시 객체 전체와 expectedRevision을 받아 최초 201, 재전송·갱신 200을 반환한다.
+- `GET /api/internal/chat-jobs/:jobId`: `{job: JobSnapshot}` 정본과 revision을 반환한다. 내부 응답의 원본 bytes를 공개 프론트 응답에 복사하지 않는다.
+
+원본은 base64 JSON으로 전송하고 기존 files BLOB에 저장한다. 내부 PUT의 JSON 본문은 압축 해제 후 40MiB까지이며, 디코딩한 원본은 파일당 10MiB·총 25MiB·10개 제한이다. 공개 JSON API의 1MiB 제한은 유지한다. 앞단 프록시도 내부 경로의 한도를 수용해야 한다.
+
+기존 테이블을 보존하고 internal_chat_publications(버전·중복 검증)와 internal_job_tombstones(전체 삭제 후 재게시 차단용 ID 해시)를 추가한다. 정식 기록은 기존 POST /api/records에서 사용자 확인 후 생성한다. 활동 직접 수정·자료 삭제는 정본 revision을 증가시키며, 전체 삭제는 원문·원본·작업을 제거하고 재전송 방지용 ID 해시만 남긴다.
+
+현재 SQLite와 단일 백엔드 프로세스 기준으로 기동 시 미완료 내부 작업을 failed로 복구한다. 여러 백엔드 프로세스의 무중단 병행 기동은 복구 소유권·리스 설계가 추가로 필요하다. 사용자 인증·사용자별 DB 범위도 이번 작업에서 추가하지 않았다.
+
+로컬 Spring 검사 37개와 JAR 빌드를 통과했다. AI 서버의 내부 API 호출 구현·실제 서버 연동·배포는 별도다. [교환 예시](../docs/backend-ai-integration/examples/home-job-exchange.json)와 [공통 계약](../docs/common/handoff/서버간_데이터_전달_계약.md)을 따른다.
 
 ## Growth Journey 새 계약 적용 상태 (2026-11-12)
 
