@@ -211,7 +211,8 @@ public final class InternalChatJobs {
                 var metadata = metadata(in);
                 db.run("UPDATE ai_chat_jobs SET status = ?, phase = ?, error = ?, input_json = ?, updated_at = ? WHERE id = ?",
                         in.get("status"), in.get("phase"), Json.stringify(in.get("error")), Json.stringify(metadata), in.get("updatedAt"), jobId);
-                db.run("UPDATE internal_chat_publications SET revision = revision + 1, publish_signature = ? WHERE job_id = ?", p.signature(), jobId);
+                db.run("UPDATE internal_chat_publications SET revision = revision + 1, publish_signature = ?, progress_received_at_ms = ? WHERE job_id = ?",
+                        p.signature(), System.currentTimeMillis(), jobId);
                 return new Result(200, snapshot(db, jobId));
             }
             if (p.expected() != 0) throw new Failure(409, "internal_revision_conflict");
@@ -228,7 +229,9 @@ public final class InternalChatJobs {
                     INSERT INTO ai_chat_jobs (id, request_key, fingerprint, analysis_id, kind, status, phase, error, input_json, created_at, updated_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", jobId, in.get("requestId"), in.get("requestFingerprint"), in.get("analysisId"),
                     in.get("kind"), in.get("status"), in.get("phase"), Json.stringify(in.get("error")), Json.stringify(metadata(in)), in.get("createdAt"), in.get("updatedAt"));
-            db.run("INSERT INTO internal_chat_publications (job_id, revision, input_signature, publish_signature) VALUES (?, 1, ?, ?)", jobId, p.inputSignature(), p.signature());
+            long receivedAt = System.currentTimeMillis();
+            db.run("INSERT INTO internal_chat_publications (job_id, revision, input_signature, publish_signature, accepted_at_ms, progress_received_at_ms) VALUES (?, 1, ?, ?, ?, ?)",
+                    jobId, p.inputSignature(), p.signature(), receivedAt, receivedAt);
             return new Result(201, snapshot(db, jobId));
         });
     }

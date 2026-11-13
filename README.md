@@ -8,7 +8,7 @@
 
 ## 개발 상태
 
-2026-11-13 활동 정보 분석 응답의 promptVersion을 실제 AI와 같은 `activity-metadata-analysis`로 정합화하고, AI에 보내는 홈 문맥의 빈 기록 message를 JSON null로 변환했습니다. DB·공개 기록 응답·내용이 있는 원문은 유지합니다. 실패 요청의 reply는 JSON null로 정리하고 오류 정보·revision 검증·완료 결과 보호를 유지합니다. Spring 검사 52개·JAR 빌드를 통과했으며, [호환 보완 작업](docs/backend-ai-fixes/README.md)의 작업 만료는 구현 전입니다. 실제 AI 모델·EC2·브라우저 검증은 수행하지 않았습니다.
+2026-11-13 활동 정보 분석 응답의 promptVersion을 실제 AI와 같은 `activity-metadata-analysis`로 정합화하고, AI에 보내는 홈 문맥의 빈 기록 message를 JSON null로 변환했습니다. DB·공개 기록 응답·내용이 있는 원문은 유지합니다. 실패 요청의 reply는 JSON null로 정리하고 오류 정보·revision 검증·완료 결과 보호를 유지합니다. 홈 내부 작업은 백엔드 접수 후 queued 10분, 마지막 진행 갱신 수신 후 running 5분을 기준으로 30초마다 검사해 만료 처리합니다. 수신 시각 보관용 DB 컬럼 두 개를 기존 자료 보존 방식으로 추가합니다. Spring 검사 58개·JAR 빌드를 통과했습니다. [호환 보완 작업](docs/backend-ai-fixes/README.md)의 네 항목은 로컬 구현·검증을 완료했습니다. 실제 AI 모델·EC2·브라우저 검증은 수행하지 않았습니다.
 
 2026-11-13 Spring에 서버 간 Bearer 인증과 홈 문맥 조회·분석 작업 게시/재조회 내부 API를 구현했습니다. 초안·원본 보관, revision·중복·삭제 후 재전송 처리와 단일 백엔드 재시작 복구를 포함합니다. 활동 정보 분석의 기록·파일 메타정보·해시 JSON 전달과 파일 일부 삭제 재분석의 남은 원본 전달도 구현했으며 Spring 검사 47개·JAR 빌드를 통과했습니다. AI 측 호출 구현과 실제 서버 연동·배포는 미확인입니다. [백엔드·AI 분리 연동 작업](docs/backend-ai-integration/README.md)을 참고하세요.
 

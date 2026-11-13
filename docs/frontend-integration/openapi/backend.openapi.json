@@ -4326,7 +4326,8 @@
               }
             }
           }
-        ]
+        ],
+        "description": "백엔드는 queued 접수 후 10분, running 진행 갱신 수신 후 5분을 기준으로 30초마다 검사해 failed로 정리한다. error.code는 queue_timeout 또는 analysis_timeout이며 reply=null, revision은 증가한다. 완료 정본은 보존하고 만료 후 늦은 갱신은 거절한다. 만료 시각은 AI 타임스탬프 대신 백엔드 수신 시각으로 계산한다."
       },
       "JobSnapshotResponse": {
         "type": "object",

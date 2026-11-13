@@ -24,6 +24,15 @@ PowerShell 설정 형식은 `$env:INTERNAL_SERVICE_TOKEN = '<서버 비밀 설�
 
 원본은 base64 JSON으로 전송하고 기존 files BLOB에 저장한다. 내부 PUT의 JSON 본문은 압축 해제 후 40MiB까지이며, 디코딩한 원본은 파일당 10MiB·총 25MiB·10개 제한이다. 공개 JSON API의 1MiB 제한은 유지한다. 앞단 프록시도 내부 경로의 한도를 수용해야 한다.
 
+### 홈 작업 만료 (2026-11-13)
+
+- 내부 홈 작업의 queued는 백엔드 최초 접수 후 10분, running은 마지막 진행 갱신 수신 후 5분을 기준으로 30초마다 검사한다. AI의 시각·조회·동일 요청 재전송으로 시간을 연장하지 않는다. queued 갱신도 최초 접수 시각을 유지한다.
+- Spring 설정은 `oneline.internal-job-queued-timeout-ms=600000`, `oneline.internal-job-running-timeout-ms=300000`, `oneline.internal-job-scan-interval-ms=30000`이다. 양수만 허용하며 필요할 때 실행 인자 `--oneline.internal-job-running-timeout-ms=300000` 형식으로 주입한다.
+- 만료 시 `status=failed`, `reply=null`, `error={code,error}`를 저장하고 revision을 증가시킨다. 오류 코드는 `queue_timeout` / `analysis_timeout`이며 원인별 한국어 재요청 안내를 포함한다. 원본·입력과 기존 완료·실패 결과는 보존한다.
+- 요청과 같은 EventLoop·트랜잭션을 사용한다. 완료 저장이 먼저면 완료를 보존하고 만료가 먼저면 늦은 완료·진행 게시를 409로 거절한다. 같은 requestId의 재접수는 기존 failed 정본을 반환하므로 다시 분석할 때 새 요청을 사용한다.
+- internal_chat_publications에 `accepted_at_ms`, `progress_received_at_ms` INTEGER 컬럼을 시작 시 자동 추가한다. 기존 미완료 작업은 기존 재시작 복구로 failed 처리하고, 이후 신규 게시부터 수신 시각을 기록한다. 기존 자료·결과는 이관 시 보존한다. 서버 종료 때 타이머를 중지한 뒤 DB를 닫는다.
+- Spring 전체 58개·JAR 빌드 통과. 실제 AI·EC2·브라우저 검증은 별도다. 프론트는 현재 2분 후 폴링을 중단하므로 만료가 즉시 화면에 자동 표시되는 것은 아니며 AI가 정본을 재조회해 오류를 전달해야 한다. 주기적 heartbeat가 없는 정상 분석도 5분간 갱신이 없으면 만료될 수 있으므로 실제 처리 시간에 맞는 배포 검증이 필요하다.
+
 기존 테이블을 보존하고 internal_chat_publications(버전·중복 검증)와 internal_job_tombstones(전체 삭제 후 재게시 차단용 ID 해시)를 추가한다. 정식 기록은 기존 POST /api/records에서 사용자 확인 후 생성한다. 활동 직접 수정·자료 삭제는 정본 revision을 증가시키며, 전체 삭제는 원문·원본·작업을 제거하고 재전송 방지용 ID 해시만 남긴다.
 
 현재 SQLite와 단일 백엔드 프로세스 기준으로 기동 시 미완료 내부 작업을 failed로 복구한다. 여러 백엔드 프로세스의 무중단 병행 기동은 복구 소유권·리스 설계가 추가로 필요하다. 사용자 인증·사용자별 DB 범위도 이번 작업에서 추가하지 않았다.
