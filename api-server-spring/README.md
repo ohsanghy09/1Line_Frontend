@@ -26,13 +26,21 @@ PowerShell 설정 형식은 `$env:INTERNAL_SERVICE_TOKEN = '<서버 비밀 설�
 
 현재 SQLite와 단일 백엔드 프로세스 기준으로 기동 시 미완료 내부 작업을 failed로 복구한다. 여러 백엔드 프로세스의 무중단 병행 기동은 복구 소유권·리스 설계가 추가로 필요하다. 사용자 인증·사용자별 DB 범위도 이번 작업에서 추가하지 않았다.
 
-로컬 Spring 검사 42개와 JAR 빌드를 통과했다. AI 서버의 내부 API 호출 구현·실제 서버 연동·배포는 별도다. [교환 예시](../docs/backend-ai-integration/examples/home-job-exchange.json)와 [공통 계약](../docs/common/handoff/서버간_데이터_전달_계약.md)을 따른다.
+로컬 Spring 검사 47개와 JAR 빌드를 통과했다. AI 서버의 내부 API 호출 구현·실제 서버 연동·배포는 별도다. [교환 예시](../docs/backend-ai-integration/examples/home-job-exchange.json)와 [공통 계약](../docs/common/handoff/서버간_데이터_전달_계약.md)을 따른다.
 
 ## 활동 정보 분석 JSON 전달 (2026-11-13)
 
 자동·수동 활동 분석은 `POST /api/analyze/activities/:activityId`에 activity·previous·records·files·recordCount·sourceFingerprint를 JSON 본문으로 보낸다. files는 [recordId,fileId,name] 메타정보이며 원본 bytes는 포함하지 않는다. 기존 스냅샷 정렬·해시·응답 근거 검증과 실패 시 이전 정보 보존은 유지한다.
 
 기록 1~100개·직렬화 JSON 250000 코드 포인트 한도를 AI HTTP 호출 전에 검사한다. 비동기 공개 API의 기존 202 접수 후 상태 조회 흐름은 유지한다. 한도 초과 시 작업은 failed가 되며 기존 정보와 기록은 보존한다. AI는 요청 본문으로만 종합하고 sourceFingerprint를 그대로 반환해야 한다. 실제 AI 측 JSON 수신·모델 평가·EC2 연동은 별도 확인 대상이다.
+
+## 파일 일부 삭제 재분석 원본 전달 (2026-11-13)
+
+`POST /api/analyze/records/:recordId/exclude-file`에 fileId·recordReply·activity·files를 JSON으로 보낸다. files는 같은 기록의 삭제 대상 제외 원본이며 id/name/mimeType/size/contentBase64를 저장 순서대로 담는다. 삭제 대상 bytes나 다른 기록의 원본은 포함하지 않는다. 보관된 크기와 실제 bytes가 다르거나 빈 원본·한도 초과면 AI 호출 전에 502로 중단하고 삭제하지 않는다.
+
+AI는 recordReply를 모델 입력에 사용하지 않고 원문 그대로 응답한다. 남은 원본이 1개여도 정상 대상이다. 성공 응답의 recordReply·파일 ID/이름/순서·changes=[]·sourceUrl 없음과 현재 활동 스냅샷을 확인한 뒤 삭제·결과 교체·초안 퇴역을 트랜잭션으로 처리한다. AI 실패·불일치·동시 변경이면 삭제하지 않는다. 마지막 파일은 AI 재분석 없이 기존 삭제 정책으로 처리한다. 프론트 공개 삭제 API는 변경하지 않았다.
+
+실제 AI 수신 서버와 앞단 프록시는 원본 25MiB의 base64 증가분 및 기록 응답·메타정보 크기를 수용하도록 설정해야 한다. 실제 모델·EC2·브라우저 검증은 미수행이다.
 
 ## Growth Journey 새 계약 적용 상태 (2026-11-12)
 
