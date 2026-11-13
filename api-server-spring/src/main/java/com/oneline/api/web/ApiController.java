@@ -12,6 +12,7 @@ import com.oneline.api.service.Archive;
 import com.oneline.api.service.ArchiveDelete;
 import com.oneline.api.service.ArchiveSearch;
 import com.oneline.api.service.Home;
+import com.oneline.api.service.InternalChatJobs;
 import com.oneline.api.service.Journey;
 import com.oneline.api.support.EventLoop;
 import com.oneline.api.validation.Schemas;
@@ -142,6 +143,7 @@ public class ApiController {
                     || db.get("SELECT id FROM ai_chat_jobs WHERE status IN ('queued', 'running') LIMIT 1") != null) {
                 throw fail(409, "AI 분석이 진행 중이에요. 분석이 끝난 뒤 다시 삭제해 주세요.");
             }
+            InternalChatJobs.rememberReset(db);
             for (String table : List.of("timeline_events", "records", "files", "analysis_jobs", "ai_chat_jobs", "journey_analyses", "analyses", "activities")) {
                 db.exec("DELETE FROM " + table);
             }
@@ -182,7 +184,7 @@ public class ApiController {
         if (db.get("SELECT id FROM records LIMIT 1") == null) throw fail(422, "홈에서 기록을 저장한 뒤 성장 분석을 실행해 주세요.");
         journeyRunning = true;
         try {
-            return json(Journey.generateJourney(db, loop, options.aiBaseUrl()));
+            return json(Journey.generateJourney(db, loop, options.aiBaseUrl(), options.internalServiceAuth()));
         } finally {
             journeyRunning = false;
         }
@@ -234,7 +236,7 @@ public class ApiController {
         if (deletingRecords.contains(recordId)) throw fail(409, "이 기록의 자료를 삭제하고 있어요. 잠시 후 다시 확인해 주세요.");
         deletingRecords.add(recordId);
         try {
-            ArchiveDelete.deleteMaterial(db, loop, id, fileId, options.aiBaseUrl(),
+            ArchiveDelete.deleteMaterial(db, loop, id, fileId, options.aiBaseUrl(), options.internalServiceAuth(),
                     (target, reply) -> syncEvents(target, reply, Js.nowIso()));
             activityMetadata.cancelPending(id);
             if (options.autoActivityAnalysis() && db.get("SELECT id FROM records WHERE activity_id = ? LIMIT 1", id) != null) {

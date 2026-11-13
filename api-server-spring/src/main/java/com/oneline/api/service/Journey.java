@@ -1,6 +1,7 @@
 package com.oneline.api.service;
 
 import com.oneline.api.db.Database;
+import com.oneline.api.config.InternalServiceAuth;
 import com.oneline.api.js.Js;
 import com.oneline.api.js.Json;
 import com.oneline.api.support.EventLoop;
@@ -115,12 +116,12 @@ public final class Journey {
         return body;
     }
 
-    public static LinkedHashMap<String, Object> generateJourney(Database db, EventLoop loop, String aiBaseUrl) {
+    public static LinkedHashMap<String, Object> generateJourney(Database db, EventLoop loop, String aiBaseUrl, InternalServiceAuth auth) {
         Snapshot sent = db.transaction(() -> journeySnapshot(db));
         String input = Json.stringify(requestBody(sent));
         Fetch.Response response;
         try {
-            response = Fetch.post(loop, Fetch.aiBase(aiBaseUrl) + "/api/analyze/journey", input, 135_000, null);
+            response = Fetch.post(loop, Fetch.aiBase(aiBaseUrl) + "/api/analyze/journey", input, 135_000, null, auth);
         } catch (Fetch.FetchError error) {
             throw publicFail(error.timeout ? 504 : 502, error.timeout
                     ? "성장 분석 응답 시간이 초과됐어요. 다시 조회한 뒤 갱신해 주세요." : "AI 서버에 연결하지 못했어요. 실행 상태를 확인해 주세요.");

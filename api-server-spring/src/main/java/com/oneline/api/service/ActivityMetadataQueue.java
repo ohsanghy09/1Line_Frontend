@@ -1,6 +1,7 @@
 package com.oneline.api.service;
 
 import com.oneline.api.db.Database;
+import com.oneline.api.config.InternalServiceAuth;
 import com.oneline.api.js.Js;
 import com.oneline.api.support.EventLoop;
 import com.oneline.api.support.Fetch;
@@ -26,6 +27,7 @@ public final class ActivityMetadataQueue {
     private final Database db;
     private final EventLoop loop;
     private final String aiBaseUrl;
+    private final InternalServiceAuth auth;
     private final long delayMs;
     private final Map<Object, Job> jobs = new HashMap<>();
     private boolean closed;
@@ -41,10 +43,11 @@ public final class ActivityMetadataQueue {
         Fetch.Controller controller;
     }
 
-    public ActivityMetadataQueue(Database db, EventLoop loop, String aiBaseUrl, long delayMs) {
+    public ActivityMetadataQueue(Database db, EventLoop loop, String aiBaseUrl, long delayMs, InternalServiceAuth auth) {
         this.db = db;
         this.loop = loop;
         this.aiBaseUrl = aiBaseUrl;
+        this.auth = auth;
         this.delayMs = delayMs;
         db.run("UPDATE activities SET metadata_status = 'failed', metadata_error = ? WHERE metadata_status IN ('queued', 'running')",
                 "서버가 재시작되어 활동 정보 분석이 중단됐어요. 다시 분석해 주세요.");
@@ -144,8 +147,9 @@ public final class ActivityMetadataQueue {
         job.controller = new Fetch.Controller();
         try {
             String base = Fetch.aiBase(aiBaseUrl);
+            String input = ActivityMetadata.requestJson(db.get("SELECT * FROM activities WHERE id = ?", id), initial);
             Fetch.Response response = Fetch.post(loop, base + "/api/analyze/activities/" + Js.encodeURIComponent(Js.str(id)),
-                    null, 150000, job.controller);
+                    input, 150000, job.controller, auth);
             Object body = response.jsonOrNull();
             if (job.cancelled) return;
             if (!response.ok()) throw new IllegalStateException("활동 정보를 분석하지 못했어요. AI 서버 상태를 확인하고 다시 분석해 주세요.");

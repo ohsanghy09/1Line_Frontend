@@ -5,7 +5,7 @@ import swaggerUi from 'swagger-ui-dist'
 
 const handoffDirectories = [
   'common/handoff', 'common/integration/handoff', 'common/review', 'backend/handoff', 'ai/handoff',
-  'growth-journey-update',
+  'growth-journey-update', 'backend-ai-integration',
 ]
 
 const escapeHtml = value => value.replace(/[&<>"']/g, character => ({
@@ -15,10 +15,15 @@ const escapeHtml = value => value.replace(/[&<>"']/g, character => ({
 // 원문을 이스케이프해 제공하고 문서 묶음 안의 상대 링크를 연결한다.
 async function buildHandoffPages(target) {
   const documents = new Map()
-  const exampleSource = 'growth-journey-update/examples/journey-exchange.json'
-  const exampleTarget = path.join(target, 'handoff', exampleSource)
-  await mkdir(path.dirname(exampleTarget), { recursive: true })
-  await copyFile(new URL('../docs/' + exampleSource, import.meta.url), exampleTarget)
+  const exampleSources = [
+    'growth-journey-update/examples/journey-exchange.json',
+    'backend-ai-integration/examples/home-job-exchange.json',
+  ]
+  for (const source of exampleSources) {
+    const exampleTarget = path.join(target, 'handoff', source)
+    await mkdir(path.dirname(exampleTarget), { recursive: true })
+    await copyFile(new URL('../docs/' + source, import.meta.url), exampleTarget)
+  }
   for (const directory of handoffDirectories) {
     const sourceDirectory = new URL('../docs/' + directory + '/', import.meta.url)
     for (const name of (await readdir(sourceDirectory)).filter(name => name.endsWith('.md')).sort()) {
@@ -29,7 +34,7 @@ async function buildHandoffPages(target) {
     const title = markdown.match(/^# (.+)/m)?.[1] ?? path.posix.basename(source, '.md')
     const content = escapeHtml(markdown.replace(/^# .+\r?\n/, '')).replace(/\[([^\]\n]+)\]\(([^)\s]+)\)/g, (match, label, href) => {
       const destination = path.posix.normalize(path.posix.join(path.posix.dirname(source), decodeURIComponent(href)))
-      if (destination === exampleSource) return '<a href="' + href + '">' + label + '</a>'
+      if (exampleSources.includes(destination)) return '<a href="' + href + '">' + label + '</a>'
       if (!documents.has(destination)) return match
       return '<a href="' + href.replace(/\.md$/, '.html') + '">' + label + '</a>'
     })

@@ -35,7 +35,7 @@ import static com.oneline.api.js.Js.obj;
  * 요청 처리는 EventLoop 잠금 안에서 한 번에 하나씩 실행한다.
  */
 @Component
-@Order(Ordered.HIGHEST_PRECEDENCE)
+@Order(Ordered.HIGHEST_PRECEDENCE + 1)
 public class ExpressCompatFilter extends OncePerRequestFilter {
     public static final String BODY_ATTRIBUTE = ExpressCompatFilter.class.getName() + ".body";
     private static final int LIMIT = 1024 * 1024;
@@ -90,12 +90,20 @@ public class ExpressCompatFilter extends OncePerRequestFilter {
             if (body != Js.UNDEFINED) request.setAttribute(BODY_ATTRIBUTE, body == null ? NULL_BODY : body);
         } catch (HttpError error) {
             bodyError = error;
+        } catch (IOException error) {
+            if (!InternalServiceAuthFilter.isInternal(request)) throw error;
+            bodyError = new HttpError(400, "invalid internal request body");
         }
 
         loop.enter();
         try {
             if (bodyError != null) {
-                writeJson(wrapper, bodyError.status(), obj("error", bodyError.getMessage()));
+                if (InternalServiceAuthFilter.isInternal(request)) {
+                    wrapper.setHeader("Cache-Control", "no-store");
+                    writeJson(wrapper, bodyError.status(), obj("error", "내부 요청 본문을 확인해 주세요.", "code", "internal_invalid_body"));
+                } else {
+                    writeJson(wrapper, bodyError.status(), obj("error", bodyError.getMessage()));
+                }
             } else {
                 chain.doFilter(request, wrapper);
             }
@@ -172,6 +180,9 @@ public class ExpressCompatFilter extends OncePerRequestFilter {
 
     /** 처리하지 않으면 UNDEFINED, 오류면 HttpError */
     private static Object parseJsonBody(HttpServletRequest request) throws IOException {
+        int limit = request.getMethod().equalsIgnoreCase("PUT")
+                && request.getServletPath().toLowerCase(Locale.ROOT).matches("/api/internal/chat-jobs/[^/]+/?")
+                ? com.oneline.api.service.InternalChatJobs.BODY_LIMIT : LIMIT;
         String transferEncoding = request.getHeader("Transfer-Encoding");
         String contentLength = request.getHeader("Content-Length");
         boolean hasBody = transferEncoding != null || (contentLength != null && isNumeric(contentLength));
@@ -199,7 +210,7 @@ public class ExpressCompatFilter extends OncePerRequestFilter {
         String encoding = request.getHeader("Content-Encoding");
         encoding = encoding == null ? "identity" : encoding.toLowerCase(Locale.ROOT);
         if (encoding.equals("identity") && contentLength != null && isNumeric(contentLength)
-                && Long.parseLong(contentLength.trim()) > LIMIT) {
+                && Long.parseLong(contentLength.trim()) > limit) {
             throw new HttpError(413, "request entity too large");
         }
         InputStream stream = request.getInputStream();
@@ -215,7 +226,7 @@ public class ExpressCompatFilter extends OncePerRequestFilter {
         int read;
         while ((read = stream.read(chunk)) != -1) {
             buffer.write(chunk, 0, read);
-            if (buffer.size() > LIMIT) throw new HttpError(413, "request entity too large");
+            if (buffer.size() > limit) throw new HttpError(413, "request entity too large");
         }
         String text = buffer.toString(decoder);
         if (text.startsWith("\uFEFF")) text = text.substring(1);

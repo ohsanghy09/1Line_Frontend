@@ -53,6 +53,10 @@ public final class ActivityChatUpdate {
     public record Result(LinkedHashMap<String, Object> body, boolean changed, Object updatedActivityId) {
     }
 
+    public static boolean validAction(Object value) {
+        return ACTION.safeParse(value).success();
+    }
+
     // 완료된 AI 작업의 허용된 필드만 적용한다. 재조회·재요청은 같은 결과를 돌려주며 다시 수정하지 않는다.
     public static Result apply(Database db, Object analysisId) {
         return db.transaction(() -> {
@@ -110,6 +114,7 @@ public final class ActivityChatUpdate {
                     "analysis", null, "updatedActivityId", activity.get("id"),
                     "content", Js.str(activity.get("name")) + " 활동 정보를 수정했어요.\n" + String.join("\n", lines));
             db.run("UPDATE analyses SET reply = ? WHERE id = ?", Json.stringify(completed), analysisId);
+            InternalChatJobs.changed(db, analysisId);
             LinkedHashMap<String, Object> body = new LinkedHashMap<>(result);
             body.put("reply", completed);
             return new Result(body, true, activity.get("id"));

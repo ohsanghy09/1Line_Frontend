@@ -1,6 +1,7 @@
 package com.oneline.api.support;
 
 import com.oneline.api.js.Json;
+import com.oneline.api.config.InternalServiceAuth;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -20,7 +21,7 @@ public final class Fetch {
 
     private static final HttpClient CLIENT = HttpClient.newBuilder()
             .version(HttpClient.Version.HTTP_1_1)
-            .followRedirects(HttpClient.Redirect.NORMAL)
+            .followRedirects(HttpClient.Redirect.NEVER)
             .build();
 
     public record Response(int status, byte[] body) {
@@ -69,9 +70,9 @@ public final class Fetch {
      * POST 요청. jsonBody 가 null 이면 본문 없이 보낸다.
      * 호출 스레드는 이벤트 루프 잠금을 풀고 기다린다.
      */
-    public static Response post(EventLoop loop, String url, String jsonBody, long timeoutMs, Controller controller) throws FetchError {
+    public static Response post(EventLoop loop, String url, String jsonBody, long timeoutMs, Controller controller, InternalServiceAuth auth) throws FetchError {
         try {
-            return loop.await(() -> send(url, jsonBody, timeoutMs, controller));
+            return loop.await(() -> send(url, jsonBody, timeoutMs, controller, auth));
         } catch (FetchError e) {
             throw e;
         } catch (Exception e) {
@@ -79,10 +80,11 @@ public final class Fetch {
         }
     }
 
-    private static Response send(String url, String jsonBody, long timeoutMs, Controller controller) throws FetchError {
+    private static Response send(String url, String jsonBody, long timeoutMs, Controller controller, InternalServiceAuth auth) throws FetchError {
         HttpRequest request;
         try {
-            HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(url));
+            HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(url))
+                    .header("Authorization", auth.authorizationHeader());
             if (jsonBody == null) {
                 builder.POST(HttpRequest.BodyPublishers.noBody());
             } else {

@@ -64,6 +64,8 @@ multipart의 Content-Type과 boundary는 브라우저가 생성한다. 별도로
 
 ## 백엔드가 호출하는 내부 분석
 
+2026-11-13 Spring은 활동 정보 분석 JSON 스냅샷과 남은 파일 재분석의 실제 원본·recordReply·활동 정보를 전송하도록 구현했다. AI는 백엔드 DB를 직접 조회하지 않고 전달받은 문맥으로 분석하며 활동 sourceFingerprint와 삭제 요청 recordReply를 그대로 반환한다. Spring의 로컬 검증 완료이며 실제 AI 수신·연동 완료를 의미하지 않는다.
+
 | 메서드·경로 | 요청 | 응답·저장 책임 |
 | --- | --- | --- |
 | POST /analyze/activities/:activityId | JSON 활동 스냅샷. activity/previous/records/files/recordCount/sourceFingerprint, 상세는 서버 간 전달 계약 | {sourceFingerprint,recordCount,model,promptVersion:activity-metadata-v1,metadata}. 백엔드가 근거·해시 재검증 후 activities 갱신 |
@@ -72,7 +74,7 @@ multipart의 Content-Type과 boundary는 브라우저가 생성한다. 별도로
 
 Journey v5는 AI 내부 모델에만 evidenceCatalog와 evidenceId 선택을 사용한다. 위 요청에는 카탈로그가 필요 없고 응답의 summary/badges/events 근거는 계속 [{recordId,quote}]다. 내부 입력·선택·복원·한도는 [분석 규칙](분석_입출력과_검증_규칙.md)의 Journey 절을 따른다. 기존 버전 결과를 새 내부 모델 스키마로 다시 검증하거나 마이그레이션하지 않는다.
 
-활동 없음 404, 기록 없음·분석 범위 한도 422, 입력 충돌 409, 공급자/출력 오류 502, 설정·DB 503, 시간 초과 504, 모델 한도 429가 가능하다. 남은 파일 분석은 제외 대상이 없거나 원본이 2개 미만이면 409다. 모델 호출 도중 생긴 변경은 백엔드 저장 단계에서 추가 409로 거절한다.
+활동 없음 404, 기록 없음·분석 범위 한도 422, 입력 충돌 409, 공급자/출력 오류 502, 설정·DB 503, 시간 초과 504, 모델 한도 429가 가능하다. 삭제 대상 실재 여부는 백엔드가 검증한다. 삭제 전 원본이 2개 이상일 때 AI에 전달되는 남은 files는 1개 이상이므로 1개 입력을 거절하지 않는다. AI는 fileId가 남은 files에 포함되지 않는지 검증하고 recordReply는 모델 입력 없이 원문 그대로 반환한다. 모델 호출 도중 생긴 변경은 백엔드 저장 단계에서 추가 409로 거절한다.
 
 metadata 객체는 summary:{value,evidence}, status:{value:진행 중/완료,evidence}/null, role:{value,evidence}/null, period:{start:{value,evidence}/null,end:{value,evidence}/null}다. evidence는 {recordId,quote} 1~10개, 문자열은 비빈 최대 20000자다. 날짜는 유효 YYYY-MM/일 단위이며 이전 반대 날짜와 순서도 검증한다.
 

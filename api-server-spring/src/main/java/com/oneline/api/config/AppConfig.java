@@ -2,6 +2,7 @@ package com.oneline.api.config;
 
 import com.oneline.api.db.Database;
 import com.oneline.api.service.ActivityMetadataQueue;
+import com.oneline.api.service.InternalChatJobs;
 import com.oneline.api.support.EventLoop;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,6 +11,7 @@ import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.boot.web.server.context.WebServerApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.DependsOn;
 import org.springframework.context.event.EventListener;
 import org.springframework.web.filter.UrlHandlerFilter;
 import org.springframework.web.servlet.config.annotation.PathMatchConfigurer;
@@ -28,12 +30,25 @@ import java.nio.file.Path;
 public class AppConfig implements WebMvcConfigurer {
     private static final Logger log = LoggerFactory.getLogger(AppConfig.class);
 
+    @Bean
+    public InternalServiceAuth internalServiceAuth(@Value("${INTERNAL_SERVICE_TOKEN:}") String token) {
+        return new InternalServiceAuth(token);
+    }
+
     @Bean(destroyMethod = "")
+    @DependsOn("internalServiceAuth")
     public Database database(@Value("${oneline.db-path:#{null}}") String configuredPath) {
         String path = configuredPath;
         if (path == null) path = System.getenv("DB_PATH");
         if (path == null) path = defaultDatabasePath();
-        return Database.open(path);
+        Database db = Database.open(path);
+        try {
+            InternalChatJobs.recover(db);
+            return db;
+        } catch (RuntimeException e) {
+            db.close();
+            throw e;
+        }
     }
 
     /** 기존 서버와 같은 DB 파일(api-server/data/1line.db)을 기본으로 사용한다. */
@@ -56,15 +71,15 @@ public class AppConfig implements WebMvcConfigurer {
             @Value("${oneline.frontend-origin:#{null}}") String origin,
             @Value("${oneline.ai-base-url:#{null}}") String aiBaseUrl,
             @Value("${oneline.auto-activity-analysis:true}") boolean autoActivityAnalysis,
-            @Value("${oneline.activity-analysis-delay-ms:500}") long activityAnalysisDelayMs) {
+            @Value("${oneline.activity-analysis-delay-ms:500}") long activityAnalysisDelayMs, InternalServiceAuth auth) {
         String frontendOrigin = origin != null ? origin : System.getenv("FRONTEND_ORIGIN");
         if (frontendOrigin == null) frontendOrigin = "http://localhost:5173";
-        return new ServerOptions(frontendOrigin, aiBaseUrl, autoActivityAnalysis, activityAnalysisDelayMs);
+        return new ServerOptions(frontendOrigin, aiBaseUrl, autoActivityAnalysis, activityAnalysisDelayMs, auth);
     }
 
     @Bean(destroyMethod = "")
     public ActivityMetadataQueue activityMetadataQueue(Database database, EventLoop eventLoop, ServerOptions options) {
-        return new ActivityMetadataQueue(database, eventLoop, options.aiBaseUrl(), options.activityAnalysisDelayMs());
+        return new ActivityMetadataQueue(database, eventLoop, options.aiBaseUrl(), options.activityAnalysisDelayMs(), options.internalServiceAuth());
     }
 
     @Bean

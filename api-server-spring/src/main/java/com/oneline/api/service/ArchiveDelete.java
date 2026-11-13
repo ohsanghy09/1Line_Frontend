@@ -1,6 +1,7 @@
 package com.oneline.api.service;
 
 import com.oneline.api.db.Database;
+import com.oneline.api.config.InternalServiceAuth;
 import com.oneline.api.js.Js;
 import com.oneline.api.js.Json;
 import com.oneline.api.support.EventLoop;
@@ -9,6 +10,7 @@ import com.oneline.api.validation.Schemas;
 import com.oneline.api.zod.Z;
 
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
@@ -31,6 +33,7 @@ public final class ArchiveDelete {
         db.run("UPDATE analyses SET reply = ? WHERE id = ?", Json.stringify(obj(
                 "id", Js.get(reply, "id"), "role", "assistant", "kind", "general", "analysis", null,
                 "content", Js.str(Js.get(reply, "content")) + "\n\n" + content)), analysisId);
+        InternalChatJobs.changed(db, analysisId);
     }
 
     private static void retireDraft(Database db, Object analysisId) {
@@ -79,7 +82,7 @@ public final class ArchiveDelete {
         });
     }
 
-    public static void deleteMaterial(Database db, EventLoop loop, Object activityId, Object fileId, String aiBaseUrl,
+    public static void deleteMaterial(Database db, EventLoop loop, Object activityId, Object fileId, String aiBaseUrl, InternalServiceAuth auth,
                                       BiConsumer<Object, Map<String, Object>> syncEvents) {
         Map<String, Object> detail = Archive.readArchiveFile(db, activityId, fileId);
         if (detail == null) throw publicFail(404, "이 활동에서 자료를 찾을 수 없어요.");
@@ -88,15 +91,33 @@ public final class ArchiveDelete {
         ActivityMetadata.Snapshot snapshot = ActivityMetadata.activitySnapshot(db, activityId);
         Object analysisId = original.get("analysis_id");
         List<Map<String, Object>> remaining = Js.truthy(analysisId)
-                ? db.all("SELECT id, name FROM files WHERE analysis_id = ? AND id != ? ORDER BY rowid", analysisId, fileId)
+                ? db.all("SELECT id, name, mime_type, size, content FROM files WHERE analysis_id = ? AND id != ? ORDER BY rowid", analysisId, fileId)
                 : List.of();
         Map<String, Object> nextReply = null;
         if (Js.strictEquals(file.get("kind"), "file") && !remaining.isEmpty()) {
             Fetch.Response response;
             try {
                 String base = Fetch.aiBase(aiBaseUrl);
+                List<Object> originals = new ArrayList<>();
+                long totalBytes = 0;
+                for (Map<String, Object> item : remaining) {
+                    Object raw = item.get("content");
+                    if (!(raw instanceof byte[] bytes) || bytes.length == 0 || bytes.length > 10 * 1024 * 1024
+                            || !(item.get("size") instanceof Number size) || size.doubleValue() != bytes.length) {
+                        throw new IllegalStateException("보관된 원본을 확인하지 못했습니다.");
+                    }
+                    totalBytes += bytes.length;
+                    originals.add(obj("id", item.get("id"), "name", item.get("name"), "mimeType", item.get("mime_type"),
+                            "size", bytes.length, "contentBase64", Base64.getEncoder().encodeToString(bytes)));
+                }
+                if (originals.size() > 10 || totalBytes > 25 * 1024 * 1024) {
+                    throw new IllegalStateException("남은 원본이 분석 한도를 초과했습니다.");
+                }
+                Map<String, Object> activity = db.get("SELECT id, name, category FROM activities WHERE id = ?", activityId);
+                String input = Json.stringify(obj("fileId", fileId, "recordReply", original.get("reply"),
+                        "activity", activity, "files", originals));
                 response = Fetch.post(loop, base + "/api/analyze/records/" + Js.encodeURIComponent(Js.str(original.get("id"))) + "/exclude-file",
-                        Json.stringify(obj("fileId", fileId)), 150000, null);
+                        input, 150000, null, auth);
             } catch (Fetch.FetchError | RuntimeException e) {
                 throw publicFail(502, "남은 파일을 재분석하지 못해 삭제하지 않았어요. AI 서버를 확인하고 다시 시도해 주세요.");
             }

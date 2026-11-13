@@ -7,6 +7,7 @@
 | 프론트엔드 | [frontend](frontend/README.md) | 개발 규칙, 화면별 구현·API 사용·변경 기록 |
 | 프론트 연동 정비 | [frontend-integration](frontend-integration/README.md) | handoff 기준 API 대조, 독립 Swagger, 로컬 의존성, 변경 협의·검증 기록 |
 | Growth Journey 수정 | [growth-journey-update](growth-journey-update/README.md) | 확정 성장 기준 5종, 구현 대상 JSON 계약·예시, AI 전달사항, 작업·검증 기록 |
+| 백엔드·AI 분리 연동 | [backend-ai-integration](backend-ai-integration/README.md) | 활동·파일 분석 데이터 전달, 홈 내부 API, 서버 간 인증 계획과 검증 기록 |
 | 백엔드 | [backend](backend/README.md) | API·DB·ERD·저장 및 삭제 계약, 로컬 서버 실행 안내 |
 | AI | [ai](ai/README.md) | 분석 API·검증·프롬프트 정의, 로컬 서버 구현·실행 기록 |
 | 공통 | [common](common/README.md) | 공통 계약, 서버 간 연동, 작업 계획, 서비스 정의와 참고 자료 |
@@ -16,6 +17,11 @@
 ```text
 docs/
   README.md
+  backend-ai-integration/
+    README.md
+    작업_및_검증_기록.md
+    examples/
+      home-job-exchange.json
   growth-journey-update/
     README.md
     공통_JSON_계약.md
@@ -56,6 +62,7 @@ docs/
 
 ## 작업을 이어갈 때
 
+- [백엔드·AI 분리 서버 연동](backend-ai-integration/README.md): 공유 DB 의존성 해소, 내부 데이터 전달·인증 구현 계획과 검증 기록.
 - [프론트 API 연동 정비](frontend-integration/README.md): 이번 작업의 상세 조사·사용자 확인·검증 기록 진입점.
 - [프론트 독립 및 원격 서버 연동 정비](common/integration/프론트엔드_독립_및_원격_서버_연동_정비.md): 현재 작업 계획. 실제 원격 서버 연동 검증은 별도 후속 작업이다.
 - [인수인계 안내](common/handoff/README.md): 각 파트의 읽기 순서와 문서 전달 범위.

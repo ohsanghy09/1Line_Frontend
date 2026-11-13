@@ -8,6 +8,8 @@
 
 ## 개발 상태
 
+2026-11-13 Spring에 서버 간 Bearer 인증과 홈 문맥 조회·분석 작업 게시/재조회 내부 API를 구현했습니다. 초안·원본 보관, revision·중복·삭제 후 재전송 처리와 단일 백엔드 재시작 복구를 포함합니다. 활동 정보 분석의 기록·파일 메타정보·해시 JSON 전달과 파일 일부 삭제 재분석의 남은 원본 전달도 구현했으며 Spring 검사 47개·JAR 빌드를 통과했습니다. AI 측 호출 구현과 실제 서버 연동·배포는 미확인입니다. [백엔드·AI 분리 연동 작업](docs/backend-ai-integration/README.md)을 참고하세요.
+
 2026-11-12 Growth Journey에 고정 5종 성장 판단과 유형별 이유·비교·경험 전이·원문 근거 추가 펼침을 적용했습니다. Spring·DB와 프론트의 구현 기준 및 검증 범위는 [Growth Journey 수정 기록](docs/growth-journey-update/README.md)에 있습니다. OpenAPI·Swagger도 같은 계약으로 갱신했으며 Swagger에서 최신 계약과 JSON 예시를 확인할 수 있습니다. 실제 AI 연동과 배포는 수행하지 않았습니다.
 
 프론트 화면과 HTTP API 서비스, 대화 복원, 기록 저장·수정·삭제 요청 흐름을 구현했습니다.
