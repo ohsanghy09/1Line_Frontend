@@ -48,6 +48,32 @@ public final class ActivityMetadata {
         return new Snapshot(fingerprint, records, files);
     }
 
+    /** 분리 AI에 전달할 문맥. 기존 스냅샷의 정렬과 해시는 그대로 사용한다. */
+    public static LinkedHashMap<String, Object> requestBody(Map<String, Object> activity, Snapshot snapshot) {
+        List<Object> records = new ArrayList<>();
+        for (Object raw : snapshot.records()) {
+            List<Object> row = Js.asArray(raw);
+            Object analysis = Js.get(Json.parse((String) row.get(2)), "analysis");
+            records.add(obj("id", row.get(0), "message", row.get(1), "summary", Js.get(analysis, "summary"),
+                    "changes", Js.get(analysis, "changes"), "savedAt", row.get(3), "updatedAt", row.get(4)));
+        }
+        return obj("activity", obj("id", activity.get("id"), "name", activity.get("name"), "category", activity.get("category")),
+                "previous", obj("summary", activity.get("summary"), "status", activity.get("status"), "role", activity.get("role"),
+                        "start_date", activity.get("start_date"), "end_date", activity.get("end_date")),
+                "records", records, "files", snapshot.files(), "recordCount", records.size(), "sourceFingerprint", snapshot.fingerprint());
+    }
+
+    public static String requestJson(Map<String, Object> activity, Snapshot snapshot) {
+        if (snapshot.records().isEmpty() || snapshot.records().size() > 100) {
+            throw new IllegalStateException("활동 정보 분석은 저장된 기록 1~100개를 대상으로 합니다.");
+        }
+        String json = Json.stringify(requestBody(activity, snapshot));
+        if (json.codePointCount(0, json.length()) > 250000) {
+            throw new IllegalStateException("활동 정보 분석 문맥이 허용 범위를 초과했습니다.");
+        }
+        return json;
+    }
+
     private static Z.ZArray evidence() {
         return array(object("recordId", text(), "quote", text()).strict()).min(1).max(10);
     }

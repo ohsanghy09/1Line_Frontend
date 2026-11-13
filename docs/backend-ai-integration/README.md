@@ -1,6 +1,6 @@
 # 백엔드·AI 분리 서버 연동
 
-작성일: 2026-11-13 · 상태: Spring 인증·홈 내부 API 구현, 로컬 테스트 37개·JAR 빌드 완료. AI 적용·실제 연동 미확인
+작성일: 2026-11-13 · 상태: Spring 인증·홈 내부 API·활동 분석 JSON 전달 구현, 로컬 테스트 42개·JAR 빌드 완료. AI 적용·실제 연동 미확인
 
 ## 목적과 범위
 
@@ -14,7 +14,7 @@ Spring 백엔드에 남아 있는 공유 DB 기반 AI 연동을 HTTP 데이터 �
 
 | 항목 | 현재 Spring 코드 | 변경 방향 |
 | --- | --- | --- |
-| 활동 정보 분석 | 활동 ID를 URL에 넣고 본문 없이 AI 호출 | 활동·기존 정보·기록·파일 메타정보·기록 수·해시를 JSON으로 전달 |
+| 활동 정보 분석 | Spring의 활동·기존 정보·기록·파일 메타정보·기록 수·해시 JSON 전달 구현 완료 | AI 측 JSON 수신 구현과 실제 연동 확인 필요 |
 | 파일 일부 삭제 후 재분석 | 삭제 대상 fileId만 전달 | 삭제 전 기록 응답·활동 정보·남은 실제 파일 원본을 함께 전달 |
 | 홈 분석 데이터 전달 | Spring의 문맥 조회·작업 게시/재조회 구현 완료 | AI 측 호출 구현과 실제 연동 확인 필요 |
 | 서버 간 인증 | 조사 당시 Authorization 헤더 없음. 이후 Spring 송신·수신 구현 | AI 측 적용과 실제 HTTPS 연동 확인 필요 |
@@ -62,12 +62,14 @@ AI 담당:
 
 ### 3. 활동 정보 분석 요청
 
-- [ ] 백엔드: `POST /api/analyze/activities/:activityId`에 activity·previous·records·files·recordCount·sourceFingerprint 전달.
+- [x] 백엔드: `POST /api/analyze/activities/:activityId`에 activity·previous·records·files·recordCount·sourceFingerprint 전달.
 - [ ] AI: 자체 DB 조회 대신 전달받은 문맥으로 활동 전체 요약·역할·상태·기간을 분석하고 근거와 요청 해시 반환.
-- [ ] 백엔드: 분석 전·저장 직전 스냅샷, AI 반환 해시·기록 수·원문 근거 검증 후 저장.
-- [ ] 실패 시 저장된 자료와 기존 활동 정보 보존.
+- [x] 백엔드: 분석 전·저장 직전 스냅샷, AI 반환 해시·기록 수·원문 근거 검증 후 저장 (로컬 검사).
+- [x] 실패 시 저장된 자료와 기존 활동 정보 보존 (로컬 검사).
 
 이 요청의 files는 원본 bytes가 아닌 기록·파일 관계와 이름 메타정보다.
+
+Spring은 기존 스냅샷 정렬·해시를 유지해 records의 id/message/summary/changes/savedAt/updatedAt을 전달한다. previous는 summary/status/role/start_date/end_date 키를 모두 포함하며 미설정 값은 null이다. 100개 초과 또는 직렬화 JSON 250000 코드 포인트 초과는 AI HTTP 호출 전에 실패 처리한다. 수동 요청의 기존 202 접수·상태 조회 흐름은 유지하며 자동 분석도 같은 본문을 사용한다. AI는 받은 해시를 재계산하지 않고 그대로 반환해야 한다. 실제 모델 품질·원격 호출 성공은 미검증이다.
 
 ### 4. 파일 일부 삭제 후 재분석
 

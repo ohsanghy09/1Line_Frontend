@@ -64,6 +64,8 @@ multipart의 Content-Type과 boundary는 브라우저가 생성한다. 별도로
 
 ## 백엔드가 호출하는 내부 분석
 
+2026-11-13 Spring은 활동 정보 분석에 아래 JSON 스냅샷 본문을 전송하도록 구현했다. AI는 백엔드 DB를 직접 조회하지 않고 전달받은 문맥으로 분석하며 sourceFingerprint를 그대로 반환한다. Spring의 로컬 검증 완료이며 실제 AI 수신·연동 완료를 의미하지 않는다. 남은 파일 재분석의 Spring 본문 전환은 후속 작업이다.
+
 | 메서드·경로 | 요청 | 응답·저장 책임 |
 | --- | --- | --- |
 | POST /analyze/activities/:activityId | JSON 활동 스냅샷. activity/previous/records/files/recordCount/sourceFingerprint, 상세는 서버 간 전달 계약 | {sourceFingerprint,recordCount,model,promptVersion:activity-metadata-v1,metadata}. 백엔드가 근거·해시 재검증 후 activities 갱신 |

@@ -26,7 +26,13 @@ PowerShell 설정 형식은 `$env:INTERNAL_SERVICE_TOKEN = '<서버 비밀 설�
 
 현재 SQLite와 단일 백엔드 프로세스 기준으로 기동 시 미완료 내부 작업을 failed로 복구한다. 여러 백엔드 프로세스의 무중단 병행 기동은 복구 소유권·리스 설계가 추가로 필요하다. 사용자 인증·사용자별 DB 범위도 이번 작업에서 추가하지 않았다.
 
-로컬 Spring 검사 37개와 JAR 빌드를 통과했다. AI 서버의 내부 API 호출 구현·실제 서버 연동·배포는 별도다. [교환 예시](../docs/backend-ai-integration/examples/home-job-exchange.json)와 [공통 계약](../docs/common/handoff/서버간_데이터_전달_계약.md)을 따른다.
+로컬 Spring 검사 42개와 JAR 빌드를 통과했다. AI 서버의 내부 API 호출 구현·실제 서버 연동·배포는 별도다. [교환 예시](../docs/backend-ai-integration/examples/home-job-exchange.json)와 [공통 계약](../docs/common/handoff/서버간_데이터_전달_계약.md)을 따른다.
+
+## 활동 정보 분석 JSON 전달 (2026-11-13)
+
+자동·수동 활동 분석은 `POST /api/analyze/activities/:activityId`에 activity·previous·records·files·recordCount·sourceFingerprint를 JSON 본문으로 보낸다. files는 [recordId,fileId,name] 메타정보이며 원본 bytes는 포함하지 않는다. 기존 스냅샷 정렬·해시·응답 근거 검증과 실패 시 이전 정보 보존은 유지한다.
+
+기록 1~100개·직렬화 JSON 250000 코드 포인트 한도를 AI HTTP 호출 전에 검사한다. 비동기 공개 API의 기존 202 접수 후 상태 조회 흐름은 유지한다. 한도 초과 시 작업은 failed가 되며 기존 정보와 기록은 보존한다. AI는 요청 본문으로만 종합하고 sourceFingerprint를 그대로 반환해야 한다. 실제 AI 측 JSON 수신·모델 평가·EC2 연동은 별도 확인 대상이다.
 
 ## Growth Journey 새 계약 적용 상태 (2026-11-12)
 

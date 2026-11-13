@@ -147,8 +147,9 @@ public final class ActivityMetadataQueue {
         job.controller = new Fetch.Controller();
         try {
             String base = Fetch.aiBase(aiBaseUrl);
+            String input = ActivityMetadata.requestJson(db.get("SELECT * FROM activities WHERE id = ?", id), initial);
             Fetch.Response response = Fetch.post(loop, base + "/api/analyze/activities/" + Js.encodeURIComponent(Js.str(id)),
-                    null, 150000, job.controller, auth);
+                    input, 150000, job.controller, auth);
             Object body = response.jsonOrNull();
             if (job.cancelled) return;
             if (!response.ok()) throw new IllegalStateException("활동 정보를 분석하지 못했어요. AI 서버 상태를 확인하고 다시 분석해 주세요.");
