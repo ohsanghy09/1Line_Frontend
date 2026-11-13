@@ -31,6 +31,7 @@ import static com.oneline.api.js.Js.obj;
 
 /** 테스트용 서버 (기존 test-support/app.js, database.js, mock-reply.js 대응) */
 public final class TestServer implements AutoCloseable {
+    public static final String TOKEN = "test-only-internal-token-not-for-deployment";
     public final ConfigurableApplicationContext context;
     public final String base;
     public final Database db;
@@ -52,6 +53,7 @@ public final class TestServer implements AutoCloseable {
             Path directory = Files.createTempDirectory("1line-spring-test-");
             List<String> props = new ArrayList<>(List.of(
                     "server.port=0",
+                    "INTERNAL_SERVICE_TOKEN=" + TOKEN,
                     "oneline.db-path=" + directory.resolve("test.db").toString().replace('\\', '/'),
                     "oneline.auto-activity-analysis=false",
                     "logging.level.root=ERROR"));
@@ -222,6 +224,11 @@ public final class TestServer implements AutoCloseable {
             }
             server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool());
             server.createContext("/", exchange -> {
+                if (!("Bearer " + TOKEN).equals(exchange.getRequestHeaders().getFirst("Authorization"))) {
+                    exchange.sendResponseHeaders(401, -1);
+                    exchange.close();
+                    return;
+                }
                 calls++;
                 String text = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
                 Object body = text.isEmpty() ? null : Json.parse(text);

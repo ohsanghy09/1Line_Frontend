@@ -1,5 +1,19 @@
 # 1Line API 서버 (Spring Boot)
 
+## 서버 간 인증 (2026-11-13)
+
+서버 시작 전에 `INTERNAL_SERVICE_TOKEN`을 서버 환경변수로 설정한다. 누락·빈 값·잘못된 Bearer 토큰 문자는 시작 오류다. `.env` 파일을 자동으로 읽는 구현은 없으며 실제 프로세스 환경변수 또는 배포 시스템의 비밀 설정으로 주입한다. 실제 값은 Git·로그·프론트에 넣지 않는다.
+
+- 백엔드 → AI의 활동·Journey·남은 파일 분석 요청에 `Authorization: Bearer <INTERNAL_SERVICE_TOKEN>`을 보낸다.
+- AI → 백엔드의 `/api/internal` 및 하위 경로는 토큰을 검사하고 누락·오류·중복 Authorization 헤더를 401로 거절한다. 공개 프론트 API에는 적용하지 않는다.
+- 홈 내부 API 컨트롤러는 아직 구현하지 않았다. 정상 토큰으로 해당 미구현 경로를 요청하면 404다.
+- 인증 요청은 HTTP 리다이렉트를 자동 추적하지 않는다. `AI_API_BASE_URL`은 리다이렉트 없는 최종 주소로 지정한다. 기존 설정대로 이 값은 `/api`를 제외한 AI 서버 주소이며 각 호출에서 `/api/analyze/...`를 붙인다.
+- 실제 배포는 HTTPS와 AI 측 토큰 송신·검증을 함께 구성해야 한다. 이 변경만으로 실제 AI 연동·TLS 설정·사용자 인증이 완료되는 것은 아니다.
+
+PowerShell 설정 형식은 `$env:INTERNAL_SERVICE_TOKEN = '<서버 비밀 설정에서 받은 값>'`이다. 문서의 자리표시자를 실제 토큰으로 사용하지 않는다. 로컬 자동 검사는 별도 테스트 전용 값을 사용한다.
+
+작업 범위·결과는 [분리 서버 연동 기록](../docs/backend-ai-integration/작업_및_검증_기록.md)에 기록한다.
+
 ## Growth Journey 새 계약 적용 상태 (2026-11-12)
 
 Growth Journey는 [공통 JSON 계약 v2](../docs/growth-journey-update/공통_JSON_계약.md)로 변경했다. 이 API는 아래의 기존 Node 서버 호환 설명과 달리 고정 5종 `growthAssessments`, `comparison`, `transfer`를 사용한다. 기준 버전은 `growth-criteria-v1`, AI 프롬프트 버전은 `journey-v6`다.

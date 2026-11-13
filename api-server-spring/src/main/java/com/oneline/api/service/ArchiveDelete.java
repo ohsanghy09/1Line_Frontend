@@ -1,6 +1,7 @@
 package com.oneline.api.service;
 
 import com.oneline.api.db.Database;
+import com.oneline.api.config.InternalServiceAuth;
 import com.oneline.api.js.Js;
 import com.oneline.api.js.Json;
 import com.oneline.api.support.EventLoop;
@@ -79,7 +80,7 @@ public final class ArchiveDelete {
         });
     }
 
-    public static void deleteMaterial(Database db, EventLoop loop, Object activityId, Object fileId, String aiBaseUrl,
+    public static void deleteMaterial(Database db, EventLoop loop, Object activityId, Object fileId, String aiBaseUrl, InternalServiceAuth auth,
                                       BiConsumer<Object, Map<String, Object>> syncEvents) {
         Map<String, Object> detail = Archive.readArchiveFile(db, activityId, fileId);
         if (detail == null) throw publicFail(404, "이 활동에서 자료를 찾을 수 없어요.");
@@ -96,7 +97,7 @@ public final class ArchiveDelete {
             try {
                 String base = Fetch.aiBase(aiBaseUrl);
                 response = Fetch.post(loop, base + "/api/analyze/records/" + Js.encodeURIComponent(Js.str(original.get("id"))) + "/exclude-file",
-                        Json.stringify(obj("fileId", fileId)), 150000, null);
+                        Json.stringify(obj("fileId", fileId)), 150000, null, auth);
             } catch (Fetch.FetchError | RuntimeException e) {
                 throw publicFail(502, "남은 파일을 재분석하지 못해 삭제하지 않았어요. AI 서버를 확인하고 다시 시도해 주세요.");
             }

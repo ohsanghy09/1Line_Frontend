@@ -35,7 +35,7 @@ import static com.oneline.api.js.Js.obj;
  * 요청 처리는 EventLoop 잠금 안에서 한 번에 하나씩 실행한다.
  */
 @Component
-@Order(Ordered.HIGHEST_PRECEDENCE)
+@Order(Ordered.HIGHEST_PRECEDENCE + 1)
 public class ExpressCompatFilter extends OncePerRequestFilter {
     public static final String BODY_ATTRIBUTE = ExpressCompatFilter.class.getName() + ".body";
     private static final int LIMIT = 1024 * 1024;
