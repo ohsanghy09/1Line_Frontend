@@ -3,6 +3,8 @@ package com.oneline.api;
 import com.oneline.api.js.Js;
 import com.oneline.api.js.Json;
 import com.oneline.api.service.InternalChatJobs;
+import com.oneline.api.service.InternalJobExpiry;
+import java.time.Instant;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
@@ -15,6 +17,242 @@ import static com.oneline.api.js.Js.obj;
 import static org.junit.jupiter.api.Assertions.*;
 
 class InternalHomeTest {
+    @Test
+    void legacyPublicationTableMigratesWithoutLosingResultsAndRestartRecoveryRemainsIdempotent() throws Exception {
+        Path path = Files.createTempDirectory("internal-expiry-migration-").resolve("db.sqlite");
+        try (var db = com.oneline.api.db.Database.open(path.toString())) {
+            var p = publication("expiry-legacy", List.of(file("legacy-file", "a.txt", new byte[]{1, 2})));
+            InternalChatJobs.publish(db, (String) p.get("jobId"), p);
+            var complete = completed(publication("expiry-legacy-done", List.of()), general("Legacy result"), 0);
+            InternalChatJobs.publish(db, (String) complete.get("jobId"), complete);
+            db.exec("ALTER TABLE internal_chat_publications DROP COLUMN accepted_at_ms");
+            db.exec("ALTER TABLE internal_chat_publications DROP COLUMN progress_received_at_ms");
+        }
+        for (int attempt = 0; attempt < 2; attempt++) {
+            try (var s = TestServer.start("oneline.db-path=" + path.toString().replace('\\', '/'))) {
+                var failed = job(internal(s, "GET", "/chat-jobs/ai-expiry-legacy", null));
+                assertEquals("failed", failed.get("status")); assertEquals(2, revision(failed));
+                assertEquals("server_restarted", Js.path(failed, "error", "code"));
+                assertEquals(1, Js.asArray(failed.get("files")).size());
+                var done = job(internal(s, "GET", "/chat-jobs/ai-expiry-legacy-done", null));
+                assertEquals("Legacy result", Js.path(done, "reply", "content")); assertEquals(1, revision(done));
+                assertEquals(201, publish(s, publication("expiry-after-migration-" + attempt, List.of())).status());
+                assertNotNull(s.row("SELECT accepted_at_ms, progress_received_at_ms FROM internal_chat_publications WHERE job_id = ?",
+                        "ai-expiry-after-migration-" + attempt).get("accepted_at_ms"));
+            }
+        }
+    }
+
+    @Test
+    void expiryUsesBackendReceiptBoundariesAndPreservesOriginalsAndTerminalResults() {
+        try (var s = TestServer.start()) {
+            var queued = publication("expiry-queued", List.of(file("expiry-file", "a.txt", new byte[]{1})));
+            publish(s, queued);
+            var running = publication("expiry-running", List.of());
+            running.put("status", "running"); running.put("phase", "analyzing");
+            // Remote timestamps are deliberately far in the future; they must not determine expiry.
+            running.put("createdAt", "2099-01-01T00:00:00.000Z");
+            running.put("updatedAt", "2099-01-01T00:00:01.000Z");
+            publish(s, running);
+            var complete = publication("expiry-completed", List.of());
+            publish(s, complete); publish(s, completed(complete, general("Saved result"), 1));
+            var failed = publication("expiry-failed", List.of());
+            failed.put("status", "failed"); failed.put("error", obj("code", "model_failed", "error", "Original error"));
+            publish(s, failed);
+            Instant now = Instant.now();
+            s.sql(db -> {
+                db.run("UPDATE internal_chat_publications SET accepted_at_ms = ?, progress_received_at_ms = ?",
+                        now.toEpochMilli() - 600000, now.toEpochMilli() - 300000);
+            });
+            var expiry = s.context.getBean(InternalJobExpiry.class);
+            expiry.scan(now.minusMillis(1));
+            assertEquals("queued", job(internal(s, "GET", "/chat-jobs/ai-expiry-queued", null)).get("status"));
+            assertEquals("running", job(internal(s, "GET", "/chat-jobs/ai-expiry-running", null)).get("status"));
+            expiry.scan(now);
+            var q = job(internal(s, "GET", "/chat-jobs/ai-expiry-queued", null));
+            var r = job(internal(s, "GET", "/chat-jobs/ai-expiry-running", null));
+            assertEquals("failed", q.get("status")); assertEquals("failed", r.get("status"));
+            assertEquals("queue_timeout", Js.path(q, "error", "code"));
+            assertEquals("analysis_timeout", Js.path(r, "error", "code"));
+            assertEquals("분석 요청이 많아 대기 시간이 초과됐어요. 잠시 후 다시 요청해 주세요.", Js.path(q, "error", "error"));
+            assertEquals("분석 진행을 확인할 수 없어 작업을 종료했어요. 다시 요청해 주세요.", Js.path(r, "error", "error"));
+            assertNull(q.get("reply")); assertNull(r.get("reply"));
+            assertEquals(copy(queued).get("files"), q.get("files"));
+            assertEquals(2, revision(q)); assertEquals(2, revision(r));
+            assertEquals(running.get("updatedAt"), r.get("updatedAt"));
+            expiry.scan(now.plusSeconds(600));
+            assertEquals(2, revision(job(internal(s, "GET", "/chat-jobs/ai-expiry-queued", null))));
+            assertEquals("Saved result", Js.path(job(internal(s, "GET", "/chat-jobs/ai-expiry-completed", null)), "reply", "content"));
+            assertEquals("model_failed", Js.path(job(internal(s, "GET", "/chat-jobs/ai-expiry-failed", null)), "error", "code"));
+            assertEquals(1, revision(job(internal(s, "GET", "/chat-jobs/ai-expiry-failed", null))));
+            assertEquals("null", s.row("SELECT reply FROM analyses WHERE id = ?", queued.get("analysisId")).get("reply"));
+            assertEquals(409, publish(s, completed(queued, general("Late result"), 2)).status());
+            var lateProgress = copy(queued); lateProgress.put("status", "running"); lateProgress.put("expectedRevision", 2);
+            assertEquals(409, publish(s, lateProgress).status());
+            assertEquals("failed", job(publish(s, queued)).get("status"));
+            assertEquals(409, s.post("/records", obj("activityId", "line1-hackathon", "analysisId", queued.get("analysisId"))).status());
+        }
+    }
+
+    @Test
+    void progressRefreshesRunningReceiptWhileRetriesAndReadsDoNotExtendQueuedOrRunning() {
+        try (var s = TestServer.start()) {
+            var p = publication("expiry-progress", List.of()); publish(s, p);
+            long old = System.currentTimeMillis() - 600000;
+            s.sql(db -> db.run("UPDATE internal_chat_publications SET accepted_at_ms = ?, progress_received_at_ms = ?", old, old));
+            publish(s, p); internal(s, "GET", "/chat-jobs/ai-expiry-progress", null);
+            assertEquals(old, ((Number) s.row("SELECT accepted_at_ms FROM internal_chat_publications").get("accepted_at_ms")).longValue());
+            var running = copy(p); running.put("status", "running"); running.put("phase", "analyzing"); running.put("expectedRevision", 1);
+            long before = System.currentTimeMillis(); publish(s, running);
+            long received = ((Number) s.row("SELECT progress_received_at_ms FROM internal_chat_publications").get("progress_received_at_ms")).longValue();
+            assertTrue(received >= before);
+            assertEquals(old, ((Number) s.row("SELECT accepted_at_ms FROM internal_chat_publications").get("accepted_at_ms")).longValue());
+            publish(s, running); internal(s, "GET", "/chat-jobs/ai-expiry-progress", null);
+            assertEquals(received, ((Number) s.row("SELECT progress_received_at_ms FROM internal_chat_publications").get("progress_received_at_ms")).longValue());
+            var expiry = s.context.getBean(InternalJobExpiry.class);
+            expiry.scan(Instant.ofEpochMilli(received + 299999));
+            assertEquals("running", job(internal(s, "GET", "/chat-jobs/ai-expiry-progress", null)).get("status"));
+            running.put("expectedRevision", 2); running.put("phase", "persisting");
+            assertEquals(3, revision(job(publish(s, running))));
+            var q = publication("expiry-still-queued", List.of()); publish(s, q);
+            s.sql(db -> db.run("UPDATE internal_chat_publications SET accepted_at_ms = ? WHERE job_id = ?", old, q.get("jobId")));
+            var queuedUpdate = copy(q); queuedUpdate.put("expectedRevision", 1); queuedUpdate.put("updatedAt", "2026-11-13T00:00:01.000Z");
+            publish(s, queuedUpdate);
+            expiry.scan(Instant.now());
+            assertEquals("failed", job(internal(s, "GET", "/chat-jobs/ai-expiry-still-queued", null)).get("status"));
+            assertEquals("running", job(internal(s, "GET", "/chat-jobs/ai-expiry-progress", null)).get("status"));
+        }
+    }
+
+    @Test
+    void expiryRollsBackAllChangesOnDatabaseFailure() {
+        try (var s = TestServer.start()) {
+            publish(s, publication("expiry-rollback", List.of()));
+            s.sql(db -> {
+                db.run("UPDATE internal_chat_publications SET accepted_at_ms = 0");
+                db.execStatement("CREATE TRIGGER reject_expiry BEFORE UPDATE ON internal_chat_publications BEGIN SELECT RAISE(ABORT, 'test rollback'); END");
+            });
+            assertThrows(RuntimeException.class, () -> s.context.getBean(InternalJobExpiry.class).scan(Instant.now()));
+            var current = job(internal(s, "GET", "/chat-jobs/ai-expiry-rollback", null));
+            assertEquals("queued", current.get("status")); assertEquals(1, revision(current)); assertNull(current.get("error"));
+            s.sql(db -> db.exec("DROP TRIGGER reject_expiry"));
+            s.context.getBean(InternalJobExpiry.class).scan(Instant.now());
+            assertEquals("failed", job(internal(s, "GET", "/chat-jobs/ai-expiry-rollback", null)).get("status"));
+        }
+    }
+
+    @Test
+    void concurrentExpiryAndCompletionProduceOneTerminalState() throws Exception {
+        try (var s = TestServer.start(); var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            var p = publication("expiry-race", List.of()); publish(s, p);
+            s.sql(db -> db.run("UPDATE internal_chat_publications SET accepted_at_ms = 0"));
+            var latch = new CountDownLatch(1);
+            var expiry = executor.submit(() -> { latch.await(); s.context.getBean(InternalJobExpiry.class).scan(Instant.now()); return true; });
+            var completion = executor.submit(() -> { latch.await(); return publish(s, completed(p, general("Race result"), 1)).status(); });
+            latch.countDown(); expiry.get(10, TimeUnit.SECONDS);
+            int status = completion.get(10, TimeUnit.SECONDS);
+            var current = job(internal(s, "GET", "/chat-jobs/ai-expiry-race", null));
+            assertEquals(2, revision(current));
+            if (status == 200) {
+                assertEquals("completed", current.get("status")); assertNull(current.get("error"));
+                assertEquals("Race result", Js.path(current, "reply", "content"));
+            } else {
+                assertEquals(409, status); assertEquals("failed", current.get("status")); assertNull(current.get("reply"));
+            }
+        }
+    }
+
+    @Test
+    void scheduledExpiryUnblocksResetAndAllowsANewRequest() throws Exception {
+        try (var s = TestServer.start("oneline.internal-job-scan-interval-ms=25")) {
+            var p = publication("expiry-timer", List.of()); publish(s, p);
+            assertEquals(409, s.post("/settings/reset-data", obj("confirmation", "전체 삭제")).status());
+            s.sql(db -> db.run("UPDATE internal_chat_publications SET accepted_at_ms = 0"));
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            while (!"failed".equals(s.row("SELECT status FROM ai_chat_jobs").get("status")) && System.nanoTime() < deadline)
+                Thread.sleep(10);
+            assertEquals("failed", job(internal(s, "GET", "/chat-jobs/ai-expiry-timer", null)).get("status"));
+            assertEquals(201, publish(s, publication("expiry-new-request", List.of())).status());
+            s.sql(db -> db.run("UPDATE internal_chat_publications SET accepted_at_ms = 0"));
+            s.context.getBean(InternalJobExpiry.class).scan(Instant.now());
+            assertEquals(200, s.post("/settings/reset-data", obj("confirmation", "전체 삭제")).status());
+        }
+    }
+
+    @Test
+    void failedInitialPublicationDiscardsReplyButPreservesErrorAndOriginals() {
+        try (var s = TestServer.start()) {
+            var p = publication("failed-initial", List.of(file("failed-file", "note.txt", new byte[]{1, 2})));
+            p.put("status", "failed"); p.put("phase", "completed");
+            p.put("reply", TestServer.mockReply("", List.of("note.txt"), false));
+            var error = obj("code", "publish_failed", "error", "Result publication failed");
+            p.put("error", error);
+            var response = publish(s, p);
+            assertEquals(201, response.status(), response.text());
+            var stored = job(internal(s, "GET", "/chat-jobs/ai-failed-initial", null));
+            assertEquals("failed", stored.get("status"));
+            assertNull(stored.get("reply"));
+            assertEquals(error, stored.get("error"));
+            assertEquals(copy(p).get("files"), stored.get("files"));
+            assertEquals(p.get("message"), stored.get("message"));
+            assertEquals("null", s.row("SELECT reply FROM analyses").get("reply"));
+            assertEquals(409, s.post("/records", obj("activityId", "line1-hackathon", "analysisId", p.get("analysisId"))).status());
+        }
+    }
+
+    @Test
+    void failedUpdateNormalizesBeforeRetrySignatureAndStillChecksRevisionAndError() {
+        try (var s = TestServer.start()) {
+            var p = publication("failed-update", List.of());
+            assertEquals(201, publish(s, p).status());
+            var running = copy(p);
+            running.put("status", "running"); running.put("phase", "persisting");
+            running.put("expectedRevision", 1);
+            assertEquals(2, revision(job(publish(s, running))));
+            var failed = completed(p, general("Leftover result"), 1);
+            failed.put("status", "failed");
+            failed.put("error", obj("code", "publish_failed", "error", "Result publication failed"));
+            assertEquals(409, publish(s, failed).status());
+            assertEquals("running", job(internal(s, "GET", "/chat-jobs/ai-failed-update", null)).get("status"));
+            failed.put("expectedRevision", 2);
+            var invalid = copy(failed); invalid.put("error", null);
+            assertEquals(400, publish(s, invalid).status());
+            invalid = copy(running); invalid.put("reply", general("Unexpected pending result"));
+            assertEquals(400, publish(s, invalid).status());
+            assertEquals(3, revision(job(publish(s, failed))));
+            assertEquals(3, revision(job(publish(s, failed))));
+            failed.put("reply", null);
+            assertEquals(3, revision(job(publish(s, failed))));
+            failed.put("reply", obj("incomplete", true));
+            var retry = job(publish(s, failed));
+            assertEquals(3, revision(retry));
+            assertNull(retry.get("reply"));
+            assertEquals(failed.get("error"), retry.get("error"));
+            assertEquals(409, publish(s, completed(p, general("Late result"), 3)).status());
+        }
+    }
+
+    @Test
+    void failedPublicationCannotOverwriteAnAlreadyCompletedResult() {
+        try (var s = TestServer.start()) {
+            var p = publication("completed-protection", List.of());
+            assertEquals(201, publish(s, p).status());
+            var result = general("Persisted result");
+            assertEquals(2, revision(job(publish(s, completed(p, result, 1)))));
+            var failed = completed(p, result, 2);
+            failed.put("status", "failed");
+            failed.put("error", obj("code", "publish_failed", "error", "Response was lost"));
+            assertEquals(409, publish(s, failed).status());
+            failed.put("expectedRevision", 1);
+            assertEquals(409, publish(s, failed).status());
+            var stored = job(internal(s, "GET", "/chat-jobs/ai-completed-protection", null));
+            assertEquals("completed", stored.get("status"));
+            assertEquals(result, stored.get("reply"));
+            assertEquals(2, revision(stored));
+            assertNull(stored.get("error"));
+        }
+    }
+
     @Test
     void documentedExchangeIsAcceptedByTheRealInternalEndpoints() throws Exception {
         var example = Js.asObject(Json.parse(Files.readString(Path.of("../docs/backend-ai-integration/examples/home-job-exchange.json"))));
@@ -320,6 +558,57 @@ class InternalHomeTest {
             var duplicateFile = publication("duplicate-file", List.of(file("unique-file", "note.txt", new byte[]{2})));
             assertEquals(409, publish(s, duplicateFile).status());
             assertEquals(2, count(s, "analyses"));
+        }
+    }
+
+    @Test
+    void homeContextUsesNullForEmptyFileAndLinkMessagesWithoutChangingStoredOrPublicValues() {
+        try (var s = TestServer.start()) {
+            String activityId = "line1-hackathon";
+            String caption = "함께 보낸 파일 설명";
+            var file = publication("null-file", List.of(file("null-file-original", "note.txt", new byte[]{1})));
+            file.put("message", caption);
+            assertEquals(201, publish(s, completed(file, TestServer.mockReply("", List.of("note.txt"), false), 0)).status());
+            var savedFile = s.post("/records", obj("activityId", activityId, "analysisId", file.get("analysisId")));
+            assertEquals(201, savedFile.status());
+            String fileRecordId = (String) savedFile.map().get("id");
+
+            String url = "https://example.org/note";
+            var link = publication("null-link", List.of());
+            link.put("kind", "link"); link.put("message", url); link.put("sourceUrl", url);
+            assertEquals(201, publish(s, completed(link, TestServer.mockLinkReply(url), 0)).status());
+            var savedLink = s.post("/records", obj("activityId", activityId, "analysisId", link.get("analysisId")));
+            assertEquals(201, savedLink.status());
+            String linkRecordId = (String) savedLink.map().get("id");
+
+            String text = "  한글과 이모지🙂\n원문 공백 유지  ";
+            var savedText = s.post("/records", obj("activityId", activityId, "message", text,
+                    "reply", TestServer.mockReply(text, List.of(), false)));
+            assertEquals(201, savedText.status());
+            String textRecordId = (String) savedText.map().get("id");
+            String fingerprint = s.query(db -> com.oneline.api.service.ActivityMetadata.activitySnapshot(db, activityId).fingerprint());
+
+            var context = internal(s, "GET", "/home-context?conversationId=conversation", null);
+            assertEquals(200, context.status(), context.text());
+            var records = Js.asArray(Js.path(context.map(), "context", "records"));
+            assertEquals(3, records.size());
+            for (String id : List.of(fileRecordId, linkRecordId)) {
+                var record = Js.asObject(records.stream().filter(r -> id.equals(Js.get(r, "id"))).findFirst().orElseThrow());
+                assertTrue(record.containsKey("message"));
+                assertNull(record.get("message"));
+                assertEquals("", s.row("SELECT message FROM records WHERE id = ?", id).get("message"));
+                assertEquals("", s.get("/records/" + id).map().get("message"));
+            }
+            assertEquals(text, Js.get(records.stream().filter(r -> textRecordId.equals(Js.get(r, "id"))).findFirst().orElseThrow(), "message"));
+            assertEquals(text, s.row("SELECT message FROM records WHERE id = ?", textRecordId).get("message"));
+            assertEquals(text, s.get("/records/" + textRecordId).map().get("message"));
+            assertEquals(caption, job(internal(s, "GET", "/chat-jobs/ai-null-file", null)).get("message"));
+            assertEquals(url, job(internal(s, "GET", "/chat-jobs/ai-null-link", null)).get("message"));
+            var messages = Js.asArray(context.map().get("recentMessages"));
+            assertTrue(messages.stream().anyMatch(m -> "user".equals(Js.get(m, "role")) && caption.equals(Js.get(m, "content"))));
+            assertTrue(messages.stream().anyMatch(m -> "user".equals(Js.get(m, "role")) && url.equals(Js.get(m, "content"))));
+            assertEquals(context.text(), internal(s, "GET", "/home-context?conversationId=conversation", null).text());
+            assertEquals(fingerprint, s.query(db -> com.oneline.api.service.ActivityMetadata.activitySnapshot(db, activityId).fingerprint()));
         }
     }
 }

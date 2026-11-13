@@ -3685,7 +3685,8 @@
                         {
                           "type": "null"
                         }
-                      ]
+                      ],
+                      "description": "AI가 읽는 홈 문맥 전용 값. DB message가 정확히 빈 문자열이면 JSON null로 제공한다. 비어 있지 않은 원문은 공백·줄바꿈을 포함해 유지하며, DB·공개 기록 조회·작업 정본·대화 원문은 변경하지 않는다."
                     },
                     "summary": {
                       "anyOf": [
@@ -3998,14 +3999,7 @@
             ]
           },
           "reply": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/CompletedReply"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "description": "completed는 CompletedReply, queued/running은 null. failed는 남은 값을 무시하고 저장·게시 해시 계산 전에 JSON null로 정규화한다."
           },
           "files": {
             "type": "array",
@@ -4095,7 +4089,7 @@
             "then": {
               "properties": {
                 "reply": {
-                  "type": "null"
+                  "description": "실패 요청의 남은 reply는 무시한다. 정본 응답은 항상 JSON null이다."
                 },
                 "error": {
                   "$ref": "#/components/schemas/ServiceError"
@@ -4332,7 +4326,8 @@
               }
             }
           }
-        ]
+        ],
+        "description": "백엔드는 queued 접수 후 10분, running 진행 갱신 수신 후 5분을 기준으로 30초마다 검사해 failed로 정리한다. error.code는 queue_timeout 또는 analysis_timeout이며 reply=null, revision은 증가한다. 완료 정본은 보존하고 만료 후 늦은 갱신은 거절한다. 만료 시각은 AI 타임스탬프 대신 백엔드 수신 시각으로 계산한다."
       },
       "JobSnapshotResponse": {
         "type": "object",

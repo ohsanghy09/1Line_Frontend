@@ -342,7 +342,7 @@ class ApiTest {
                 List<Object> first = Js.asArray(snapshot.records().get(0));
                 var ref = arr(obj("recordId", first.get(0), "quote", first.get(1)));
                 return new Object[]{200, obj("sourceFingerprint", snapshot.fingerprint(), "recordCount", (double) snapshot.records().size(),
-                        "model", "test-model", "promptVersion", "activity-metadata-v1", "metadata", obj(
+                        "model", "test-model", "promptVersion", "activity-metadata-analysis", "metadata", obj(
                                 "summary", obj("value", "자료 " + snapshot.records().size() + "개를 종합했어요.", "evidence", ref),
                                 "role", obj("value", "개발", "evidence", ref), "status", obj("value", "진행 중", "evidence", ref),
                                 "period", obj("start", obj("value", "2026-01", "evidence", ref), "end", null)))};
@@ -367,7 +367,7 @@ class ApiTest {
                 ActivityMetadata.Snapshot snapshot = s.query(db -> ActivityMetadata.activitySnapshot(db, "line1-hackathon"));
                 var ref = arr(obj("recordId", Js.asArray(snapshot.records().get(0)).get(0), "quote", "없는 문장"));
                 return new Object[]{200, obj("sourceFingerprint", snapshot.fingerprint(), "recordCount", 1.0, "model", "m",
-                        "promptVersion", "activity-metadata-v1", "metadata", obj("summary", obj("value", "위조", "evidence", ref),
+                        "promptVersion", "activity-metadata-analysis", "metadata", obj("summary", obj("value", "위조", "evidence", ref),
                                 "role", null, "status", null, "period", obj("start", null, "end", null)))};
             };
             s.sql(db -> db.run("UPDATE records SET updated_at = ?", "2026-11-08T00:00:00.000Z"));

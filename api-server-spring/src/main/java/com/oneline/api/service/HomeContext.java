@@ -24,7 +24,8 @@ public final class HomeContext {
         if (!activityIds.isEmpty()) {
             String placeholders = String.join(",", Collections.nCopies(activityIds.size(), "?"));
             for (var row : db.all("SELECT * FROM records WHERE activity_id IN (" + placeholders + ") ORDER BY created_at DESC, id LIMIT 50", activityIds.toArray())) {
-                records.add(obj("id", row.get("id"), "activityId", row.get("activity_id"), "message", row.get("message"),
+                Object message = row.get("message");
+                records.add(obj("id", row.get("id"), "activityId", row.get("activity_id"), "message", "".equals(message) ? null : message,
                         "summary", Js.path(Json.parse((String) row.get("reply")), "analysis", "summary")));
             }
         }

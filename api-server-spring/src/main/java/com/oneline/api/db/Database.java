@@ -103,6 +103,13 @@ public final class Database implements AutoCloseable {
             boolean hasCriteria = db.all("PRAGMA table_info(journey_analyses)").stream()
                     .anyMatch(column -> "criteria_version".equals(column.get("name")));
             if (!hasCriteria) db.exec("ALTER TABLE journey_analyses ADD COLUMN criteria_version TEXT");
+            Set<String> publicationColumns = new HashSet<>();
+            for (var column : db.all("PRAGMA table_info(internal_chat_publications)"))
+                publicationColumns.add((String) column.get("name"));
+            for (String column : List.of("accepted_at_ms", "progress_received_at_ms")) {
+                if (!publicationColumns.contains(column))
+                    db.exec("ALTER TABLE internal_chat_publications ADD COLUMN " + column + " INTEGER");
+            }
             // 기존 DB의 활동·기록·원본을 보존하며 상세 메타정보 자리만 추가한다.
             Set<String> columns = new HashSet<>();
             for (Map<String, Object> column : db.all("PRAGMA table_info(activities)")) columns.add((String) column.get("name"));
