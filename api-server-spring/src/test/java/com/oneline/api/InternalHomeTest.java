@@ -322,4 +322,55 @@ class InternalHomeTest {
             assertEquals(2, count(s, "analyses"));
         }
     }
+
+    @Test
+    void homeContextUsesNullForEmptyFileAndLinkMessagesWithoutChangingStoredOrPublicValues() {
+        try (var s = TestServer.start()) {
+            String activityId = "line1-hackathon";
+            String caption = "함께 보낸 파일 설명";
+            var file = publication("null-file", List.of(file("null-file-original", "note.txt", new byte[]{1})));
+            file.put("message", caption);
+            assertEquals(201, publish(s, completed(file, TestServer.mockReply("", List.of("note.txt"), false), 0)).status());
+            var savedFile = s.post("/records", obj("activityId", activityId, "analysisId", file.get("analysisId")));
+            assertEquals(201, savedFile.status());
+            String fileRecordId = (String) savedFile.map().get("id");
+
+            String url = "https://example.org/note";
+            var link = publication("null-link", List.of());
+            link.put("kind", "link"); link.put("message", url); link.put("sourceUrl", url);
+            assertEquals(201, publish(s, completed(link, TestServer.mockLinkReply(url), 0)).status());
+            var savedLink = s.post("/records", obj("activityId", activityId, "analysisId", link.get("analysisId")));
+            assertEquals(201, savedLink.status());
+            String linkRecordId = (String) savedLink.map().get("id");
+
+            String text = "  한글과 이모지🙂\n원문 공백 유지  ";
+            var savedText = s.post("/records", obj("activityId", activityId, "message", text,
+                    "reply", TestServer.mockReply(text, List.of(), false)));
+            assertEquals(201, savedText.status());
+            String textRecordId = (String) savedText.map().get("id");
+            String fingerprint = s.query(db -> com.oneline.api.service.ActivityMetadata.activitySnapshot(db, activityId).fingerprint());
+
+            var context = internal(s, "GET", "/home-context?conversationId=conversation", null);
+            assertEquals(200, context.status(), context.text());
+            var records = Js.asArray(Js.path(context.map(), "context", "records"));
+            assertEquals(3, records.size());
+            for (String id : List.of(fileRecordId, linkRecordId)) {
+                var record = Js.asObject(records.stream().filter(r -> id.equals(Js.get(r, "id"))).findFirst().orElseThrow());
+                assertTrue(record.containsKey("message"));
+                assertNull(record.get("message"));
+                assertEquals("", s.row("SELECT message FROM records WHERE id = ?", id).get("message"));
+                assertEquals("", s.get("/records/" + id).map().get("message"));
+            }
+            assertEquals(text, Js.get(records.stream().filter(r -> textRecordId.equals(Js.get(r, "id"))).findFirst().orElseThrow(), "message"));
+            assertEquals(text, s.row("SELECT message FROM records WHERE id = ?", textRecordId).get("message"));
+            assertEquals(text, s.get("/records/" + textRecordId).map().get("message"));
+            assertEquals(caption, job(internal(s, "GET", "/chat-jobs/ai-null-file", null)).get("message"));
+            assertEquals(url, job(internal(s, "GET", "/chat-jobs/ai-null-link", null)).get("message"));
+            var messages = Js.asArray(context.map().get("recentMessages"));
+            assertTrue(messages.stream().anyMatch(m -> "user".equals(Js.get(m, "role")) && caption.equals(Js.get(m, "content"))));
+            assertTrue(messages.stream().anyMatch(m -> "user".equals(Js.get(m, "role")) && url.equals(Js.get(m, "content"))));
+            assertEquals(context.text(), internal(s, "GET", "/home-context?conversationId=conversation", null).text());
+            assertEquals(fingerprint, s.query(db -> com.oneline.api.service.ActivityMetadata.activitySnapshot(db, activityId).fingerprint()));
+        }
+    }
 }

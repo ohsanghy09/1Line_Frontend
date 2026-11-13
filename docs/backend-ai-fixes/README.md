@@ -1,10 +1,10 @@
 # 백엔드·AI 호환 및 실패 처리 보완
 
-작성일: 2026-11-13 · 상태: 활동 분석 버전 정합화 완료, Spring 검사 48개·JAR 빌드 통과. 나머지 3개 기능은 구현 전
+작성일: 2026-11-13 · 상태: 활동 분석 버전·빈 기록 본문 처리 완료, Spring 검사 49개·JAR 빌드 통과. 실패 요청·작업 만료는 구현 전
 
 ## 목적과 작업 범위
 
-기존 [분리 서버 연동 구현](../backend-ai-integration/README.md)을 바탕으로, 실제 AI 저장소와 Spring 사이의 형식 불일치와 중단된 작업 처리를 보완한다. AI 코드를 변경하지 않고 백엔드에서 대응한다. 사용자 요청으로 첫 작업인 활동 분석 버전 정합화를 시작했다. DB·배포 설정은 변경하지 않았다.
+기존 [분리 서버 연동 구현](../backend-ai-integration/README.md)을 바탕으로, 실제 AI 저장소와 Spring 사이의 형식 불일치와 중단된 작업 처리를 보완한다. AI 코드를 변경하지 않고 백엔드에서 대응한다. 활동 분석 버전 정합화와 홈 문맥의 빈 기록 본문 처리를 구현했다. DB·배포 설정은 변경하지 않았다.
 
 관련 이슈 제목: `fix: AI 연동 계약 호환 및 분석 작업 실패·만료 처리 보완`
 
@@ -28,7 +28,7 @@
 | 항목 | 현재 불일치·누락 | 백엔드에서 논의한 변경 | 결정 상태 |
 | --- | --- | --- | --- |
 | 활동 분석 버전 | 조사 시 Spring v1과 AI 반환값 불일치. 현재 Spring을 activity-metadata-analysis로 변경 | AI 기준 허용값·계약·검사 갱신 | 구현·로컬 검증 완료 |
-| 빈 기록 본문 | 파일·링크 기록의 message는 빈 문자열인데 AI Text 검증은 이를 거절 | DB 값은 유지하고 홈 문맥 응답에서 빈 문자열만 null로 변환 | 방향 논의, 구현 전 |
+| 빈 기록 본문 | 조사 당시 빈 문자열이 AI Text 검증에서 거절됨. 현재 홈 문맥의 빈 message만 null로 전달 | DB·공개 응답·실제 원문은 보존 | 구현·로컬 검증 완료 |
 | 실패 요청 reply | AI가 failed로 전환할 때 남긴 reply를 Spring이 거절 | failed 요청의 reply를 백엔드에서 null로 정규화 | 채택한 방향. 사용자의 중단 지시 후 수정하지 않음 |
 | 작업 만료 | AI만 종료되면 백엔드 queued/running이 남음 | 오래 갱신되지 않은 작업을 failed로 종료하고 늦은 완료 거절 | 시간 기준 확정, 세부 구현·검증 전 |
 
@@ -46,12 +46,14 @@ AI [activity_metadata.py](https://github.com/hongdabomi/GrowthArchive_ai/blob/3f
 
 ### 2. 빈 기록 본문
 
-파일·링크 저장 시 함께 입력한 채팅을 기록에 복사하지 않는 정책에 따라 message=""가 저장된다. Spring [HomeContext.java](../../api-server-spring/src/main/java/com/oneline/api/service/HomeContext.java)가 이를 그대로 보내면 AI [RecordContext](https://github.com/hongdabomi/GrowthArchive_ai/blob/3f2e9907396d728ea37aeafa189bac92c0159a24/schemas/common.py)의 Text(min_length=1) 검증에서 거절된다. 파일 원본·분석 요약이 비어 있다는 뜻이 아니다.
+파일·링크 저장 시 함께 입력한 채팅을 기록에 복사하지 않는 정책에 따라 message=""가 저장된다. 조사 당시 Spring이 이를 그대로 보내 AI [RecordContext](https://github.com/hongdabomi/GrowthArchive_ai/blob/3f2e9907396d728ea37aeafa189bac92c0159a24/schemas/common.py)의 Text(min_length=1) 검증과 맞지 않았다. 현재 [HomeContext.java](../../api-server-spring/src/main/java/com/oneline/api/service/HomeContext.java)는 홈 문맥 응답에서 빈 문자열만 JSON null로 변환한다. 파일 원본·분석 요약이 비어 있다는 뜻이 아니다.
 
-- [ ] AI에 보내는 홈 문맥의 records[].message만 "" → JSON null로 변환한다.
-- [ ] DB의 저장값·채팅 이력·실제 내용이 있는 문자열은 보존한다.
-- [ ] 파일·링크 저장 후 다음 홈 분석의 문맥 검증을 확인한다.
-- [ ] 공백만 있는 문자열 처리 여부는 별도로 정한다. 원문을 무조건 trim하거나 Text 전역 규칙을 완화하지 않는다.
+- [x] AI에 보내는 홈 문맥의 records[].message만 "" → JSON null로 변환한다.
+- [x] DB의 저장값·채팅 이력·실제 내용이 있는 문자열은 보존한다.
+- [x] 파일·링크 저장 후 내부 홈 문맥 HTTP 응답이 message 키와 JSON null을 제공하는지 검사한다. 실제 AI 통합 검증은 별도다.
+- [x] 이번 범위는 정확한 빈 문자열만 변환한다. 비어 있지 않은 값은 trim하거나 재작성하지 않는다. 공백만 있는 기존 값의 별도 정규화는 추가하지 않는다.
+
+파일·링크의 공개 GET /api/records/:id 응답과 DB message는 계속 ""다. 내부 작업 정본의 입력 message와 recentMessages의 채팅 원문도 유지한다. 활동 종합·Journey에 전달하는 기록 본문과 기존 스냅샷 해시는 변경하지 않았다. 로컬 Spring 검사 49개·JAR 빌드를 통과했다.
 
 ### 3. 실패 요청의 reply 정규화
 
@@ -97,7 +99,8 @@ AI는 preparing → analyzing → persisting 등 단계 전환 시 상태를 갱
 ## 검증·완료 기준
 
 - [x] 실제 AI 응답 버전·구조를 사용하는 활동 종합 저장 검사 (로컬 HTTP AI 대역).
-- [ ] 파일·링크 저장 후 빈 message를 포함한 홈 문맥의 AI 검증 통과.
+- [x] 파일·링크 저장 후 홈 문맥의 빈 message를 JSON null로 전달하고 DB·공개 응답·원문·지문을 보존하는 로컬 검사.
+- [ ] 실제 AI의 문맥 검증을 포함한 두 서버 통합 확인.
 - [ ] failed+reply 결과 요청의 정규화·저장·재조회·중복 처리 검사.
 - [ ] 완료 미저장 후 실패 게시, 완료 저장 후 응답 유실, stale revision을 구분한 검사.
 - [ ] AI 중단을 가정한 만료, 갱신 직전/직후·완료 동시 요청·늦은 완료·사용자 재전송 검사.
