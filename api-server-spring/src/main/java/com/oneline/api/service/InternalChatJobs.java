@@ -132,16 +132,16 @@ public final class InternalChatJobs {
         if (status.equals("completed")) {
             require("completed".equals(input.get("phase")) && error == null);
             input.put("reply", validateReply(reply, link, url, files));
+        } else if (status.equals("failed")) {
+            // Discard a leftover result before hashing so failed retries share one canonical payload.
+            input.put("reply", null);
+            var failure = object(error, Set.of("code", "error"));
+            text(failure.get("code"), 20000, false);
+            text(failure.get("error"), 20000, true);
         } else {
             require(reply == null);
-            if (status.equals("failed")) {
-                var failure = object(error, Set.of("code", "error"));
-                text(failure.get("code"), 20000, false);
-                text(failure.get("error"), 20000, true);
-            } else {
-                require(error == null && !"completed".equals(input.get("phase")));
-                require(!status.equals("queued") || "preparing".equals(input.get("phase")));
-            }
+            require(error == null && !"completed".equals(input.get("phase")));
+            require(!status.equals("queued") || "preparing".equals(input.get("phase")));
         }
         var identity = obj("message", message, "sourceUrl", url, "conversationId", input.get("conversationId"),
                 "kind", input.get("kind"), "files", fingerprintFiles);

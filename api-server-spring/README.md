@@ -20,7 +20,7 @@ PowerShell 설정 형식은 `$env:INTERNAL_SERVICE_TOKEN = '<서버 비밀 설�
 - `PUT /api/internal/chat-jobs/:jobId`: 게시 객체 전체와 expectedRevision을 받아 최초 201, 재전송·갱신 200을 반환한다.
 - `GET /api/internal/chat-jobs/:jobId`: `{job: JobSnapshot}` 정본과 revision을 반환한다. 내부 응답의 원본 bytes를 공개 프론트 응답에 복사하지 않는다.
 
-홈 문맥 records[].message가 빈 문자열이면 JSON null로 전달한다. DB·공개 기록 조회·내부 작업 정본·대화 원문은 변경하지 않고 비어 있지 않은 문자열도 그대로 유지한다. 이 호환 처리 후 Spring 검사 49개·JAR 빌드를 통과했으며 실제 AI 서버 검증은 별도다.
+홈 문맥 records[].message가 빈 문자열이면 JSON null로 전달한다. DB·공개 기록 조회·내부 작업 정본·대화 원문은 변경하지 않고 비어 있지 않은 문자열도 그대로 유지한다. 실패 게시(status=failed)에 남은 reply는 해시 계산·저장 전에 null로 정리하고 error를 보존한다. DB의 reply는 SQL NULL 대신 JSON 텍스트 "null"이며 정본 응답은 JSON null이다. queued/running의 reply 제한·completed 검증·revision 충돌·완료 결과 보호는 유지한다. 이 호환 처리 후 Spring 검사 52개·JAR 빌드를 통과했으며 실제 AI 서버 검증은 별도다.
 
 원본은 base64 JSON으로 전송하고 기존 files BLOB에 저장한다. 내부 PUT의 JSON 본문은 압축 해제 후 40MiB까지이며, 디코딩한 원본은 파일당 10MiB·총 25MiB·10개 제한이다. 공개 JSON API의 1MiB 제한은 유지한다. 앞단 프록시도 내부 경로의 한도를 수용해야 한다.
 

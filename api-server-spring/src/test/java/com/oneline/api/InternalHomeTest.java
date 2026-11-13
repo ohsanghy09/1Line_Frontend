@@ -16,6 +16,80 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class InternalHomeTest {
     @Test
+    void failedInitialPublicationDiscardsReplyButPreservesErrorAndOriginals() {
+        try (var s = TestServer.start()) {
+            var p = publication("failed-initial", List.of(file("failed-file", "note.txt", new byte[]{1, 2})));
+            p.put("status", "failed"); p.put("phase", "completed");
+            p.put("reply", TestServer.mockReply("", List.of("note.txt"), false));
+            var error = obj("code", "publish_failed", "error", "Result publication failed");
+            p.put("error", error);
+            var response = publish(s, p);
+            assertEquals(201, response.status(), response.text());
+            var stored = job(internal(s, "GET", "/chat-jobs/ai-failed-initial", null));
+            assertEquals("failed", stored.get("status"));
+            assertNull(stored.get("reply"));
+            assertEquals(error, stored.get("error"));
+            assertEquals(copy(p).get("files"), stored.get("files"));
+            assertEquals(p.get("message"), stored.get("message"));
+            assertEquals("null", s.row("SELECT reply FROM analyses").get("reply"));
+            assertEquals(409, s.post("/records", obj("activityId", "line1-hackathon", "analysisId", p.get("analysisId"))).status());
+        }
+    }
+
+    @Test
+    void failedUpdateNormalizesBeforeRetrySignatureAndStillChecksRevisionAndError() {
+        try (var s = TestServer.start()) {
+            var p = publication("failed-update", List.of());
+            assertEquals(201, publish(s, p).status());
+            var running = copy(p);
+            running.put("status", "running"); running.put("phase", "persisting");
+            running.put("expectedRevision", 1);
+            assertEquals(2, revision(job(publish(s, running))));
+            var failed = completed(p, general("Leftover result"), 1);
+            failed.put("status", "failed");
+            failed.put("error", obj("code", "publish_failed", "error", "Result publication failed"));
+            assertEquals(409, publish(s, failed).status());
+            assertEquals("running", job(internal(s, "GET", "/chat-jobs/ai-failed-update", null)).get("status"));
+            failed.put("expectedRevision", 2);
+            var invalid = copy(failed); invalid.put("error", null);
+            assertEquals(400, publish(s, invalid).status());
+            invalid = copy(running); invalid.put("reply", general("Unexpected pending result"));
+            assertEquals(400, publish(s, invalid).status());
+            assertEquals(3, revision(job(publish(s, failed))));
+            assertEquals(3, revision(job(publish(s, failed))));
+            failed.put("reply", null);
+            assertEquals(3, revision(job(publish(s, failed))));
+            failed.put("reply", obj("incomplete", true));
+            var retry = job(publish(s, failed));
+            assertEquals(3, revision(retry));
+            assertNull(retry.get("reply"));
+            assertEquals(failed.get("error"), retry.get("error"));
+            assertEquals(409, publish(s, completed(p, general("Late result"), 3)).status());
+        }
+    }
+
+    @Test
+    void failedPublicationCannotOverwriteAnAlreadyCompletedResult() {
+        try (var s = TestServer.start()) {
+            var p = publication("completed-protection", List.of());
+            assertEquals(201, publish(s, p).status());
+            var result = general("Persisted result");
+            assertEquals(2, revision(job(publish(s, completed(p, result, 1)))));
+            var failed = completed(p, result, 2);
+            failed.put("status", "failed");
+            failed.put("error", obj("code", "publish_failed", "error", "Response was lost"));
+            assertEquals(409, publish(s, failed).status());
+            failed.put("expectedRevision", 1);
+            assertEquals(409, publish(s, failed).status());
+            var stored = job(internal(s, "GET", "/chat-jobs/ai-completed-protection", null));
+            assertEquals("completed", stored.get("status"));
+            assertEquals(result, stored.get("reply"));
+            assertEquals(2, revision(stored));
+            assertNull(stored.get("error"));
+        }
+    }
+
+    @Test
     void documentedExchangeIsAcceptedByTheRealInternalEndpoints() throws Exception {
         var example = Js.asObject(Json.parse(Files.readString(Path.of("../docs/backend-ai-integration/examples/home-job-exchange.json"))));
         try (var s = TestServer.start()) {

@@ -90,6 +90,14 @@ test('저장·분석 필수 필드와 상태별 생략 규칙을 명시한다', 
     assert.ok(ai.paths['/chat'].post.responses['200'])
     assert.ok(ai.paths['/chat'].post.responses['202'])
     assert.equal(ai.components.schemas.ActivityAnalysisResult.properties.promptVersion.const, 'activity-metadata-analysis')
+    const publication = backend.components.schemas.JobPublication
+    const rule = (schema, status) => schema.allOf.find(item => item.if.properties.status.const === status).then.properties
+    assert.equal(publication.properties.reply.anyOf, undefined)
+    assert.equal(rule(publication, 'failed').reply.type, undefined)
+    assert.equal(rule(publication, 'failed').error.$ref, '#/components/schemas/ServiceError')
+    assert.equal(rule(publication, 'completed').reply.$ref, '#/components/schemas/CompletedReply')
+    assert.equal(publication.allOf.find(item => item.if.properties.status.enum).then.properties.reply.type, 'null')
+    assert.equal(rule(backend.components.schemas.JobSnapshot, 'failed').reply.type, 'null')
 })
 
 test('Swagger에서 연결한 handoff 원문과 문서 사이 링크를 정적 파일로 제공한다', async t => {

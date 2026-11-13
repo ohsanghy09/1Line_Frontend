@@ -1,10 +1,10 @@
 # 백엔드·AI 호환 및 실패 처리 보완
 
-작성일: 2026-11-13 · 상태: 활동 분석 버전·빈 기록 본문 처리 완료, Spring 검사 49개·JAR 빌드 통과. 실패 요청·작업 만료는 구현 전
+작성일: 2026-11-13 · 상태: 활동 분석 버전·빈 기록 본문·실패 요청 reply 처리 완료. 작업 만료는 구현 전
 
 ## 목적과 작업 범위
 
-기존 [분리 서버 연동 구현](../backend-ai-integration/README.md)을 바탕으로, 실제 AI 저장소와 Spring 사이의 형식 불일치와 중단된 작업 처리를 보완한다. AI 코드를 변경하지 않고 백엔드에서 대응한다. 활동 분석 버전 정합화와 홈 문맥의 빈 기록 본문 처리를 구현했다. DB·배포 설정은 변경하지 않았다.
+기존 [분리 서버 연동 구현](../backend-ai-integration/README.md)을 바탕으로, 실제 AI 저장소와 Spring 사이의 형식 불일치와 중단된 작업 처리를 보완한다. AI 코드를 변경하지 않고 백엔드에서 대응한다. 활동 분석 버전 정합화, 홈 문맥의 빈 기록 본문 처리, 실패 요청 reply 정규화를 구현했다. DB·배포 설정은 변경하지 않았다.
 
 관련 이슈 제목: `fix: AI 연동 계약 호환 및 분석 작업 실패·만료 처리 보완`
 
@@ -29,7 +29,7 @@
 | --- | --- | --- | --- |
 | 활동 분석 버전 | 조사 시 Spring v1과 AI 반환값 불일치. 현재 Spring을 activity-metadata-analysis로 변경 | AI 기준 허용값·계약·검사 갱신 | 구현·로컬 검증 완료 |
 | 빈 기록 본문 | 조사 당시 빈 문자열이 AI Text 검증에서 거절됨. 현재 홈 문맥의 빈 message만 null로 전달 | DB·공개 응답·실제 원문은 보존 | 구현·로컬 검증 완료 |
-| 실패 요청 reply | AI가 failed로 전환할 때 남긴 reply를 Spring이 거절 | failed 요청의 reply를 백엔드에서 null로 정규화 | 채택한 방향. 사용자의 중단 지시 후 수정하지 않음 |
+| 실패 요청 reply | 조사 당시 AI가 failed로 전환할 때 남긴 reply를 Spring이 거절 | failed 요청의 reply를 백엔드에서 null로 정규화 | 구현·로컬 검증 완료 |
 | 작업 만료 | AI만 종료되면 백엔드 queued/running이 남음 | 오래 갱신되지 않은 작업을 failed로 종료하고 늦은 완료 거절 | 시간 기준 확정, 세부 구현·검증 전 |
 
 ### 1. 활동 정보 분석 버전
@@ -57,16 +57,16 @@ AI [activity_metadata.py](https://github.com/hongdabomi/GrowthArchive_ai/blob/3f
 
 ### 3. 실패 요청의 reply 정규화
 
-AI [JobService.run](https://github.com/hongdabomi/GrowthArchive_ai/blob/3f2e9907396d728ea37aeafa189bac92c0159a24/jobs.py#L64)은 완료 게시 오류 후 status/error만 바꿔 reply가 남을 수 있다. Spring [InternalChatJobs.java](../../api-server-spring/src/main/java/com/oneline/api/service/InternalChatJobs.java)는 completed 이외 상태에서 reply=null을 요구하므로 실패 게시도 거절한다.
+AI [JobService.run](https://github.com/hongdabomi/GrowthArchive_ai/blob/3f2e9907396d728ea37aeafa189bac92c0159a24/jobs.py#L64)은 완료 게시 오류 후 status/error만 바꿔 reply가 남을 수 있다. 조사 당시 Spring은 completed 이외 상태에서 reply=null을 요구해 실패 게시도 거절했다. 현재 [InternalChatJobs.java](../../api-server-spring/src/main/java/com/oneline/api/service/InternalChatJobs.java)는 failed 요청의 남은 reply를 무시하고 null로 정리한다.
 
-사용자와 정리한 방향은 **status를 null로 바꾸는 것이 아니라, status=failed를 유지하면서 reply를 null로 정리**하는 것이다. 실제 수정 요청은 중단됐으며 현재 구현되지 않았다.
+사용자의 후속 구현 요청에 따라 **status=failed와 오류 정보를 유지하면서 reply만 null로 정리**하도록 구현했다.
 
-- [ ] failed 요청에 reply가 있어도 허용하되 검증·게시 해시 계산·저장 전에 null로 정규화한다.
-- [ ] queued/running의 reply=null 규칙, 필수 error 검증, 입력·원본 검증은 유지한다.
-- [ ] expectedRevision 충돌·완료된 작업의 실패 덮어쓰기 거절을 유지한다.
-- [ ] 원본을 재전송하거나 reply 유무가 달라진 같은 실패 요청의 중복 처리가 안정적인지 확인한다.
-- [ ] DB 스키마는 그대로 사용한다. analyses.reply는 NOT NULL이므로 SQL NULL이 아니라 기존 Json.stringify(null)의 문자열 "null"로 보관한다. 내부 조회 응답에서는 JSON null이어야 한다.
-- [ ] 실패 상태의 초안을 정식 기록으로 저장하지 못하도록 기존 저장 검증을 유지한다.
+- [x] failed 요청에 reply가 있어도 허용하되 reply 검증·게시 해시 계산·저장 전에 null로 정규화한다. 필수 필드·요청 크기 제한은 유지한다.
+- [x] queued/running의 reply=null 규칙, 필수 error 검증, 입력·원본 검증은 유지한다.
+- [x] expectedRevision 충돌·완료된 작업의 실패 덮어쓰기 거절을 유지한다.
+- [x] 원본을 재전송하거나 reply 유무가 달라진 같은 실패 요청의 중복 처리가 안정적인지 확인했다.
+- [x] DB 스키마는 그대로 사용한다. analyses.reply는 NOT NULL이므로 SQL NULL이 아니라 기존 Json.stringify(null)의 문자열 "null"로 보관한다. 내부 조회 응답에서는 JSON null이다.
+- [x] 실패 상태의 초안을 정식 기록으로 저장하지 못하도록 기존 저장 검증을 유지한다.
 
 이미 완료가 저장됐지만 응답만 유실된 경우에는 완료 결과를 보호해야 한다. reply 정규화만으로 revision 충돌·통신 장애·결과 재게시가 모두 해결되지는 않는다. 백엔드에 전달되지 않은 결과의 자동 복원은 이 범위에 포함하지 않는다.
 
@@ -101,11 +101,11 @@ AI는 preparing → analyzing → persisting 등 단계 전환 시 상태를 갱
 - [x] 실제 AI 응답 버전·구조를 사용하는 활동 종합 저장 검사 (로컬 HTTP AI 대역).
 - [x] 파일·링크 저장 후 홈 문맥의 빈 message를 JSON null로 전달하고 DB·공개 응답·원문·지문을 보존하는 로컬 검사.
 - [ ] 실제 AI의 문맥 검증을 포함한 두 서버 통합 확인.
-- [ ] failed+reply 결과 요청의 정규화·저장·재조회·중복 처리 검사.
-- [ ] 완료 미저장 후 실패 게시, 완료 저장 후 응답 유실, stale revision을 구분한 검사.
+- [x] failed+reply 결과 요청의 정규화·저장·재조회·중복 처리 로컬 HTTP 검사.
+- [x] 완료 미저장 후 실패 게시, 완료 저장 후 실패 알림 도착, stale revision을 구분한 로컬 검사. 실제 통신 단절 재현은 별도다.
 - [ ] AI 중단을 가정한 만료, 갱신 직전/직후·완료 동시 요청·늦은 완료·사용자 재전송 검사.
 - [x] 활동 버전 변경 후 기존 공개 API·저장·수정·삭제·인증·원본 보관 회귀 검사.
-- [x] 활동 버전 범위의 계약·OpenAPI·작업 기록을 실제 구현과 일치하도록 갱신. 나머지 변경은 구현 시 진행.
+- [x] 활동 버전·빈 기록 본문·실패 reply 범위의 계약·OpenAPI·작업 기록을 갱신. 작업 만료는 구현 시 진행.
 
 로컬 검사, 실제 두 서버의 계약 통합 검사, 실제 모델·브라우저·EC2 검증은 별도로 기록한다. 성공할 수 없는 분석을 성공으로 위장하지 않고 실패 안내·재전송이 가능한 상태로 정리한다. 토큰·키는 코드·문서·프론트에 넣지 않는다.
 

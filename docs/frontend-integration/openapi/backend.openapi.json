@@ -3999,14 +3999,7 @@
             ]
           },
           "reply": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/CompletedReply"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "description": "completed는 CompletedReply, queued/running은 null. failed는 남은 값을 무시하고 저장·게시 해시 계산 전에 JSON null로 정규화한다."
           },
           "files": {
             "type": "array",
@@ -4096,7 +4089,7 @@
             "then": {
               "properties": {
                 "reply": {
-                  "type": "null"
+                  "description": "실패 요청의 남은 reply는 무시한다. 정본 응답은 항상 JSON null이다."
                 },
                 "error": {
                   "$ref": "#/components/schemas/ServiceError"
