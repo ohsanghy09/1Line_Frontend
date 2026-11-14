@@ -95,9 +95,9 @@ function GrowthJourney() {
             ) : <>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="text-xs text-brand-muted space-y-1" aria-live="polite">
-                        <p>{journey.analysis?.id ? `확정 기록 ${journey.analysis.recordCount}개로 분석했어요.` : '저장된 기록을 모아 성장 흐름을 분석해 보세요.'}</p>
+                        <p>{journey.analysis?.id ? `${journey.analysis.stale ? '이전 분석' : '현재 분석'} 기준: 확정 기록 ${journey.analysis.recordCount}개` : '저장된 기록을 모아 성장 흐름을 분석해 보세요.'}</p>
                         {journey.analysis?.generatedAt && <p>마지막 분석: {new Date(journey.analysis.generatedAt).toLocaleString('ko-KR')}</p>}
-                        {journey.analysis?.stale && <p>기록이 변경됐어요. 최신 기록으로 분석을 갱신해 주세요.</p>}
+                        {journey.analysis?.stale && <p>분석 이후 기록이 변경됐어요. 현재 확정 기록은 {journey.analysis.currentRecordCount}개이며, 표시된 결과는 최신 기록을 반영하지 않았어요.</p>}
                         {journey.analysis?.currentRecordCount === 0 && <p>홈에서 기록을 먼저 저장해 주세요.</p>}
                         <p>날짜는 근거 기록의 저장 월(UTC)을 기준으로 표시합니다.</p>
                     </div>

@@ -9,7 +9,7 @@ import LinkInputModal from '../components/chat/modals/LinkInputModal'
 import ChatMessageTime from '../components/chat/ChatMessageTime'
 import FileAnalysisProgress from '../components/chat/FileAnalysisProgress'
 import ChatServiceStatusBadge from '../components/chat/ChatServiceStatusBadge'
-import { getChatReply, getLinkReply, getChatServiceStatus, resumeChatReply, isTerminalChatFailure } from '../services/chat'
+import { getChatReply, getLinkReply, getChatServiceStatus, resumeChatReply, isTerminalChatFailure, getChatValidationError, getLinkValidationError } from '../services/chat'
 import type { ChatMessage, ChatProgress, ChatServiceStatus } from '../types/chat'
 import { appendChatReply, readChatSession, writeChatSession } from '../utils/chatSession'
 import type { PendingChatJob } from '../utils/chatSession'
@@ -190,6 +190,9 @@ function Home() {
         // 글 없이 파일만 선택한 경우에도 전송할 수 있다.
         if ((!content && filesToSend.length === 0) || pendingRequestRef.current || pendingJob) return
 
+        const validationError = sourceUrl ? getLinkValidationError(sourceUrl) : getChatValidationError(content, filesToSend)
+        if (validationError) { setReplyError(validationError); return }
+
         // 사용자가 선택한 파일명과 크기를 그대로 말풍선에 표시한다.
         const attachments = filesToSend.map((file) => ({ id: crypto.randomUUID(), name: file.name, size: file.size }))
         const sentAt = Date.now()
@@ -246,6 +249,11 @@ function Home() {
                 setReplyError(error instanceof Error ? error.message : '답변을 받아오지 못했어요. 메시지를 다시 보내주세요.')
                 const terminalFailure = isTerminalChatFailure(error)
                 if (terminalFailure) setPendingJob(null)
+                // 접수 전 확정 거절만 대화에서 제거한다. 통신 실패는 접수됐을 가능성이 있다.
+                if (!requestStatus.jobAccepted && error && typeof error === 'object' && 'status' in error
+                    && [400, 413, 415, 422].includes(Number(error.status))) {
+                    setMessages(current => current.filter(message => message.id !== userMessageId))
+                }
                 // 실패한 입력은 다시 보낼 수 있게 복원하되 새로 작성한 글은 덮어쓰지 않는다.
                 if ((!requestStatus.jobAccepted || terminalFailure) && !sourceUrl) {
                     setChatInput(current => current || content)
@@ -410,7 +418,10 @@ function Home() {
                     ))}
 
                     {replyError && <p role="alert" className="text-sm text-red-600">{replyError}</p>}
-                    {pendingJob && !isReplying && <button type="button" onClick={() => { setIsReplying(true); setReplyError(''); resumeJob(pendingJob) }} className="text-xs text-brand-primary hover:underline">진행 상태 다시 확인</button>}
+                    {pendingJob && !isReplying && <div className="space-y-1">
+                        <p className="text-xs text-brand-muted">접수된 분석 작업이 있어요. 파일을 다시 보내지 않고 진행 상태를 확인할 수 있어요.</p>
+                        <button type="button" onClick={() => { setIsReplying(true); setReplyError(''); resumeJob(pendingJob) }} className="text-xs text-brand-primary hover:underline">진행 상태 다시 확인</button>
+                    </div>}
                     {sessionError && <p role="alert" className="text-sm text-red-600">{sessionError}</p>}
 
                 </div>

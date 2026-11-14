@@ -35,8 +35,8 @@ function isEvent(value: unknown): value is RawEvent {
         && (value.isTurningPoint === true ? ['before', 'after', 'reason'].every(key => typeof value[key] === 'string') : value.isTurningPoint === false && typeof value.description === 'string')
 }
 
-function dateLabel(value: string): string {
-    return new Intl.DateTimeFormat('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(value))
+function dateLabel(value: string, withSeconds = false): string {
+    return new Intl.DateTimeFormat('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', ...(withSeconds ? { second: '2-digit' as const } : {}) }).format(new Date(value))
 }
 
 function activityView(value: RawActivity): FootprintActivity {
@@ -48,7 +48,7 @@ export function readFootprintActivity(value: unknown): FootprintActivity {
     if (!isActivity(value)) throw new Error('활동 응답 형식이 올바르지 않습니다.')
     return activityView(value)
 }
-const fileView = (value: RawFile): FootprintFile => ({ ...value, uploadedAtLabel: dateLabel(value.uploadedAt) })
+const fileView = (value: RawFile): FootprintFile => ({ ...value, uploadedAtLabel: dateLabel(value.uploadedAt, true) })
 const eventView = (value: RawEvent): FootprintTimelineEvent => ({ ...value, dateLabel: dateLabel(value.occurredAt) })
 
 // 서버 연결 실패를 예시 활동으로 대체하지 않는다. 404만 화면의 없음 상태로 변환한다.

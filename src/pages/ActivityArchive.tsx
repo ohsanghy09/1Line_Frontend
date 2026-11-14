@@ -105,7 +105,7 @@ function ActivityArchiveContent({ activityId }: { activityId: string }) {
                                 <Sparkles aria-hidden="true" className="w-3.5 h-3.5" /> AI 활동 요약
                             </h3>
                             <p className="text-slate-700 leading-relaxed wrap-anywhere">{activity.summary}</p>
-                            {(activity.recordsCount ?? activity.materialsCount) > 0 && <ActivityAnalysisStatus activityId={activityId} />}
+                            {(activity.recordsCount ?? activity.materialsCount) > 0 && <ActivityAnalysisStatus activityId={activityId} metadata={activity} />}
                         </div>
                     </header>
 

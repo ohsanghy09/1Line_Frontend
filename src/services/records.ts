@@ -4,8 +4,8 @@ import type { ActivityMetadata, ActivitySelection, ChatReply } from '../types/ch
 export type ActivityOption = ActivityMetadata & { id: string; name: string }
 export type SavedRecord = { id: string; activityId: string; reply: ChatReply }
 
-export async function getActivities(): Promise<ActivityOption[]> {
-    const data = await request('/activities')
+export async function getActivities(signal?: AbortSignal): Promise<ActivityOption[]> {
+    const data = await request('/activities', { signal })
     if (!Array.isArray(data) || !data.every(item => item && typeof item.id === 'string' && isActivityProposal({ ...item, confidence: null }))) throw new Error('활동 목록 형식이 올바르지 않습니다.')
     return data.map(item => ({ ...item, category: item.category ?? null, status: item.status ?? null, role: item.role ?? null, period: item.period ?? null, summary: item.summary ?? null }))
 }
