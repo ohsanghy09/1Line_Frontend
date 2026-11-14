@@ -71,12 +71,21 @@ public final class Fetch {
      * 호출 스레드는 이벤트 루프 잠금을 풀고 기다린다.
      */
     public static Response post(EventLoop loop, String url, String jsonBody, long timeoutMs, Controller controller, InternalServiceAuth auth) throws FetchError {
+        return post(loop, url, jsonBody, timeoutMs, controller, auth, null);
+    }
+
+    public static Response post(EventLoop loop, String url, String jsonBody, long timeoutMs, Controller controller, InternalServiceAuth auth, AiCallLog call) throws FetchError {
         try {
-            return loop.await(() -> send(url, jsonBody, timeoutMs, controller, auth));
+            Response response = loop.await(() -> send(url, jsonBody, timeoutMs, controller, auth));
+            if (call != null) call.received(response.status());
+            return response;
         } catch (FetchError e) {
+            if (call != null) call.transportFailed(e);
             throw e;
         } catch (Exception e) {
-            throw new FetchError(false, false, e);
+            FetchError error = new FetchError(false, false, e);
+            if (call != null) call.transportFailed(error);
+            throw error;
         }
     }
 

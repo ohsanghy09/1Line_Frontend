@@ -4,6 +4,7 @@ import com.oneline.api.db.Database;
 import com.oneline.api.service.ActivityMetadataQueue;
 import com.oneline.api.service.InternalChatJobs;
 import com.oneline.api.service.InternalJobExpiry;
+import com.oneline.api.service.UnsavedAnalysisCleanup;
 import com.oneline.api.support.EventLoop;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -92,15 +93,23 @@ public class AppConfig implements WebMvcConfigurer {
     }
 
     @Bean
-    public ShutdownHook shutdownHook(ActivityMetadataQueue queue, InternalJobExpiry expiry, Database database) {
-        return new ShutdownHook(queue, expiry, database);
+    public UnsavedAnalysisCleanup unsavedAnalysisCleanup(Database database, EventLoop loop,
+            @Value("${oneline.unsaved-retention-ms:${UNSAVED_ANALYSIS_RETENTION_MS:86400000}}") long retentionMs,
+            @Value("${oneline.unsaved-cleanup-interval-ms:300000}") long intervalMs) {
+        return new UnsavedAnalysisCleanup(database, loop, retentionMs, intervalMs);
+    }
+
+    @Bean
+    public ShutdownHook shutdownHook(ActivityMetadataQueue queue, InternalJobExpiry expiry, UnsavedAnalysisCleanup cleanup, Database database) {
+        return new ShutdownHook(queue, expiry, cleanup, database);
     }
 
     /** SIGINT/SIGTERM: 대기 중 분석을 정리한 뒤 DB를 닫는다. */
-    public record ShutdownHook(ActivityMetadataQueue queue, InternalJobExpiry expiry, Database database) implements org.springframework.beans.factory.DisposableBean {
+    public record ShutdownHook(ActivityMetadataQueue queue, InternalJobExpiry expiry, UnsavedAnalysisCleanup cleanup, Database database) implements org.springframework.beans.factory.DisposableBean {
         @Override
         public void destroy() {
             expiry.close();
+            cleanup.close();
             queue.close();
             database.close();
         }

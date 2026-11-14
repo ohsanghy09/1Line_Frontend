@@ -99,7 +99,15 @@ public final class Database implements AutoCloseable {
                     CREATE TABLE IF NOT EXISTS internal_job_tombstones (
                       job_id TEXT PRIMARY KEY, request_id TEXT NOT NULL UNIQUE, analysis_id TEXT NOT NULL UNIQUE
                     );
+                    CREATE TABLE IF NOT EXISTS analysis_retention (
+                      analysis_id TEXT PRIMARY KEY REFERENCES analyses(id) ON DELETE CASCADE,
+                      touched_at_ms INTEGER NOT NULL
+                    );
+                    CREATE INDEX IF NOT EXISTS files_analysis_id ON files(analysis_id);
+                    CREATE INDEX IF NOT EXISTS analysis_retention_touched ON analysis_retention(touched_at_ms);
                     """);
+            // 기존 미저장 원본도 첫 도입 시점부터 보관 기간을 보장한다. AI 시각은 정리 기준으로 신뢰하지 않는다.
+            db.run("INSERT OR IGNORE INTO analysis_retention SELECT id, ? FROM analyses", System.currentTimeMillis());
             boolean hasCriteria = db.all("PRAGMA table_info(journey_analyses)").stream()
                     .anyMatch(column -> "criteria_version".equals(column.get("name")));
             if (!hasCriteria) db.exec("ALTER TABLE journey_analyses ADD COLUMN criteria_version TEXT");
@@ -114,7 +122,7 @@ public final class Database implements AutoCloseable {
             Set<String> columns = new HashSet<>();
             for (Map<String, Object> column : db.all("PRAGMA table_info(activities)")) columns.add((String) column.get("name"));
             for (String column : List.of("category", "status", "role", "period", "summary", "start_date", "end_date", "updated_at",
-                    "metadata_status", "metadata_fingerprint", "metadata_error", "metadata_model", "metadata_updated_at")) {
+                    "metadata_status", "metadata_fingerprint", "metadata_error", "metadata_model", "metadata_updated_at", "metadata_review_fields")) {
                 if (!columns.contains(column)) db.exec("ALTER TABLE activities ADD COLUMN " + column + " TEXT");
             }
             // 실행 시 예시 활동을 넣지 않는다. 활동은 실제 사용자 입력의 AI 분석으로 생성한다.

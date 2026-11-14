@@ -5,6 +5,7 @@ import com.oneline.api.config.InternalServiceAuth;
 import com.oneline.api.js.Js;
 import com.oneline.api.support.EventLoop;
 import com.oneline.api.support.Fetch;
+import com.oneline.api.support.AiCallLog;
 import com.oneline.api.zod.Z;
 
 import java.util.ArrayList;
@@ -140,25 +141,26 @@ public final class ActivityMetadataQueue {
                             start_date = CASE WHEN metadata_model IS NOT NULL THEN NULL ELSE start_date END,
                             end_date = CASE WHEN metadata_model IS NOT NULL THEN NULL ELSE end_date END,
                             period = CASE WHEN metadata_model IS NOT NULL THEN NULL ELSE period END,
-                            metadata_status = 'idle', metadata_fingerprint = NULL, metadata_error = NULL WHERE id = ?""", id);
+                            metadata_status = 'idle', metadata_fingerprint = NULL, metadata_error = NULL,
+                            metadata_review_fields = NULL WHERE id = ?""", id);
             return;
         }
         db.run("UPDATE activities SET metadata_status = 'running' WHERE id = ?", id);
         job.controller = new Fetch.Controller();
-        try {
+        try (var call = new AiCallLog("activity_metadata", id)) {
             String base = Fetch.aiBase(aiBaseUrl);
             String input = ActivityMetadata.requestJson(db.get("SELECT * FROM activities WHERE id = ?", id), initial);
             Fetch.Response response = Fetch.post(loop, base + "/api/analyze/activities/" + Js.encodeURIComponent(Js.str(id)),
-                    input, 150000, job.controller, auth);
+                    input, 150000, job.controller, auth, call);
             Object body = response.jsonOrNull();
-            if (job.cancelled) return;
+            if (job.cancelled) { call.cancelled(); return; }
             if (!response.ok()) throw new IllegalStateException("활동 정보를 분석하지 못했어요. AI 서버 상태를 확인하고 다시 분석해 주세요.");
             Z.SafeParseResult parsed = ActivityMetadata.OUTPUT.safeParse(body);
             if (!parsed.success()) throw new IllegalStateException("활동 정보 분석 응답 형식을 확인하지 못했어요.");
             Map<String, Object> output = Js.asObject(parsed.data());
-            db.transaction(() -> {
+            boolean applied = db.transaction(() -> {
                 ActivityMetadata.Snapshot current = ActivityMetadata.activitySnapshot(db, id);
-                if (current == null) return;
+                if (current == null) return false;
                 if (!current.fingerprint().equals(initial.fingerprint())
                         || !Js.strictEquals(output.get("sourceFingerprint"), current.fingerprint())
                         || ((Number) output.get("recordCount")).doubleValue() != current.records().size()) {
@@ -199,9 +201,16 @@ public final class ActivityMetadataQueue {
                         Js.coalesce(Js.opt(Js.get(period, "start"), "value"), previous.get("start_date")),
                         Js.coalesce(Js.opt(Js.get(period, "end"), "value"), previous.get("end_date")));
                 Object start = parsedPeriod.get("start"), end = parsedPeriod.get("end");
+                List<String> review = ActivityMetadata.reviewFields(previous);
+                if (metadata.get("status") != null) review.remove("status");
+                if (metadata.get("role") != null) review.remove("role");
+                if (!Js.nullish(Js.get(period, "start"))) review.remove("start_date");
+                if (!Js.nullish(Js.get(period, "end"))) review.remove("end_date");
+                if (!Js.nullish(Js.get(period, "start")) || !Js.nullish(Js.get(period, "end"))) review.remove("period");
                 db.run("""
                                 UPDATE activities SET summary = ?, status = ?, role = ?, start_date = ?, end_date = ?, period = ?,
-                                  metadata_status = 'ready', metadata_error = NULL, metadata_fingerprint = ?, metadata_model = ?, metadata_updated_at = ? WHERE id = ?""",
+                                  metadata_status = 'ready', metadata_error = NULL, metadata_fingerprint = ?, metadata_model = ?,
+                                  metadata_updated_at = ?, metadata_review_fields = ? WHERE id = ?""",
                         Js.get(metadata.get("summary"), "value"),
                         Js.coalesce(Js.opt(metadata.get("status"), "value"), previous.get("status")),
                         Js.coalesce(Js.opt(metadata.get("role"), "value"), previous.get("role")),
@@ -209,8 +218,10 @@ public final class ActivityMetadataQueue {
                         Js.truthy(start) || Js.truthy(end)
                                 ? Js.str(Js.coalesce(start, "미확인")) + " ~ " + Js.str(Js.coalesce(end, ""))
                                 : previous.get("period"),
-                        current.fingerprint(), output.get("model"), Js.nowIso(), id);
+                        current.fingerprint(), output.get("model"), Js.nowIso(), com.oneline.api.js.Json.stringify(review), id);
+                return true;
             });
+            if (applied) call.applied(); else call.cancelled();
         } catch (Throwable error) {
             // 자료와 이전 메타정보를 보존한다. 공급자 원문·사용자 입력은 오류 로그에 남기지 않는다.
             if (!job.cancelled) markFailed(id);

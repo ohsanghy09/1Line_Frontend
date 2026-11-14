@@ -6,6 +6,7 @@ import com.oneline.api.js.Js;
 import com.oneline.api.js.Json;
 import com.oneline.api.support.EventLoop;
 import com.oneline.api.support.Fetch;
+import com.oneline.api.support.AiCallLog;
 import com.oneline.api.validation.Schemas;
 import com.oneline.api.zod.Z;
 
@@ -41,11 +42,22 @@ public final class ArchiveDelete {
     }
 
     private static void clearMetadata(Database db, Object id) {
+        Map<String, Object> previous = db.get("SELECT * FROM activities WHERE id = ?", id);
+        boolean hasRecords = db.get("SELECT id FROM records WHERE activity_id = ? LIMIT 1", id) != null;
+        List<String> review = new ArrayList<>();
+        if (hasRecords) {
+            for (String field : List.of("status", "role", "start_date", "end_date", "period")) {
+                if (previous.get(field) != null) review.add(field);
+            }
+        }
         db.run("""
-                UPDATE activities SET summary = NULL, role = NULL, status = NULL,
-                    start_date = NULL, end_date = NULL, period = NULL, metadata_status = 'idle',
+                UPDATE activities SET summary = NULL,
+                    role = CASE WHEN ? THEN role ELSE NULL END, status = CASE WHEN ? THEN status ELSE NULL END,
+                    start_date = CASE WHEN ? THEN start_date ELSE NULL END, end_date = CASE WHEN ? THEN end_date ELSE NULL END,
+                    period = CASE WHEN ? THEN period ELSE NULL END, metadata_status = 'idle', metadata_review_fields = ?,
                     metadata_fingerprint = NULL, metadata_error = NULL, metadata_model = NULL, metadata_updated_at = NULL,
-                    updated_at = ? WHERE id = ?""", Js.nowIso(), id);
+                    updated_at = ? WHERE id = ?""", hasRecords, hasRecords, hasRecords, hasRecords, hasRecords,
+                Json.stringify(review), Js.nowIso(), id);
     }
 
     // 삭제된 근거를 포함한 전체 요약/배지를 부분적으로 신뢰할 수 없으므로 스냅샷 전체를 비운다.
@@ -93,74 +105,78 @@ public final class ArchiveDelete {
         List<Map<String, Object>> remaining = Js.truthy(analysisId)
                 ? db.all("SELECT id, name, mime_type, size, content FROM files WHERE analysis_id = ? AND id != ? ORDER BY rowid", analysisId, fileId)
                 : List.of();
-        Map<String, Object> nextReply = null;
-        if (Js.strictEquals(file.get("kind"), "file") && !remaining.isEmpty()) {
-            Fetch.Response response;
-            try {
-                String base = Fetch.aiBase(aiBaseUrl);
-                List<Object> originals = new ArrayList<>();
-                long totalBytes = 0;
-                for (Map<String, Object> item : remaining) {
-                    Object raw = item.get("content");
-                    if (!(raw instanceof byte[] bytes) || bytes.length == 0 || bytes.length > 10 * 1024 * 1024
-                            || !(item.get("size") instanceof Number size) || size.doubleValue() != bytes.length) {
-                        throw new IllegalStateException("보관된 원본을 확인하지 못했습니다.");
+        try (var call = Js.strictEquals(file.get("kind"), "file") && !remaining.isEmpty()
+                ? new AiCallLog("exclude_file", original.get("id")) : null) {
+            Map<String, Object> nextReply = null;
+            if (Js.strictEquals(file.get("kind"), "file") && !remaining.isEmpty()) {
+                Fetch.Response response;
+                try {
+                    String base = Fetch.aiBase(aiBaseUrl);
+                    List<Object> originals = new ArrayList<>();
+                    long totalBytes = 0;
+                    for (Map<String, Object> item : remaining) {
+                        Object raw = item.get("content");
+                        if (!(raw instanceof byte[] bytes) || bytes.length == 0 || bytes.length > 10 * 1024 * 1024
+                                || !(item.get("size") instanceof Number size) || size.doubleValue() != bytes.length) {
+                            throw new IllegalStateException("보관된 원본을 확인하지 못했습니다.");
+                        }
+                        totalBytes += bytes.length;
+                        originals.add(obj("id", item.get("id"), "name", item.get("name"), "mimeType", item.get("mime_type"),
+                                "size", bytes.length, "contentBase64", Base64.getEncoder().encodeToString(bytes)));
                     }
-                    totalBytes += bytes.length;
-                    originals.add(obj("id", item.get("id"), "name", item.get("name"), "mimeType", item.get("mime_type"),
-                            "size", bytes.length, "contentBase64", Base64.getEncoder().encodeToString(bytes)));
+                    if (originals.size() > 10 || totalBytes > 25 * 1024 * 1024) {
+                        throw new IllegalStateException("남은 원본이 분석 한도를 초과했습니다.");
+                    }
+                    Map<String, Object> activity = db.get("SELECT id, name, category FROM activities WHERE id = ?", activityId);
+                    String input = Json.stringify(obj("fileId", fileId, "recordReply", original.get("reply"),
+                            "activity", activity, "files", originals));
+                    response = Fetch.post(loop, base + "/api/analyze/records/" + Js.encodeURIComponent(Js.str(original.get("id"))) + "/exclude-file",
+                            input, 150000, null, auth, call);
+                } catch (Fetch.FetchError | RuntimeException e) {
+                    throw publicFail(502, "남은 파일을 재분석하지 못해 삭제하지 않았어요. AI 서버를 확인하고 다시 시도해 주세요.");
                 }
-                if (originals.size() > 10 || totalBytes > 25 * 1024 * 1024) {
-                    throw new IllegalStateException("남은 원본이 분석 한도를 초과했습니다.");
+                Object body = response.jsonOrNull();
+                Z.SafeParseResult parsed = Schemas.REPLY.safeParse(Js.opt(body, "reply"));
+                List<Object> remainingIds = new ArrayList<>(), remainingNames = new ArrayList<>();
+                for (Map<String, Object> item : remaining) {
+                    remainingIds.add(item.get("id"));
+                    remainingNames.add(item.get("name"));
                 }
-                Map<String, Object> activity = db.get("SELECT id, name, category FROM activities WHERE id = ?", activityId);
-                String input = Json.stringify(obj("fileId", fileId, "recordReply", original.get("reply"),
-                        "activity", activity, "files", originals));
-                response = Fetch.post(loop, base + "/api/analyze/records/" + Js.encodeURIComponent(Js.str(original.get("id"))) + "/exclude-file",
-                        input, 150000, null, auth);
-            } catch (Fetch.FetchError | RuntimeException e) {
-                throw publicFail(502, "남은 파일을 재분석하지 못해 삭제하지 않았어요. AI 서버를 확인하고 다시 시도해 주세요.");
+                if (!response.ok() || !parsed.success() || !Js.strictEquals(Js.get(body, "recordReply"), original.get("reply"))
+                        || !java.util.Objects.equals(Json.stringify(Js.get(body, "fileIds")), Json.stringify(remainingIds))) {
+                    throw publicFail(502, "남은 파일의 분석 결과를 확인하지 못해 삭제하지 않았어요. 다시 시도해 주세요.");
+                }
+                nextReply = Js.asObject(parsed.data());
+                Object nextAnalysis = nextReply.get("analysis");
+                List<Object> nextNames = new ArrayList<>();
+                for (Object item : Js.asArray(Js.get(nextAnalysis, "files"))) nextNames.add(Js.get(item, "name"));
+                if (Js.truthy(nextReply.getOrDefault("sourceUrl", Js.UNDEFINED)) || !Js.asArray(Js.get(nextAnalysis, "changes")).isEmpty()
+                        || !java.util.Objects.equals(Json.stringify(nextNames), Json.stringify(remainingNames))) {
+                    throw publicFail(502, "남은 파일의 분석 대상이 일치하지 않아 삭제하지 않았어요. 다시 시도해 주세요.");
+                }
+                Object oldReply = Json.parse((String) original.get("reply"));
+                Js.set(nextAnalysis, "activity", Js.get(Js.get(oldReply, "analysis"), "activity"));
+                nextReply.put("activityCreated", Js.get(oldReply, "activityCreated"));
             }
-            Object body = response.jsonOrNull();
-            Z.SafeParseResult parsed = Schemas.REPLY.safeParse(Js.opt(body, "reply"));
-            List<Object> remainingIds = new ArrayList<>(), remainingNames = new ArrayList<>();
-            for (Map<String, Object> item : remaining) {
-                remainingIds.add(item.get("id"));
-                remainingNames.add(item.get("name"));
-            }
-            if (!response.ok() || !parsed.success() || !Js.strictEquals(Js.get(body, "recordReply"), original.get("reply"))
-                    || !java.util.Objects.equals(Json.stringify(Js.get(body, "fileIds")), Json.stringify(remainingIds))) {
-                throw publicFail(502, "남은 파일의 분석 결과를 확인하지 못해 삭제하지 않았어요. 다시 시도해 주세요.");
-            }
-            nextReply = Js.asObject(parsed.data());
-            Object nextAnalysis = nextReply.get("analysis");
-            List<Object> nextNames = new ArrayList<>();
-            for (Object item : Js.asArray(Js.get(nextAnalysis, "files"))) nextNames.add(Js.get(item, "name"));
-            if (Js.truthy(nextReply.getOrDefault("sourceUrl", Js.UNDEFINED)) || !Js.asArray(Js.get(nextAnalysis, "changes")).isEmpty()
-                    || !java.util.Objects.equals(Json.stringify(nextNames), Json.stringify(remainingNames))) {
-                throw publicFail(502, "남은 파일의 분석 대상이 일치하지 않아 삭제하지 않았어요. 다시 시도해 주세요.");
-            }
-            Object oldReply = Json.parse((String) original.get("reply"));
-            Js.set(nextAnalysis, "activity", Js.get(Js.get(oldReply, "analysis"), "activity"));
-            nextReply.put("activityCreated", Js.get(oldReply, "activityCreated"));
+            Map<String, Object> finalReply = nextReply;
+            db.transaction(() -> {
+                ActivityMetadata.Snapshot current = ActivityMetadata.activitySnapshot(db, activityId);
+                if (current == null || !current.fingerprint().equals(snapshot.fingerprint())) {
+                    throw publicFail(409, "삭제 중 활동 기록이 변경됐어요. 새로고침 후 다시 시도해 주세요.");
+                }
+                if (Js.strictEquals(file.get("kind"), "file")) db.run("DELETE FROM files WHERE id = ?", fileId);
+                retireDraft(db, analysisId);
+                if (finalReply != null) {
+                    db.run("UPDATE records SET message = '', reply = ?, updated_at = ? WHERE id = ?",
+                            Json.stringify(finalReply), Js.nowIso(), original.get("id"));
+                    syncEvents.accept(original.get("id"), finalReply);
+                } else {
+                    db.run("DELETE FROM records WHERE id = ?", original.get("id"));
+                }
+                clearMetadata(db, activityId);
+                invalidateJourney(db);
+            });
+            if (call != null) call.applied();
         }
-        Map<String, Object> finalReply = nextReply;
-        db.transaction(() -> {
-            ActivityMetadata.Snapshot current = ActivityMetadata.activitySnapshot(db, activityId);
-            if (current == null || !current.fingerprint().equals(snapshot.fingerprint())) {
-                throw publicFail(409, "삭제 중 활동 기록이 변경됐어요. 새로고침 후 다시 시도해 주세요.");
-            }
-            if (Js.strictEquals(file.get("kind"), "file")) db.run("DELETE FROM files WHERE id = ?", fileId);
-            retireDraft(db, analysisId);
-            if (finalReply != null) {
-                db.run("UPDATE records SET message = '', reply = ?, updated_at = ? WHERE id = ?",
-                        Json.stringify(finalReply), Js.nowIso(), original.get("id"));
-                syncEvents.accept(original.get("id"), finalReply);
-            } else {
-                db.run("DELETE FROM records WHERE id = ?", original.get("id"));
-            }
-            clearMetadata(db, activityId);
-            invalidateJourney(db);
-        });
     }
 }

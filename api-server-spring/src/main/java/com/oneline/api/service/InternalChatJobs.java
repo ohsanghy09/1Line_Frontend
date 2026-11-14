@@ -213,6 +213,7 @@ public final class InternalChatJobs {
                         in.get("status"), in.get("phase"), Json.stringify(in.get("error")), Json.stringify(metadata), in.get("updatedAt"), jobId);
                 db.run("UPDATE internal_chat_publications SET revision = revision + 1, publish_signature = ?, progress_received_at_ms = ? WHERE job_id = ?",
                         p.signature(), System.currentTimeMillis(), jobId);
+                UnsavedAnalysisCleanup.touch(db, in.get("analysisId"), System.currentTimeMillis());
                 return new Result(200, snapshot(db, jobId));
             }
             if (p.expected() != 0) throw new Failure(409, "internal_revision_conflict");
@@ -230,6 +231,7 @@ public final class InternalChatJobs {
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", jobId, in.get("requestId"), in.get("requestFingerprint"), in.get("analysisId"),
                     in.get("kind"), in.get("status"), in.get("phase"), Json.stringify(in.get("error")), Json.stringify(metadata(in)), in.get("createdAt"), in.get("updatedAt"));
             long receivedAt = System.currentTimeMillis();
+            UnsavedAnalysisCleanup.touch(db, in.get("analysisId"), receivedAt);
             db.run("INSERT INTO internal_chat_publications (job_id, revision, input_signature, publish_signature, accepted_at_ms, progress_received_at_ms) VALUES (?, 1, ?, ?, ?, ?)",
                     jobId, p.inputSignature(), p.signature(), receivedAt, receivedAt);
             return new Result(201, snapshot(db, jobId));
@@ -271,6 +273,7 @@ public final class InternalChatJobs {
 
     /** 정본 reply/원본 변경과 같은 트랜잭션에서 호출한다. */
     public static void changed(Database db, Object analysisId) {
+        UnsavedAnalysisCleanup.touch(db, analysisId, System.currentTimeMillis());
         db.run("""
                 UPDATE internal_chat_publications SET revision = revision + 1, publish_signature = NULL
                 WHERE job_id IN (SELECT id FROM ai_chat_jobs WHERE analysis_id = ?)""", analysisId);
@@ -284,14 +287,24 @@ public final class InternalChatJobs {
                     hash(row.get("id")), hash(row.get("request_key")), hash(row.get("analysis_id")));
     }
 
+    /** 정리한 작업의 늦은 게시·동일 요청 재전송으로 원본이 부활하지 않게 해시만 남긴다. */
+    public static void rememberRetiredAnalysis(Database db, Object analysisId) {
+        for (var row : db.all("""
+                SELECT id, request_key, analysis_id FROM ai_chat_jobs WHERE analysis_id = ?""", analysisId)) {
+            db.run("INSERT OR IGNORE INTO internal_job_tombstones (job_id, request_id, analysis_id) VALUES (?, ?, ?)",
+                    hash(row.get("id")), hash(row.get("request_key")), hash(row.get("analysis_id")));
+        }
+    }
+
     public static void recover(Database db) {
         db.transaction(() -> {
             for (var row : db.all("""
-                    SELECT j.id FROM ai_chat_jobs j JOIN internal_chat_publications p ON p.job_id = j.id
+                    SELECT j.id, j.analysis_id FROM ai_chat_jobs j JOIN internal_chat_publications p ON p.job_id = j.id
                     WHERE j.status IN ('queued', 'running')""")) {
                 db.run("UPDATE ai_chat_jobs SET status = 'failed', error = ?, updated_at = ? WHERE id = ?",
                         Json.stringify(obj("code", "server_restarted", "error", "서버가 재시작되어 분석이 중단됐어요. 새 요청으로 다시 전송해 주세요.")), Js.nowIso(), row.get("id"));
                 db.run("UPDATE internal_chat_publications SET revision = revision + 1, publish_signature = NULL WHERE job_id = ?", row.get("id"));
+                UnsavedAnalysisCleanup.touch(db, row.get("analysis_id"), System.currentTimeMillis());
             }
         });
     }

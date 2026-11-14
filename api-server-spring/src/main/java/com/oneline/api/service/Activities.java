@@ -64,7 +64,10 @@ public final class Activities {
         // null은 미확인 값이다. 기존 값을 지우거나 덮어쓰지 않는다.
         for (String field : List.of("category", "status", "role", "summary")) {
             Object value = metadata.getOrDefault(field, Js.UNDEFINED);
-            if (!Js.nullish(value)) db.run("UPDATE activities SET " + field + " = ? WHERE id = ?", value, id);
+            if (!Js.nullish(value)) {
+                db.run("UPDATE activities SET " + field + " = ? WHERE id = ?", value, id);
+                ActivityMetadata.confirmFields(db, id, List.of(field));
+            }
         }
         Object period = metadata.getOrDefault("period", Js.UNDEFINED);
         if (Js.truthy(Js.opt(period, "start")) || Js.truthy(Js.opt(period, "end"))) {
@@ -75,6 +78,11 @@ public final class Activities {
             Object start = parsed.get("start"), end = parsed.get("end");
             db.run("UPDATE activities SET start_date = ?, end_date = ?, period = ? WHERE id = ?",
                     start, end, Js.str(Js.coalesce(start, "미확인")) + " ~ " + Js.str(Js.coalesce(end, "")), id);
+            List<String> confirmed = new java.util.ArrayList<>();
+            if (Js.truthy(Js.opt(period, "start"))) confirmed.add("start_date");
+            if (Js.truthy(Js.opt(period, "end"))) confirmed.add("end_date");
+            confirmed.add("period");
+            ActivityMetadata.confirmFields(db, id, confirmed);
         }
     }
 
