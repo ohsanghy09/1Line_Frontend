@@ -1,5 +1,17 @@
 # 1Line API 서버 (Spring Boot)
 
+## 공동 파일 연동 (2026-11-14)
+
+F19 `exclude-file-result-v2`와 F11 `file-dedup-v1` 백엔드·관련 프론트를 구현했다. 두 기능은 기본 비활성화다. AI 측 준비 후 `EXCLUDE_FILE_V2_ENABLED=true`, `FILE_DEDUP_ENABLED=true`로 전환한다. 비활성 상태의 부분 삭제는 503으로 원본을 보존한다. 새 내부 API는 `POST /api/internal/file-duplicates/check`다.
+
+F19 독립 원문 검증은 현재 UTF-8 텍스트 형식만 지원하며, PDF·Office·이미지의 부분 삭제는 추출기 검증 전까지 거절한다. 요청·응답, 형식 제한, 설정·전환 순서는 [공동 연동 안내](../docs/integration-test-fixes/공동작업_백엔드_연동안내.md)를 참고한다. 실제 AI·운영 서버 검증은 별도다.
+
+## 통합 테스트 후속 수정 (2026-11-14)
+
+부분 삭제 시 활동 속성을 임시 보존하고 재확인이 필요한 상태로 표시한다. 마지막 기록 삭제 시 관련 정보는 비운다. 미저장 원본은 기본 24시간 보관 후 5분 주기로 정리하며, 진행 중 작업과 정식 저장 자료는 보호한다. `UNSAVED_ANALYSIS_RETENTION_MS`로 보관 시간을 지정할 수 있다.
+
+삭제·활동·Journey AI 호출은 결과·검증/반영 여부·소요 시간을 로그에 남기되 토큰·본문은 기록하지 않는다. DB 열/보관 시각 테이블은 시작 시 추가하며, 기존 원본은 첫 도입 후 보관 기간을 보장한다. 설정·주의점·검증 범위는 [백엔드 단독 작업 기록](../docs/integration-test-fixes/백엔드_단독작업_구현_검증.md)을 참고한다. 실제 운영 배포는 별도다.
+
 ## 서버 간 인증 (2026-11-13)
 
 서버 시작 전에 `INTERNAL_SERVICE_TOKEN`을 서버 환경변수로 설정한다. 누락·빈 값·잘못된 Bearer 토큰 문자는 시작 오류다. `.env` 파일을 자동으로 읽는 구현은 없으며 실제 프로세스 환경변수 또는 배포 시스템의 비밀 설정으로 주입한다. 실제 값은 Git·로그·프론트에 넣지 않는다.
@@ -91,6 +103,35 @@ cd api-server-spring
 - 실행 파일 빌드: `.\gradlew.bat bootJar` → `build/libs/1line-api-server-0.1.0.jar` (`java -jar ...`)
 - 검사: `.\gradlew.bat test`
 - JDK 21 이상 필요. Gradle은 wrapper가 자동으로 받는다.
+
+### Linux 실행·검사
+
+Java 21 JDK가 필요하다. Gradle Wrapper가 필요한 Gradle 버전을 내려받으므로 최초 실행에는 다운로드 가능한 환경이 필요하다.
+
+```bash
+cd api-server-spring
+java -version
+./gradlew test --console=plain
+./gradlew bootJar --console=plain
+```
+
+`gradlew`의 Git 실행 권한은 `100755`로 관리한다. 기존 체크아웃·압축 해제 등으로 실행 권한이 없으면 해당 환경에서 한 번 `chmod +x gradlew`를 실행한다. 권한이 정상인 Git 체크아웃에서는 필요하지 않다.
+
+실제 개발 서버의 포트는 환경변수로 지정한다. 테스트 실행과 서버 기동은 별개이며, 다음 예시는 3999 포트로 서버를 실행한다. 실제 AI 연결·DB 경로 등은 해당 배포 환경의 설정을 사용한다.
+
+```bash
+PORT=3999 ./gradlew bootRun --console=plain
+```
+
+서버 담당자의 검사 명령은 `PORT=3999 ./gradlew test --console=plain`이며, 이 명령은 애플리케이션을 운영 서버로 기동하는 명령이 아니다.
+
+Ubuntu/Debian에서 DB를 직접 조회할 CLI가 필요한 경우에만 설치한다. 앱 자체는 JDBC를 사용하므로 별도 sqlite3 CLI 설치가 필수는 아니다.
+
+```bash
+sudo apt install -y sqlite3
+```
+
+SQLite `busy_timeout`은 기존 동작과 동일하게 0을 유지한다. 현재 `SQLITE_BUSY_TIMEOUT_MS`를 읽는 기능은 없으며, 환경변수 지원은 필요할 때 별도로 구현·검증한다.
 
 ### 환경변수 (기존과 동일)
 

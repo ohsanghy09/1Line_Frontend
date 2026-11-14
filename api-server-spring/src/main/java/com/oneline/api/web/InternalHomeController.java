@@ -3,6 +3,8 @@ package com.oneline.api.web;
 import com.oneline.api.db.Database;
 import com.oneline.api.service.HomeContext;
 import com.oneline.api.service.InternalChatJobs;
+import com.oneline.api.service.FileDuplicates;
+import com.oneline.api.config.ServerOptions;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -12,7 +14,8 @@ import static com.oneline.api.js.Js.obj;
 @RestController
 public final class InternalHomeController {
     private final Database db;
-    public InternalHomeController(Database db) { this.db = db; }
+    private final ServerOptions options;
+    public InternalHomeController(Database db, ServerOptions options) { this.db = db; this.options = options; }
 
     private static ResponseEntity<byte[]> response(int status, Object value) {
         var result = ApiController.json(status, value);
@@ -28,13 +31,23 @@ public final class InternalHomeController {
 
     @PutMapping("/api/internal/chat-jobs/{jobId}")
     public ResponseEntity<byte[]> publish(@PathVariable String jobId, HttpServletRequest request) {
-        var result = InternalChatJobs.publish(db, jobId, ExpressCompatFilter.body(request));
+        var result = InternalChatJobs.publish(db, jobId, ExpressCompatFilter.body(request), options.fileDedupEnabled());
         return response(result.status(), obj("job", result.job()));
     }
 
     @GetMapping("/api/internal/chat-jobs/{jobId}")
     public ResponseEntity<byte[]> job(@PathVariable String jobId) {
         return response(200, obj("job", db.transaction(() -> InternalChatJobs.snapshot(db, jobId))));
+    }
+
+    @PostMapping("/api/internal/file-duplicates/check")
+    public ResponseEntity<byte[]> duplicates(HttpServletRequest request) {
+        return response(200, db.transaction(() -> FileDuplicates.check(db, ExpressCompatFilter.body(request))));
+    }
+
+    @ExceptionHandler(FileDuplicates.Problem.class)
+    public ResponseEntity<byte[]> duplicateProblem(FileDuplicates.Problem problem) {
+        return response(problem.status, problem.body());
     }
 
     @ExceptionHandler(InternalChatJobs.Failure.class)

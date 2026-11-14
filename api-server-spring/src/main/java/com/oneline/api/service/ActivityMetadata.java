@@ -103,11 +103,34 @@ public final class ActivityMetadata {
         Map<String, Object> row = db.get("SELECT * FROM activities WHERE id = ?", id);
         if (row == null) return null;
         Snapshot snapshot = activitySnapshot(db, id);
+        boolean review = !reviewFields(row).isEmpty();
         return obj(
                 "status", Js.coalesce(row.get("metadata_status"), "idle"),
-                "error", Js.coalesce(row.get("metadata_error"), null),
+                "error", Js.coalesce(row.get("metadata_error"), review
+                        ? "자료 삭제 전의 일부 활동 정보를 임시로 유지하고 있어요. 남은 자료로 재분석하거나 대화로 값을 확인해 주세요." : null),
                 "updatedAt", Js.coalesce(row.get("metadata_updated_at"), null),
-                "stale", !snapshot.records().isEmpty() && !Js.strictEquals(row.get("metadata_fingerprint"), snapshot.fingerprint()));
+                "stale", review || !snapshot.records().isEmpty() && !Js.strictEquals(row.get("metadata_fingerprint"), snapshot.fingerprint()));
+    }
+
+    public static List<String> reviewFields(Map<String, Object> activity) {
+        Object raw = activity.get("metadata_review_fields");
+        if (!(raw instanceof String text)) return new ArrayList<>();
+        Object parsed = Json.parseOrNull(text);
+        List<String> result = new ArrayList<>();
+        if (!(parsed instanceof List<?>)) return result;
+        for (Object field : Js.asArray(parsed)) {
+            if (field instanceof String name && List.of("status", "role", "start_date", "end_date", "period").contains(name)) result.add(name);
+        }
+        return result;
+    }
+
+    /** 사용자가 명시적으로 수정한 항목은 재확인 대상으로 남기지 않는다. */
+    public static void confirmFields(Database db, Object id, java.util.Collection<String> fields) {
+        Map<String, Object> activity = db.get("SELECT metadata_review_fields FROM activities WHERE id = ?", id);
+        if (activity == null) return;
+        List<String> review = reviewFields(activity);
+        review.removeAll(fields);
+        db.run("UPDATE activities SET metadata_review_fields = ? WHERE id = ?", Json.stringify(review), id);
     }
 
     static Map<String, Object> periodParse(Object start, Object end) {

@@ -10,6 +10,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import static com.oneline.api.js.Js.obj;
 
@@ -76,13 +77,21 @@ public final class Archive {
         }
 
         List<Map<String, Object>> rows = db.all("""
-                SELECT e.* FROM timeline_events e JOIN records r ON e.record_id = r.id
+                SELECT e.*, x.evidence_json FROM timeline_events e JOIN records r ON e.record_id = r.id
+                    LEFT JOIN timeline_event_evidence x ON x.event_id = e.id
                     WHERE r.activity_id = ? ORDER BY e.created_at, e.rowid""", activityId);
         List<Object> timeline = new ArrayList<>();
         for (Map<String, Object> row : rows) {
             Object change = Json.parse((String) row.get("change_json"));
             List<Map<String, Object>> files = materialsByRecord.getOrDefault(row.get("record_id"), List.of());
             List<Object> evidenceFileIds = new ArrayList<>(), evidenceLabels = new ArrayList<>();
+            Object structured = row.get("evidence_json") instanceof String json ? Json.parse(json) : null;
+            if (structured instanceof Map<?, ?>) {
+                for (String side : List.of("before", "after")) for (Object ref : Js.asArray(Js.get(structured, side))) {
+                    Object id = Js.get(ref, "fileId");
+                    if (files.stream().anyMatch(f -> Objects.equals(f.get("id"), id))) evidenceFileIds.add(id);
+                }
+            } else {
             // 이전 계약의 근거는 이름 문자열이다. 동일 기록 안에서 유일한 경우에만 ID로 연결한다.
             for (Object label : Js.iterate(Js.get(change, "evidence"))) {
                 List<Map<String, Object>> matches = new ArrayList<>();
@@ -95,6 +104,7 @@ public final class Archive {
                 if (target != null) evidenceFileIds.add(target.get("id"));
                 else evidenceLabels.add(label);
             }
+            }
             List<Object> uniqueIds = new ArrayList<>();
             LinkedHashSet<Object> seen = new LinkedHashSet<>();
             for (Object id : evidenceFileIds) {
@@ -104,6 +114,7 @@ public final class Archive {
                     "id", row.get("id"), "occurredAt", row.get("created_at"), "title", Js.get(change, "category"),
                     "evidenceFileIds", uniqueIds, "evidenceLabels", evidenceLabels,
                     "change", obj("before", Js.get(change, "before"), "after", Js.get(change, "after")));
+            if (structured != null) base.put("changeEvidence", structured);
             if (Js.truthy(row.get("is_turning_point"))) {
                 base.put("isTurningPoint", true);
                 base.put("before", Js.get(change, "before"));

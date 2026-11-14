@@ -18,6 +18,34 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class InternalHomeTest {
     @Test
+    void cleanupRetiresUnsavedFilesAndRejectsLatePublicationWithoutResurrection() {
+        try (var s = TestServer.start()) {
+            var p = publication("cleanup", List.of(file("cleanup-file", "report.txt", new byte[]{1, 2})));
+            assertEquals(201, publish(s, p).status());
+            s.sql(db -> db.run("UPDATE analysis_retention SET touched_at_ms = 123"));
+            assertEquals(200, publish(s, p).status());
+            assertEquals(123, ((Number) s.row("SELECT touched_at_ms FROM analysis_retention").get("touched_at_ms")).longValue());
+            var failed = copy(p);
+            failed.put("expectedRevision", 1); failed.put("status", "failed");
+            failed.put("error", obj("code", "invalid_analysis", "error", "분석 실패"));
+            assertEquals(200, publish(s, failed).status());
+            assertTrue(((Number) s.row("SELECT touched_at_ms FROM analysis_retention").get("touched_at_ms")).longValue() > 123);
+            s.sql(db -> db.run("UPDATE analysis_retention SET touched_at_ms = 0"));
+            assertEquals(200, publish(s, failed).status());
+            assertEquals(0, ((Number) s.row("SELECT touched_at_ms FROM analysis_retention").get("touched_at_ms")).longValue());
+            var cleaner = s.context.getBean(com.oneline.api.service.UnsavedAnalysisCleanup.class);
+            assertEquals(1, cleaner.scan(Instant.now()));
+            assertEquals(0, count(s, "files"));
+            assertEquals(0, count(s, "analyses"));
+            assertEquals(1, count(s, "internal_job_tombstones"));
+            assertEquals(404, internal(s, "GET", "/chat-jobs/" + p.get("jobId"), null).status());
+            assertEquals(409, publish(s, p).status());
+            assertEquals(0, count(s, "files"));
+            assertEquals(404, s.post("/records", obj("activityId", "line1-hackathon", "analysisId", p.get("analysisId"))).status());
+        }
+    }
+
+    @Test
     void legacyPublicationTableMigratesWithoutLosingResultsAndRestartRecoveryRemainsIdempotent() throws Exception {
         Path path = Files.createTempDirectory("internal-expiry-migration-").resolve("db.sqlite");
         try (var db = com.oneline.api.db.Database.open(path.toString())) {

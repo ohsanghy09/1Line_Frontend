@@ -71,7 +71,19 @@ export type ActivitySelection =
     | { newActivity: ActivityMetadata & { name: string } }
 
 // 서비스에서 검증한 AI 응답과 브라우저에 복원할 카드의 데이터 구조.
+export type Deduplication = {
+    schemaVersion: 'file-dedup-v1'
+    activityId: string | null
+    files: {
+        inputIndex: number; status: 'new' | 'duplicate' | 'pending'
+        matches: { activityId: string; recordId: string; fileId: string }[]
+        duplicateOfInputIndex?: number
+    }[]
+    saveBlocked: boolean
+}
+
 export type ChatReply = {
+    deduplication?: Deduplication
     id: string
     role: 'assistant'
     kind: ChatReplyKind

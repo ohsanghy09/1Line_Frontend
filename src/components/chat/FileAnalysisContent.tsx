@@ -24,7 +24,7 @@ function FileAnalysisContent({ reply, actions }: { reply: ChatReply; actions?: R
                 <div className="min-w-0"><span className="text-brand-muted">활동:</span> <strong className="text-brand-text">{analysis.activity.name}</strong></div>
                 <div className="min-w-0"><span className="text-brand-muted">자료 유형:</span> <strong>{analysis.materialType}</strong></div>
                 <div><span className="text-brand-muted">단계:</span> <strong>{analysis.stage ?? '—'}</strong></div>
-                <div className="min-w-0 break-words"><span className="text-brand-muted">관련 자료:</span> <strong className="text-slate-600">{file.previousVersion ?? '없음'}</strong></div>
+                <div className="min-w-0 break-words"><span className="text-brand-muted">비교 대상 이전 자료:</span> <strong className="text-slate-600">{file.previousVersion ?? '연결된 이전 자료 없음'}</strong></div>
             </div>
 
             <p className="text-xs text-brand-text leading-relaxed"><strong>AI 요약:</strong> {analysis.summary}</p>

@@ -1,9 +1,6 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import path from 'node:path'
+import { readFile } from 'node:fs/promises'
 import test from 'node:test'
-import { buildSwagger } from '../scripts/build-swagger.mjs'
 
 const read = path => readFile(new URL('../' + path, import.meta.url), 'utf8')
 const methods = new Set(['get', 'post', 'put', 'patch', 'delete'])
@@ -46,7 +43,7 @@ for (const name of ['backend', 'ai']) {
         assert.equal(documented.length, name === 'backend' ? 16 : 4)
         assert.deepEqual(actual.sort(), documented)
         assert.deepEqual(internal.sort(), name === 'backend'
-            ? ['GET /internal/chat-jobs/{jobId}', 'GET /internal/home-context', 'PUT /internal/chat-jobs/{jobId}']
+            ? ['GET /internal/chat-jobs/{jobId}', 'GET /internal/home-context', 'POST /internal/file-duplicates/check', 'PUT /internal/chat-jobs/{jobId}']
             : ['POST /analyze/activities/{activityId}', 'POST /analyze/journey', 'POST /analyze/records/{recordId}/exclude-file'])
 
         function checkReferences(value) {
@@ -98,57 +95,4 @@ test('저장·분석 필수 필드와 상태별 생략 규칙을 명시한다', 
     assert.equal(rule(publication, 'completed').reply.$ref, '#/components/schemas/CompletedReply')
     assert.equal(publication.allOf.find(item => item.if.properties.status.enum).then.properties.reply.type, 'null')
     assert.equal(rule(backend.components.schemas.JobSnapshot, 'failed').reply.type, 'null')
-})
-
-test('Swagger에서 연결한 handoff 원문과 문서 사이 링크를 정적 파일로 제공한다', async t => {
-    const directory = await mkdtemp(path.join(tmpdir(), '1line-swagger-test-'))
-    t.after(async () => {
-        assert.equal(path.dirname(directory), path.resolve(tmpdir()))
-        assert.ok(path.basename(directory).startsWith('1line-swagger-test-'))
-        await rm(directory, { recursive: true, force: true })
-    })
-    await buildSwagger(directory)
-    const init = await readFile(path.join(directory, 'swagger-init.js'), 'utf8')
-    assert.ok(init.includes('AI · 홈·서버 분석'))
-    const visited = new Set()
-    async function checkPage(url) {
-        const parsed = new URL(url, 'https://docs.example.org/swagger/')
-        if (!parsed.pathname.startsWith('/swagger/handoff/') || visited.has(parsed.pathname)) return
-        const relative = decodeURIComponent(parsed.pathname.slice('/swagger/'.length))
-        const html = await readFile(path.join(directory, relative), 'utf8')
-        if (relative.endsWith('.json')) {
-            const example = JSON.parse(html)
-            assert.ok(example.publicResponse || example.completedResponse)
-            return
-        }
-        visited.add(parsed.pathname)
-        assert.ok(html.includes('<html lang="ko">'))
-        for (const [, href] of html.matchAll(/href="([^"]+)"/g)) {
-            await checkPage(new URL(href, parsed).href)
-        }
-    }
-    for (const name of ['backend', 'ai']) {
-        const document = JSON.parse(await readFile(path.join(directory, 'openapi', name + '.json'), 'utf8'))
-        assert.deepEqual(document, JSON.parse(await read('docs/frontend-integration/openapi/' + name + '.openapi.json')))
-        assert.ok(document.info.description.includes('analysisId'))
-        assert.ok(document.info.description.includes('사용자가 분석 카드의 저장 버튼을 누르면'))
-        for (const [, href] of document.info.description.matchAll(/\]\(([^)]+)\)/g)) await checkPage(href)
-        for (const operations of Object.values(document.paths)) {
-            for (const operation of Object.values(operations)) {
-                const provider = name === 'backend' ? '백엔드' : 'AI'
-                const caller = operation['x-audience'] === 'frontend' ? '프론트' : name === 'backend' ? 'AI' : '백엔드'
-                assert.ok(operation.summary.startsWith('[' + caller + ' → ' + provider + ']'))
-            }
-        }
-    }
-    assert.equal(visited.size, 27)
-    assert.ok(visited.has('/swagger/handoff/backend-ai-integration/README.html'))
-    const homeExample = JSON.parse(await readFile(path.join(directory, 'handoff/backend-ai-integration/examples/home-job-exchange.json'), 'utf8'))
-    assert.equal(homeExample.queuedPublication.expectedRevision, 0)
-    assert.equal(homeExample.completedResponse.job.revision, 2)
-    assert.ok(visited.has(encodeURI('/swagger/handoff/growth-journey-update/공통_JSON_계약.html')))
-    const example = JSON.parse(await readFile(path.join(directory, 'handoff/growth-journey-update/examples/journey-exchange.json'), 'utf8'))
-    assert.equal(example.publicResponse.schemaVersion, 'journey-result-v2')
-    const contract = await readFile(path.join(directory, 'handoff/growth-journey-update/공통_JSON_계약.html'), 'utf8')
-    assert.ok(contract.includes('href="examples/journey-exchange.json"'))
 })

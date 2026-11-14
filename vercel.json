@@ -4,9 +4,8 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "routes": [
-    { "src": "/swagger", "status": 307, "headers": { "Location": "/swagger/" } },
+    { "src": "/swagger(/.*)?", "status": 404 },
     { "handle": "filesystem" },
-    { "src": "/swagger/.*", "status": 404 },
     { "src": "/.*", "dest": "/index.html" }
   ]
 }

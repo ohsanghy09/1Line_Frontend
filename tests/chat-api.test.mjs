@@ -97,12 +97,45 @@ test('입력 제한·잘못된 링크·취소·ID 없는 저장은 네트워크 
     await assert.rejects(chat.getChatReply('a'.repeat(20001)), /20000자/)
     await assert.rejects(chat.getChatReply('', Array.from({ length: 11 }, () => new File(['a'], 'a.txt'))), /최대 10개/)
     await assert.rejects(chat.getChatReply('', [new File([new Uint8Array(10 * 1024 * 1024 + 1)], 'large.bin')]), /10MiB/)
+    await assert.rejects(chat.getChatReply('', Array.from({ length: 3 }, () => new File([new Uint8Array(9 * 1024 * 1024)], 'large.txt'))), /합계.*25MiB/)
     await assert.rejects(chat.getLinkReply('javascript:alert(1)'), /HTTP 또는 HTTPS/)
     await assert.rejects(chat.getChatReply('취소', [], { signal: AbortSignal.abort() }), { name: 'AbortError' })
     for (const card of [mocks.mockTextAnalysisReply, mocks.mockFileAnalysisReply, mocks.mockNoChangeReply, mocks.mockBatchAnalysisReply]) {
         await assert.rejects(records.saveRecord(card, 'activity-1'), /다시 분석/)
     }
     for (const analysisId of [' ', 'a'.repeat(20001)]) await assert.rejects(records.saveRecord({ ...mocks.mockTextAnalysisReply, analysisId }, 'activity-1'), /다시 분석/)
+})
+
+test('파일 개수·개별/합계 용량·유니코드 텍스트 경계와 링크 거절 사유를 구분한다', () => {
+    const MiB = 1024 * 1024
+    assert.equal(chat.getChatValidationError('', [{ size: 10 * MiB }, { size: 10 * MiB }, { size: 5 * MiB }]), null)
+    assert.match(chat.getChatValidationError('', [{ size: 10 * MiB }, { size: 10 * MiB }, { size: 5 * MiB + 1 }]), /25MiB/)
+    assert.equal(chat.getChatValidationError('😀'.repeat(20000), []), null)
+    assert.match(chat.getChatValidationError('😀'.repeat(20001), []), /20000자/)
+    assert.equal(chat.getLinkValidationError('https://example.org/path?q=test#section'), null)
+    assert.match(chat.getLinkValidationError('https://user:password@example.org'), /사용자정보/)
+    assert.match(chat.getLinkValidationError('ftp://example.org'), /HTTP 또는 HTTPS/)
+    assert.match(chat.getLinkValidationError('not a url'), /올바른 링크/)
+    assert.match(chat.getLinkValidationError('https://example.org/' + 'a'.repeat(4096)), /4096자/)
+})
+
+test('AI 폴링 502와 백엔드 오류의 안내·상태를 구분하고 작업 재조회로 복구한다', async t => {
+    expectRequests(t, [
+        { path: '/ai-api/chat', method: 'POST', data: { jobId: 'ai-502', status: 'running', progress } },
+        { path: '/ai-api/chat/jobs/ai-502', status: 502, data: null },
+        { path: '/ai-api/chat/jobs/ai-502', data: completed('ai-502', mocks.mockFileAnalysisReply) },
+        { path: '/api/test', status: 502, data: { error: '백엔드 요청 실패' } },
+    ])
+    let jobId
+    await assert.rejects(chat.getChatReply('', [new File(['x'], 'x.txt')], { onJobStarted: id => { jobId = id } }), error => {
+        assert.equal(error.status, 502)
+        assert.match(error.message, /AI 서버가 일시적으로/)
+        assert.equal(chat.isTerminalChatFailure(error), false)
+        return true
+    })
+    assert.equal(jobId, 'ai-502')
+    assert.equal((await chat.resumeChatReply(jobId)).kind, mocks.mockFileAnalysisReply.kind)
+    await assert.rejects(chat.request('/test'), /백엔드 요청 실패/)
 })
 
 test('저장은 초안 ID와 분류·활동 선택만 보내며 중복·잘못된 응답을 거절한다', async t => {

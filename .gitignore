@@ -10,7 +10,6 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
-public/swagger/
 *.local
 
 # 개인·배포 환경설정은 제외하고 공용 예시만 추적한다.

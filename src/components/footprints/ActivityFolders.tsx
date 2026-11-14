@@ -5,6 +5,12 @@ import type { FootprintFolder } from '../../types/footprints'
 function ActivityFolders({ folders, onSelectFile }: { folders: FootprintFolder[]; onSelectFile: (fileId: string) => void }) {
     // 원본처럼 모든 폴더를 처음에는 펼친다. 각 폴더의 접힘 상태는 ID로 독립 관리한다.
     const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set())
+    const sameNames = new Map<string, string[]>()
+    for (const file of folders.flatMap(folder => folder.files)) {
+        const ids = sameNames.get(file.name) ?? []
+        ids.push(file.id)
+        sameNames.set(file.name, ids)
+    }
 
     function toggleFolder(id: string) {
         setCollapsedIds(current => {
@@ -57,7 +63,9 @@ function ActivityFolders({ folders, onSelectFile }: { folders: FootprintFolder[]
                                                     <FileText aria-hidden="true" className="w-4 h-4 shrink-0 text-brand-muted" />
                                                     <span className="min-w-0">
                                                         <span className="block text-xs font-semibold text-brand-text wrap-anywhere">{file.name}</span>
+                                                        {(sameNames.get(file.name)?.length ?? 0) > 1 && <span className="block text-[10px] font-medium text-brand-primary">같은 이름의 자료 {(sameNames.get(file.name)?.indexOf(file.id) ?? 0) + 1}/{sameNames.get(file.name)?.length}</span>}
                                                         <span className="block text-[10px] text-brand-muted wrap-anywhere">{file.type} · {file.uploadedAtLabel}</span>
+                                                        {file.summary && <span className="mt-1 block line-clamp-2 text-[11px] text-slate-600 wrap-anywhere">{file.summaryScope === 'record' ? '기록 요약' : '자료 요약'}: {file.summary}</span>}
                                                     </span>
                                                 </span>
                                                 {file.version && <span className="shrink-0 px-2 py-0.5 bg-brand-secondarySoft text-brand-secondary text-[10px] font-semibold rounded">{file.version}</span>}

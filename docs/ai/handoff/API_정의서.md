@@ -1,5 +1,7 @@
 # AI API 정의서
 
+2026-11-14 공동 작업 기준: [백엔드 연동 안내](../../integration-test-fixes/공동작업_백엔드_연동안내.md)와 [전체 교환 JSON](../../integration-test-fixes/examples/joint-file-exchange.json)을 따른다. 부분 삭제는 exclude-file-result-v2로 변화별 전후 근거를 반환하고, 홈 파일 분석은 file-dedup-v1 조회·게시 필드를 지원해야 한다. 백엔드·프론트 로컬 구현과 실제 AI 구현·연결 완료는 구분한다. 아래 구형 changes=[] 강제 설명은 최신 안내로 대체한다.
+
 > Growth Journey v2 (2026-11-12): [최신 공통 JSON 계약](../../growth-journey-update/공통_JSON_계약.md)과 [전체 요청·응답 예시](../../growth-journey-update/examples/journey-exchange.json)를 따른다. Spring·프론트 및 OpenAPI·Swagger는 반영했으나 실제 AI 구현·원격 연동·배포는 미검증이다.
 
 

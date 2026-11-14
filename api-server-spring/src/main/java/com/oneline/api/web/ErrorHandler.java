@@ -21,6 +21,11 @@ import static com.oneline.api.js.Js.obj;
 public class ErrorHandler {
     private static final Logger log = LoggerFactory.getLogger(ErrorHandler.class);
 
+    @ExceptionHandler(com.oneline.api.service.FileDuplicates.Problem.class)
+    public ResponseEntity<byte[]> duplicateProblem(com.oneline.api.service.FileDuplicates.Problem problem) {
+        return ApiController.json(problem.status, problem.body());
+    }
+
     @ExceptionHandler({NoHandlerFoundException.class, NoResourceFoundException.class, HttpRequestMethodNotSupportedException.class})
     public ResponseEntity<byte[]> notFound(Exception ignored) {
         return ApiController.json(404, obj("error", "API를 찾을 수 없습니다."));

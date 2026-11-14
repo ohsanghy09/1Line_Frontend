@@ -61,6 +61,7 @@ public final class InternalJobExpiry implements AutoCloseable {
                             Json.stringify(error), updated, row.get("id"));
                     db.run("UPDATE analyses SET reply = ? WHERE id = ?", Json.stringify(null), row.get("analysis_id"));
                     db.run("UPDATE internal_chat_publications SET revision = revision + 1, publish_signature = NULL WHERE job_id = ?", row.get("id"));
+                    UnsavedAnalysisCleanup.touch(db, row.get("analysis_id"), now.toEpochMilli());
                 }
             });
         });

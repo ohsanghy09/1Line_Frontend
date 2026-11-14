@@ -6,6 +6,7 @@ import com.oneline.api.js.Js;
 import com.oneline.api.js.Json;
 import com.oneline.api.support.EventLoop;
 import com.oneline.api.support.Fetch;
+import com.oneline.api.support.AiCallLog;
 import com.oneline.api.zod.Z;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -118,51 +119,55 @@ public final class Journey {
 
     public static LinkedHashMap<String, Object> generateJourney(Database db, EventLoop loop, String aiBaseUrl, InternalServiceAuth auth) {
         Snapshot sent = db.transaction(() -> journeySnapshot(db));
-        String input = Json.stringify(requestBody(sent));
-        Fetch.Response response;
-        try {
-            response = Fetch.post(loop, Fetch.aiBase(aiBaseUrl) + "/api/analyze/journey", input, 135_000, null, auth);
-        } catch (Fetch.FetchError error) {
-            throw publicFail(error.timeout ? 504 : 502, error.timeout
-                    ? "성장 분석 응답 시간이 초과됐어요. 다시 조회한 뒤 갱신해 주세요." : "AI 서버에 연결하지 못했어요. 실행 상태를 확인해 주세요.");
-        }
-        Object body = response.jsonOrNull();
-        if (!response.ok()) {
-            int status = List.of(409, 422, 429, 502, 503, 504).contains(response.status()) ? response.status() : 502;
-            Object error = Js.opt(body, "error");
-            throw publicFail(status, error instanceof String s ? s : "성장 분석 요청에 실패했어요.");
-        }
-        Z.SafeParseResult parsed = JourneyContract.PROVIDER.safeParse(body);
-        if (!parsed.success()) throw publicFail(502, "성장 분석 응답 형식을 확인할 수 없어요.");
-        Map<String, Object> output = asObject(parsed.data());
-        Map<String, Object> result = asObject(output.get("result"));
-        db.transaction(() -> {
-            Snapshot current = journeySnapshot(db);
-            if (!sent.fingerprint().equals(output.get("sourceFingerprint"))
-                    || !sent.fingerprint().equals(current.fingerprint())
-                    || sent.records().size() != ((Number) output.get("recordCount")).doubleValue())
-                throw publicFail(409, "분석 중 기록이 변경됐어요. 최신 기록으로 다시 분석해 주세요.");
-            Map<String, List<Object>> records = new LinkedHashMap<>();
-            for (Object raw : current.records()) {
-                List<Object> row = asArray(raw);
-                records.put((String) row.getFirst(), row);
+        try (var call = new AiCallLog("journey", sent.fingerprint())) {
+            String input = Json.stringify(requestBody(sent));
+            Fetch.Response response;
+            try {
+                response = Fetch.post(loop, Fetch.aiBase(aiBaseUrl) + "/api/analyze/journey", input, 135_000, null, auth, call);
+            } catch (Fetch.FetchError error) {
+                throw publicFail(error.timeout ? 504 : 502, error.timeout
+                        ? "성장 분석 응답 시간이 초과됐어요. 다시 조회한 뒤 갱신해 주세요." : "AI 서버에 연결하지 못했어요. 실행 상태를 확인해 주세요.");
             }
-            Map<String, Object> sources = new LinkedHashMap<>();
-            checkEvidence(get(result.get("summary"), "evidence"), records, sources);
-            for (Object badge : asArray(result.get("badges")))
-                checkEvidence(get(badge, "evidence"), records, sources);
-            for (Object event : asArray(result.get("events"))) validateEvent(event, records, sources);
-            result.put("evidenceSources", new ArrayList<>(sources.values()));
-            for (Object event : asArray(result.get("events"))) set(event, "id", Js.randomUUID());
-            for (Object badge : asArray(result.get("badges"))) set(badge, "id", Js.randomUUID());
-            db.run("""
-                    INSERT INTO journey_analyses
-                    (id, source_fingerprint, record_count, result_json, model, prompt_version, created_at, criteria_version)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                    Js.randomUUID(), sent.fingerprint(), output.get("recordCount"), Json.stringify(result),
-                    output.get("model"), output.get("promptVersion"), Js.nowIso(), JourneyContract.CRITERIA);
-        });
-        return readJourney(db);
+            Object body = response.jsonOrNull();
+            if (!response.ok()) {
+                int status = List.of(409, 422, 429, 502, 503, 504).contains(response.status()) ? response.status() : 502;
+                Object error = Js.opt(body, "error");
+                throw publicFail(status, error instanceof String s ? s : "성장 분석 요청에 실패했어요.");
+            }
+            Z.SafeParseResult parsed = JourneyContract.PROVIDER.safeParse(body);
+            if (!parsed.success()) throw publicFail(502, "성장 분석 응답 형식을 확인할 수 없어요.");
+            Map<String, Object> output = asObject(parsed.data());
+            Map<String, Object> result = asObject(output.get("result"));
+            db.transaction(() -> {
+                Snapshot current = journeySnapshot(db);
+                if (!sent.fingerprint().equals(output.get("sourceFingerprint"))
+                        || !sent.fingerprint().equals(current.fingerprint())
+                        || sent.records().size() != ((Number) output.get("recordCount")).doubleValue())
+                    throw publicFail(409, "분석 중 기록이 변경됐어요. 최신 기록으로 다시 분석해 주세요.");
+                Map<String, List<Object>> records = new LinkedHashMap<>();
+                for (Object raw : current.records()) {
+                    List<Object> row = asArray(raw);
+                    records.put((String) row.getFirst(), row);
+                }
+                Map<String, Object> sources = new LinkedHashMap<>();
+                checkEvidence(get(result.get("summary"), "evidence"), records, sources);
+                for (Object badge : asArray(result.get("badges")))
+                    checkEvidence(get(badge, "evidence"), records, sources);
+                for (Object event : asArray(result.get("events"))) validateEvent(event, records, sources);
+                result.put("evidenceSources", new ArrayList<>(sources.values()));
+                for (Object event : asArray(result.get("events"))) set(event, "id", Js.randomUUID());
+                for (Object badge : asArray(result.get("badges"))) set(badge, "id", Js.randomUUID());
+                db.run("""
+                        INSERT INTO journey_analyses
+                        (id, source_fingerprint, record_count, result_json, model, prompt_version, created_at, criteria_version)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                        Js.randomUUID(), sent.fingerprint(), output.get("recordCount"), Json.stringify(result),
+                        output.get("model"), output.get("promptVersion"), Js.nowIso(), JourneyContract.CRITERIA);
+            });
+            LinkedHashMap<String, Object> saved = readJourney(db);
+            call.applied();
+            return saved;
+        }
     }
 
     private static void checkEvidence(Object refs, Map<String, List<Object>> records, Map<String, Object> sources) {

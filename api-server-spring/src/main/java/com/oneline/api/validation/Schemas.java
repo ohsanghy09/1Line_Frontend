@@ -128,6 +128,7 @@ public final class Schemas {
             "content", text(),
             "activityCreated", bool().optional(),
             "sourceUrl", linkUrl().optional(),
+            "deduplication", Deduplication.SCHEMA.optional(),
             "analysis", object(
                     "activity", activityProposal(),
                     "materialType", text(),

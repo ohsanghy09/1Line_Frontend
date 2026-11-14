@@ -217,7 +217,7 @@ class ApiTest {
                 }
                 analysis.put("files", files);
                 analysis.put("groups", arr(obj("materialType", analysis.get("materialType"), "count", (double) remaining.size())));
-                return new Object[]{200, obj("recordReply", record.get("reply"), "fileIds", ids, "reply", reply)};
+                return new Object[]{200, obj("schemaVersion", "exclude-file-result-v2", "changeEvidence", List.of(), "recordReply", record.get("reply"), "fileIds", ids, "reply", reply)};
             };
             var target = s.draft("conv-1", "실제 경험 설명", mockReply("x", List.of("a.txt", "b.txt"), true), "a.txt", "b.txt");
             var targetRecord = s.post("/records", obj("analysisId", target.analysisId(), "activityId", "line1-hackathon")).map();
@@ -285,7 +285,7 @@ class ApiTest {
                 analysis.put("files", new ArrayList<>(Js.asArray(analysis.get("files")).subList(1, 2)));
                 analysis.put("changes", new ArrayList<>());
                 s.sql(db -> db.run("UPDATE records SET updated_at = ? WHERE id = ?", "changed", record.get("id")));
-                return new Object[]{200, obj("recordReply", row.get("reply"), "fileIds", arr(draft.fileIds().get(1)), "reply", reply)};
+                return new Object[]{200, obj("schemaVersion", "exclude-file-result-v2", "changeEvidence", List.of(), "recordReply", row.get("reply"), "fileIds", arr(draft.fileIds().get(1)), "reply", reply)};
             };
             assertEquals(409, s.send("DELETE", path, obj()).status());
             assertEquals(2.0, s.get("/archive/activities/line1-hackathon").map().get("materialsCount"));

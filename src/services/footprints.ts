@@ -31,12 +31,18 @@ function isFile(value: unknown): value is RawFile {
 function isEvent(value: unknown): value is RawEvent {
     return object(value) && typeof value.id === 'string' && typeof value.title === 'string' && date(value.occurredAt)
         && strings(value.evidenceFileIds) && (value.evidenceLabels === undefined || strings(value.evidenceLabels))
+        && (value.changeEvidence === undefined || object(value.changeEvidence) && ['before', 'after'].every(side => {
+            const refs = (value.changeEvidence as Record<string, unknown>)[side]
+            return Array.isArray(refs) && refs.length > 0 && refs.length <= 20 && refs.every(ref => object(ref)
+                && typeof ref.fileId === 'string' && (value.evidenceFileIds as string[]).includes(ref.fileId)
+                && typeof ref.quote === 'string' && Boolean(ref.quote.trim()) && Array.from(ref.quote).length <= 2000)
+        }))
         && (value.change === undefined || object(value.change) && typeof value.change.before === 'string' && typeof value.change.after === 'string')
         && (value.isTurningPoint === true ? ['before', 'after', 'reason'].every(key => typeof value[key] === 'string') : value.isTurningPoint === false && typeof value.description === 'string')
 }
 
-function dateLabel(value: string): string {
-    return new Intl.DateTimeFormat('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(value))
+function dateLabel(value: string, withSeconds = false): string {
+    return new Intl.DateTimeFormat('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', ...(withSeconds ? { second: '2-digit' as const } : {}) }).format(new Date(value))
 }
 
 function activityView(value: RawActivity): FootprintActivity {
@@ -48,7 +54,7 @@ export function readFootprintActivity(value: unknown): FootprintActivity {
     if (!isActivity(value)) throw new Error('활동 응답 형식이 올바르지 않습니다.')
     return activityView(value)
 }
-const fileView = (value: RawFile): FootprintFile => ({ ...value, uploadedAtLabel: dateLabel(value.uploadedAt) })
+const fileView = (value: RawFile): FootprintFile => ({ ...value, uploadedAtLabel: dateLabel(value.uploadedAt, true) })
 const eventView = (value: RawEvent): FootprintTimelineEvent => ({ ...value, dateLabel: dateLabel(value.occurredAt) })
 
 // 서버 연결 실패를 예시 활동으로 대체하지 않는다. 404만 화면의 없음 상태로 변환한다.

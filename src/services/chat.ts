@@ -3,17 +3,36 @@ import type { ActivityProposal, ChatProgress, ChatReply, ChatServiceStatus } fro
 // 홈 분석은 FastAPI, 기록 저장·조회는 기존 백엔드로 요청한다.
 type ChatRequestOptions = { conversationId?: string; signal?: AbortSignal; onProgress?: (progress: ChatProgress) => void; onJobStarted?: (jobId: string) => void }
 
-export function isHttpUrl(value: string): boolean {
+export function getLinkValidationError(value: string): string | null {
+    if (value.length > 4096) return '링크는 4096자까지 입력할 수 있어요.'
+    if (!value.trim()) return '분석할 링크를 입력해 주세요.'
     try {
         const url = new URL(value)
-        return value.length <= 4096 && ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password
-    } catch { return false }
+        if (!['http:', 'https:'].includes(url.protocol)) return 'HTTP 또는 HTTPS 링크만 지원해요.'
+        if (url.username || url.password) return '아이디나 비밀번호가 포함된 링크는 사용할 수 없어요. 사용자정보를 제거해 주세요.'
+        return null
+    } catch { return '올바른 링크 주소를 입력해 주세요. 예: https://example.com' }
+}
+
+export function isHttpUrl(value: string): boolean {
+    return getLinkValidationError(value) === null
+}
+
+// 화면에서 말풍선·첨부를 변경하기 전과 실제 요청 직전에 같은 제한을 검사한다.
+export function getChatValidationError(message: string, files: Pick<File, 'size'>[]): string | null {
+    if (!message.trim() && !files.length) return '텍스트 또는 파일을 보내주세요.'
+    if (Array.from(message).length > 20_000) return '텍스트는 20000자까지 보낼 수 있어요.'
+    if (files.length > 10) return '파일은 최대 10개까지 보낼 수 있어요.'
+    if (files.some(file => file.size > 10 * 1024 * 1024)) return '파일은 각각 10MiB까지 보낼 수 있어요.'
+    if (files.reduce((total, file) => total + file.size, 0) > 25 * 1024 * 1024) return '파일의 합계는 25MiB까지 보낼 수 있어요. 일부 첨부를 제거해 주세요.'
+    return null
 }
 
 export async function getLinkReply(url: string, options: ChatRequestOptions = {}): Promise<ChatReply> {
     options.signal?.throwIfAborted()
     const sourceUrl = url.trim()
-    if (!isHttpUrl(sourceUrl)) throw new Error('HTTP 또는 HTTPS 링크를 입력해 주세요.')
+    const validationError = getLinkValidationError(sourceUrl)
+    if (validationError) throw new Error(validationError)
     const data = await aiRequest('/chat/links', {
         method: 'POST', signal: options.signal, headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: sourceUrl, conversationId: options.conversationId, requestId: crypto.randomUUID() }),
@@ -23,8 +42,8 @@ export async function getLinkReply(url: string, options: ChatRequestOptions = {}
 
 export async function getChatReply(message: string, files: File[] = [], options: ChatRequestOptions = {}): Promise<ChatReply> {
     options.signal?.throwIfAborted()
-    if (!message.trim() && !files.length) throw new Error('텍스트 또는 파일을 보내주세요.')
-    if (message.length > 20_000 || files.length > 10 || files.some(file => file.size > 10 * 1024 * 1024)) throw new Error('텍스트는 20000자, 파일은 최대 10개·각 10MiB까지 보낼 수 있어요.')
+    const validationError = getChatValidationError(message, files)
+    if (validationError) throw new Error(validationError)
     // multipart 경계와 Content-Type은 브라우저가 설정한다.
     const body = new FormData()
     body.set('message', message)
@@ -76,7 +95,7 @@ async function resolveChatReply(initial: unknown, options: ChatRequestOptions): 
                 data = await aiRequest(`/chat/jobs/${encodeURIComponent(jobId)}`, { signal })
             }
         } catch (error) {
-            if (timeout.aborted && !options.signal?.aborted) throw new Error('진행 상태 확인 시간이 초과됐어요. 서버에는 작업이 보관되어 있습니다.')
+            if (timeout.aborted && !options.signal?.aborted) throw new Error('진행 상태 확인 시간이 초과됐어요. 파일을 다시 보내기 전에 진행 상태를 다시 확인해 주세요.')
             throw error
         }
     }
@@ -122,20 +141,29 @@ const apiBase = (import.meta.env?.VITE_API_BASE_URL || '/api').replace(/\/$/, ''
 const aiBase = (import.meta.env?.VITE_AI_API_BASE_URL || '/ai-api').replace(/\/$/, '')
 
 function aiRequest(path: string, init: RequestInit = {}, timeoutMs = 30_000): Promise<unknown> {
-    return request(path, init, aiBase, timeoutMs)
+    return request(path, init, aiBase, timeoutMs, 'ai')
 }
 
-export async function request(path: string, init: RequestInit = {}, base = apiBase, timeoutMs = 30_000): Promise<unknown> {
+export async function request(path: string, init: RequestInit = {}, base = apiBase, timeoutMs = 30_000, service: 'api' | 'ai' = 'api'): Promise<unknown> {
     const timeout = AbortSignal.timeout(timeoutMs)
     try {
         const response = await fetch(`${base}${path}`, { ...init, signal: init.signal ? AbortSignal.any([init.signal, timeout]) : timeout })
         const data: unknown = await response.json().catch(() => null)
-        if (!response.ok) throw Object.assign(new Error(isObject(data) && typeof data.error === 'string' ? data.error : '서버 요청을 처리하지 못했어요. API 서버 실행 상태를 확인해 주세요.'), { status: response.status })
+        if (!response.ok) {
+            const unavailable = service === 'ai' && [502, 503, 504].includes(response.status)
+            const message = unavailable ? 'AI 서버가 일시적으로 응답하지 않아요. 잠시 후 상태를 다시 확인해 주세요.'
+                : isObject(data) && typeof data.error === 'string' ? data.error
+                    : service === 'ai' ? 'AI 서버 요청을 처리하지 못했어요. 잠시 후 상태를 확인해 주세요.' : '서버 요청을 처리하지 못했어요. API 서버 실행 상태를 확인해 주세요.'
+            throw Object.assign(new Error(message), { status: response.status,
+                ...(isObject(data) && typeof data.code === 'string' ? { code: data.code } : {}),
+                ...(isObject(data) && data.code === 'duplicate_files' && Array.isArray(data.duplicates) ? { duplicates: data.duplicates } : {}),
+            })
+        }
         return data
     } catch (error) {
         if (init.signal?.aborted) throw error
-        if (timeout.aborted) throw new Error('응답 시간이 초과됐어요. 서버에서 처리됐을 수 있으니 확인 후 다시 시도해 주세요.')
-        if (error instanceof TypeError) throw new Error('API 서버에 연결하지 못했어요. 서버 실행 상태를 확인해 주세요.')
+        if (timeout.aborted) throw new Error(`${service === 'ai' ? 'AI 서버 ' : ''}응답 시간이 초과됐어요. 서버에서 처리됐을 수 있으니 확인 후 다시 시도해 주세요.`)
+        if (error instanceof TypeError) throw new Error(service === 'ai' ? 'AI 서버에 연결하지 못했어요. 네트워크 연결과 서버 상태를 확인해 주세요.' : 'API 서버에 연결하지 못했어요. 서버 실행 상태를 확인해 주세요.')
         throw error
     }
 }
@@ -177,17 +205,46 @@ export function isActivityProposal(value: unknown): value is ActivityProposal {
     return true
 }
 
+export function isDeduplication(value: unknown, count: number): boolean {
+    if (!isObject(value) || value.schemaVersion !== 'file-dedup-v1'
+        || !(value.activityId === null || typeof value.activityId === 'string' && value.activityId.trim())
+        || typeof value.saveBlocked !== 'boolean' || !Array.isArray(value.files) || value.files.length !== count || count < 1 || count > 10
+        || Object.keys(value).some(key => !['schemaVersion', 'activityId', 'files', 'saveBlocked'].includes(key))) return false
+    let blocked = false
+    for (let index = 0; index < value.files.length; index++) {
+        const file = value.files[index]
+        if (!isObject(file) || file.inputIndex !== index || !['new', 'duplicate', 'pending'].includes(String(file.status))
+            || !Array.isArray(file.matches) || file.matches.length > 20
+            || Object.keys(file).some(key => !['inputIndex', 'status', 'matches', 'duplicateOfInputIndex'].includes(key))) return false
+        const repeated = file.duplicateOfInputIndex !== undefined
+        if (repeated && (!Number.isInteger(file.duplicateOfInputIndex) || Number(file.duplicateOfInputIndex) < 0
+            || Number(file.duplicateOfInputIndex) >= index || file.status !== 'duplicate' || file.matches.length !== 0)) return false
+        if (file.status === 'new' && (value.activityId === null || file.matches.length !== 0)
+            || file.status === 'pending' && value.activityId !== null
+            || file.status === 'duplicate' && !repeated && (value.activityId === null || file.matches.length === 0)) return false
+        const ids = new Set<string>()
+        for (const match of file.matches) {
+            if (!isObject(match) || Object.keys(match).length !== 3 || !['activityId', 'recordId', 'fileId'].every(key => typeof match[key] === 'string' && String(match[key]).trim())
+                || value.activityId !== null && match.activityId !== value.activityId || ids.has(String(match.fileId))) return false
+            ids.add(String(match.fileId))
+        }
+        blocked ||= file.status === 'duplicate'
+    }
+    return value.saveBlocked === blocked
+}
+
 export function isReply(value: unknown): value is ChatReply {
     if (!isObject(value) || typeof value.id !== 'string' || value.role !== 'assistant' || typeof value.content !== 'string') return false
     if (value.activityCreated !== undefined && typeof value.activityCreated !== 'boolean') return false
     if (value.updatedActivityId !== undefined && (typeof value.updatedActivityId !== 'string' || !value.updatedActivityId)) return false
-    if (value.kind === 'general') return value.analysis === null
+    if (value.kind === 'general') return value.analysis === null && value.deduplication === undefined
     if (!['text-analysis', 'file-analysis', 'no-change', 'batch-analysis', 'link-analysis'].includes(String(value.kind))) return false
     if (value.sourceUrl !== undefined && (typeof value.sourceUrl !== 'string' || !isHttpUrl(value.sourceUrl))) return false
     const analysis = value.analysis
     if (!isObject(analysis) || !isActivityProposal(analysis.activity)) return false
     if (typeof analysis.materialType !== 'string' || typeof analysis.summary !== 'string' || !(analysis.stage === null || typeof analysis.stage === 'string')) return false
     if (analysis.noChangeMessage !== undefined && typeof analysis.noChangeMessage !== 'string') return false
+    if (value.deduplication !== undefined && (!Array.isArray(analysis.files) || !isDeduplication(value.deduplication, analysis.files.length))) return false
     return Array.isArray(analysis.changes) && analysis.changes.every(change => isObject(change) && typeof change.before === 'string' && typeof change.after === 'string' && typeof change.category === 'string' && Array.isArray(change.evidence) && change.evidence.every(item => typeof item === 'string'))
         && Array.isArray(analysis.files) && analysis.files.every(file => isObject(file) && typeof file.name === 'string' && typeof file.materialType === 'string' && (file.previousVersion === null || typeof file.previousVersion === 'string'))
         && Array.isArray(analysis.groups) && analysis.groups.every(group => isObject(group) && typeof group.materialType === 'string' && Number.isInteger(group.count) && Number(group.count) > 0)

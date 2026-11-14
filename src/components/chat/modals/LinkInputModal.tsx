@@ -1,7 +1,7 @@
 import { Link, X } from 'lucide-react'
 import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { isHttpUrl } from '../../../services/chat'
+import { getLinkValidationError } from '../../../services/chat'
 
 // 원본 링크 모달의 간격·색상·크기를 유지한다. 분석 접수와 기록 확정은 분리한다.
 export default function LinkInputModal({ initialUrl, onClose, onSubmit }: { initialUrl: string; onClose: () => void; onSubmit: (url: string) => void }) {
@@ -21,7 +21,8 @@ export default function LinkInputModal({ initialUrl, onClose, onSubmit }: { init
             {/* 브라우저 기본 경고 대신 입력창 아래에서 URL 오류를 안내한다. */}
             <form noValidate className="space-y-4" onSubmit={event => {
                 event.preventDefault()
-                if (!isHttpUrl(url.trim())) { setError('HTTP 또는 HTTPS 링크를 입력해 주세요.'); return }
+                const validationError = getLinkValidationError(url.trim())
+                if (validationError) { setError(validationError); return }
                 onSubmit(url.trim())
             }}>
                 <div className="flex items-center justify-between border-b border-brand-border pb-3">

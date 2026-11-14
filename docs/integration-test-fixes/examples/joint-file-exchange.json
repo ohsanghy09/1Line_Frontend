@@ -1,0 +1,218 @@
+{
+  "excludeFile": {
+    "request": {
+      "schemaVersion": "exclude-file-result-v2",
+      "fileId": "file-a",
+      "recordReply": "{\"id\":\"reply-example\",\"role\":\"assistant\",\"kind\":\"batch-analysis\",\"content\":\"Remaining originals analyzed.\",\"analysis\":{\"activity\":{\"id\":null,\"name\":\"Example activity\",\"match\":\"unresolved\",\"confidence\":null},\"materialType\":\"Report\",\"stage\":null,\"summary\":\"Original summary of A, B, and C.\",\"changes\":[{\"before\":\"Measured value 30\",\"after\":\"Measured value 8\",\"category\":\"Improvement\",\"evidence\":[\"B.txt\",\"C.txt\"]}],\"files\":[{\"name\":\"A.txt\",\"materialType\":\"Report\",\"previousVersion\":null},{\"name\":\"B.txt\",\"materialType\":\"Report\",\"previousVersion\":null},{\"name\":\"C.txt\",\"materialType\":\"Report\",\"previousVersion\":null}],\"groups\":[{\"materialType\":\"Report\",\"count\":3}],\"suggestedSaveMode\":\"record-change\"}}",
+      "activity": {
+        "id": "activity-1",
+        "name": "Example activity",
+        "category": null
+      },
+      "files": [
+        {
+          "id": "file-b",
+          "name": "B.txt",
+          "mimeType": "text/plain",
+          "size": 12,
+          "contentBase64": "YmVmb3JlOiAzMA0K"
+        },
+        {
+          "id": "file-c",
+          "name": "C.txt",
+          "mimeType": "text/plain",
+          "size": 9,
+          "contentBase64": "YWZ0ZXI6IDgK"
+        }
+      ]
+    },
+    "response": {
+      "schemaVersion": "exclude-file-result-v2",
+      "reply": {
+        "id": "reply-example",
+        "role": "assistant",
+        "kind": "batch-analysis",
+        "content": "Remaining originals analyzed.",
+        "analysis": {
+          "activity": {
+            "id": null,
+            "name": "Example activity",
+            "match": "unresolved",
+            "confidence": null
+          },
+          "materialType": "Report",
+          "stage": null,
+          "summary": "The measured value changed from 30 to 8.",
+          "changes": [
+            {
+              "before": "Measured value 30",
+              "after": "Measured value 8",
+              "category": "Improvement",
+              "evidence": [
+                "B.txt",
+                "C.txt"
+              ]
+            }
+          ],
+          "files": [
+            {
+              "name": "B.txt",
+              "materialType": "Report",
+              "previousVersion": null
+            },
+            {
+              "name": "C.txt",
+              "materialType": "Report",
+              "previousVersion": null
+            }
+          ],
+          "groups": [
+            {
+              "materialType": "Report",
+              "count": 2
+            }
+          ],
+          "suggestedSaveMode": "record-change"
+        }
+      },
+      "recordReply": "{\"id\":\"reply-example\",\"role\":\"assistant\",\"kind\":\"batch-analysis\",\"content\":\"Remaining originals analyzed.\",\"analysis\":{\"activity\":{\"id\":null,\"name\":\"Example activity\",\"match\":\"unresolved\",\"confidence\":null},\"materialType\":\"Report\",\"stage\":null,\"summary\":\"Original summary of A, B, and C.\",\"changes\":[{\"before\":\"Measured value 30\",\"after\":\"Measured value 8\",\"category\":\"Improvement\",\"evidence\":[\"B.txt\",\"C.txt\"]}],\"files\":[{\"name\":\"A.txt\",\"materialType\":\"Report\",\"previousVersion\":null},{\"name\":\"B.txt\",\"materialType\":\"Report\",\"previousVersion\":null},{\"name\":\"C.txt\",\"materialType\":\"Report\",\"previousVersion\":null}],\"groups\":[{\"materialType\":\"Report\",\"count\":3}],\"suggestedSaveMode\":\"record-change\"}}",
+      "fileIds": [
+        "file-b",
+        "file-c"
+      ],
+      "changeEvidence": [
+        {
+          "changeIndex": 0,
+          "before": [
+            {
+              "fileId": "file-b",
+              "quote": "before: 30\n"
+            }
+          ],
+          "after": [
+            {
+              "fileId": "file-c",
+              "quote": "after: 8"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "duplicateCheck": {
+    "request": {
+      "schemaVersion": "file-dedup-v1",
+      "activityId": "activity-1",
+      "files": [
+        {
+          "inputIndex": 0,
+          "sha256": "63b6624088f2199dbe8deffa9e7e01e9e2754f4d54fba10beac33d4b00b4e8bc",
+          "size": 12
+        }
+      ]
+    },
+    "response": {
+      "schemaVersion": "file-dedup-v1",
+      "activityId": "activity-1",
+      "files": [
+        {
+          "inputIndex": 0,
+          "status": "duplicate",
+          "matches": [
+            {
+              "activityId": "activity-1",
+              "recordId": "record-1",
+              "fileId": "file-b"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "publication": {
+    "jobId": "ai-joint-example",
+    "analysisId": "analysis-joint-example",
+    "conversationId": "conversation-example",
+    "requestId": "request-joint-example",
+    "requestFingerprint": "example-input-fingerprint",
+    "kind": "chat",
+    "status": "completed",
+    "phase": "completed",
+    "message": "",
+    "sourceUrl": null,
+    "reply": {
+      "id": "reply-example",
+      "role": "assistant",
+      "kind": "batch-analysis",
+      "content": "Remaining originals analyzed.",
+      "analysis": {
+        "activity": {
+          "id": null,
+          "name": "Example activity",
+          "match": "unresolved",
+          "confidence": null
+        },
+        "materialType": "Report",
+        "stage": null,
+        "summary": "The measured value changed from 30 to 8.",
+        "changes": [],
+        "files": [
+          {
+            "name": "B.txt",
+            "materialType": "Report",
+            "previousVersion": null
+          },
+          {
+            "name": "C.txt",
+            "materialType": "Report",
+            "previousVersion": null
+          }
+        ],
+        "groups": [
+          {
+            "materialType": "Report",
+            "count": 2
+          }
+        ],
+        "suggestedSaveMode": "archive"
+      },
+      "deduplication": {
+        "schemaVersion": "file-dedup-v1",
+        "activityId": null,
+        "files": [
+          {
+            "inputIndex": 0,
+            "status": "pending",
+            "matches": []
+          },
+          {
+            "inputIndex": 1,
+            "status": "pending",
+            "matches": []
+          }
+        ],
+        "saveBlocked": false
+      }
+    },
+    "files": [
+      {
+        "id": "file-b",
+        "name": "B.txt",
+        "mimeType": "text/plain",
+        "size": 12,
+        "contentBase64": "YmVmb3JlOiAzMA0K"
+      },
+      {
+        "id": "file-c",
+        "name": "C.txt",
+        "mimeType": "text/plain",
+        "size": 9,
+        "contentBase64": "YWZ0ZXI6IDgK"
+      }
+    ],
+    "error": null,
+    "createdAt": "2026-11-14T00:00:00.000Z",
+    "updatedAt": "2026-11-14T00:00:01.000Z",
+    "expectedRevision": 0
+  }
+}

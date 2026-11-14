@@ -4,6 +4,7 @@
 
 | 구분 | 문서 안내 | 내용 |
 | --- | --- | --- |
+| 통합 테스트 후속 수정 | [integration-test-fixes](integration-test-fixes/README.md) | 프론트 8개·백엔드 4개·공동 구현 2개의 작업 계획과 완료 기준 |
 | 프론트엔드 | [frontend](frontend/README.md) | 개발 규칙, 화면별 구현·API 사용·변경 기록 |
 | 프론트 연동 정비 | [frontend-integration](frontend-integration/README.md) | handoff 기준 API 대조, 독립 Swagger, 로컬 의존성, 변경 협의·검증 기록 |
 | Growth Journey 수정 | [growth-journey-update](growth-journey-update/README.md) | 확정 성장 기준 5종, 구현 대상 JSON 계약·예시, AI 전달사항, 작업·검증 기록 |
@@ -18,6 +19,13 @@
 ```text
 docs/
   README.md
+  integration-test-fixes/
+    README.md
+    통합테스트_공동작업_책임범위.md
+    백엔드_단독작업_구현_검증.md
+    공동작업_백엔드_연동안내.md
+    examples/
+      joint-file-exchange.json
   backend-ai-fixes/
     README.md
     작업_및_검증_기록.md
@@ -66,6 +74,7 @@ docs/
 
 ## 작업을 이어갈 때
 
+- [통합 테스트 후속 프론트·백엔드 작업 계획](integration-test-fixes/README.md): 남은 작업 14개와 공동 제안서, 우선순위·검증·진행 상태 관리.
 - [백엔드·AI 호환 및 실패 처리 보완](backend-ai-fixes/README.md): 활동 분석 버전·빈 기록 본문·실패 요청 reply·작업 만료 처리의 로컬 구현·검증을 완료했다. 실제 서버 통합 검증은 별도다.
 - [백엔드·AI 분리 서버 연동](backend-ai-integration/README.md): 공유 DB 의존성 해소, 내부 데이터 전달·인증 구현 계획과 검증 기록.
 - [프론트 API 연동 정비](frontend-integration/README.md): 이번 작업의 상세 조사·사용자 확인·검증 기록 진입점.

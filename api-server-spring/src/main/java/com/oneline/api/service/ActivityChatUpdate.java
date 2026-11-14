@@ -101,6 +101,11 @@ public final class ActivityChatUpdate {
             for (String field : List.of("role", "status", "summary")) {
                 if (updates.containsKey(field)) db.run("UPDATE activities SET " + field + " = ? WHERE id = ?", updates.get(field), activity.get("id"));
             }
+            List<String> confirmed = new ArrayList<>(updates.keySet());
+            if (updates.containsKey("startDate")) confirmed.add("start_date");
+            if (updates.containsKey("endDate")) confirmed.add("end_date");
+            if (updates.containsKey("startDate") || updates.containsKey("endDate")) confirmed.add("period");
+            ActivityMetadata.confirmFields(db, activity.get("id"), confirmed);
             // 직접 수정 시 이전 자동 분석은 중단한다. 다음 자료 저장의 자동 분석은 그대로 허용한다.
             // 실제 수정이 완료된 시각을 최근 활동 정렬에도 반영한다. 중복 요청은 위에서 반환해 시각을 다시 바꾸지 않는다.
             db.run("UPDATE activities SET metadata_status = 'idle', metadata_error = NULL, updated_at = ? WHERE id = ?",
