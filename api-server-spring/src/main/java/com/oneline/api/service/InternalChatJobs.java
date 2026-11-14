@@ -171,7 +171,7 @@ public final class InternalChatJobs {
             require(names.equals(files.stream().map(f -> f.value().get("name")).toList()));
         }
         // 선택 필드 외에 원본 bytes 등 임의 필드를 정본 reply에 넣지 않는다.
-        require(Set.of("id", "role", "kind", "content", "analysis", "update", "sourceUrl", "activityCreated", "updatedActivityId")
+        require(Set.of("id", "role", "kind", "content", "analysis", "update", "sourceUrl", "activityCreated", "updatedActivityId", "deduplication")
                 .containsAll(reply.keySet()));
         if (reply.containsKey("sourceUrl")) require(Schemas.linkUrl().safeParse(reply.get("sourceUrl")).success());
         if (reply.containsKey("activityCreated")) require(reply.get("activityCreated") instanceof Boolean);
@@ -181,8 +181,31 @@ public final class InternalChatJobs {
     public record Result(int status, Map<String, Object> job) {}
 
     public static Result publish(Database db, String jobId, Object raw) {
+        return publish(db, jobId, raw, false);
+    }
+
+    public static Result publish(Database db, String jobId, Object raw, boolean requireDedup) {
         Publication p = validate(jobId, raw);
         Map<String, Object> in = p.value();
+        if ("completed".equals(in.get("status"))) {
+            var reply = Js.asObject(in.get("reply"));
+            Object dedup = reply.get("deduplication");
+            if (requireDedup && !p.files().isEmpty()) require(dedup != null);
+            if (dedup != null) {
+                require(com.oneline.api.validation.Deduplication.SCHEMA.safeParse(dedup).success());
+                var results = Js.asArray(Js.get(dedup, "files"));
+                require(results.size() == p.files().size() && !results.isEmpty());
+                Object activityId = Js.path(reply, "analysis", "activity", "id");
+                require(Objects.equals(Js.get(dedup, "activityId"), activityId));
+                for (int index = 0; index < results.size(); index++) {
+                    Object repeated = Js.get(results.get(index), "duplicateOfInputIndex");
+                    if (!Js.nullish(repeated)) {
+                        int previous = ((Number) repeated).intValue();
+                        require(Arrays.equals(p.files().get(index).bytes(), p.files().get(previous).bytes()));
+                    }
+                }
+            }
+        }
         return db.transaction(() -> {
             if (db.get("SELECT job_id FROM internal_job_tombstones WHERE job_id = ? OR request_id = ? OR analysis_id = ?",
                     hash(jobId), hash(in.get("requestId")), hash(in.get("analysisId"))) != null) throw new Failure(409, "internal_job_retired");

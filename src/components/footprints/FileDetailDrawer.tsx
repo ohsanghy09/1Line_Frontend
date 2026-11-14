@@ -92,6 +92,13 @@ function FileDetailDrawer({ activityId, fileId, onClose }: { activityId: string;
                         {/* 선택 자료가 근거로 연결된 이벤트만 표시한다. 변화 없는 파일에 비교를 만들지 않는다. */}
                         {detail.events.map(event => (
                             <div key={event.id} className="space-y-3">
+                                {event.changeEvidence && <details className="rounded-xl border border-brand-border p-3 text-xs">
+                                    <summary className="cursor-pointer font-medium">변화의 원문 근거</summary>
+                                    {(['before', 'after'] as const).map(side => <div key={side} className="mt-2 space-y-1">
+                                        <p className="font-medium">{side === 'before' ? '이전 근거' : '이후 근거'}</p>
+                                        {event.changeEvidence![side].map((ref, index) => <blockquote key={index} className="whitespace-pre-wrap break-words border-l-2 border-brand-border pl-2">{ref.quote}</blockquote>)}
+                                    </div>)}
+                                </details>}
                                 {(event.isTurningPoint || event.change) && (
                                     <div className="p-4 bg-indigo-50/60 border border-indigo-100 rounded-xl space-y-2">
                                         <h4 className="font-bold text-xs text-brand-primary flex items-center gap-1.5">

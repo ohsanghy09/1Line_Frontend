@@ -28,6 +28,14 @@ function ChatReplyCard({ reply, now, actions, activityActions, activityGuidance 
             <div className="min-w-0 space-y-2 max-w-[85%] sm:max-w-[80%]">
                 <div className="bg-white border border-brand-border shadow-soft p-4 rounded-2xl rounded-tl-sm text-sm text-brand-text space-y-3 break-words">
 
+                    {!actions?.saved && reply.deduplication && <div role="status" className="rounded-xl border border-brand-border bg-slate-50 p-3 text-xs space-y-1">
+                        <p>{reply.deduplication.saveBlocked ? '같은 자료가 확인됐어요. 중복 파일을 제외하고 신규 자료만 다시 보내 주세요. 다른 활동에서는 같은 파일을 사용할 수 있어요.'
+                            : reply.deduplication.activityId === null ? '활동을 선택하면 저장 전에 자료 중복을 다시 확인해요.' : '분석 시점의 중복 확인 결과예요. 저장 전에 다시 확인해요.'}</p>
+                        {reply.deduplication.files.filter(file => file.status === 'duplicate').map(file => <p key={file.inputIndex} className="break-all">
+                            {analysis?.files[file.inputIndex]?.name}: {file.duplicateOfInputIndex !== undefined ? '이번 첨부에 같은 파일이 있어요.' : '선택한 활동에 이미 저장된 자료예요.'}
+                        </p>)}
+                    </div>}
+
                     {(needsActivityConfirmation || reply.activityCreated) && analysis ? <>
                         <div className="font-bold text-sm text-brand-primary">
                             {reply.activityCreated ? `${analysis.activity.name} · 활동 기록` : analysis.activity.match === 'new' ? `${analysis.activity.name} · 새 활동 제안` : '자료를 연결할 활동을 확인해 주세요'}

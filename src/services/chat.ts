@@ -154,7 +154,10 @@ export async function request(path: string, init: RequestInit = {}, base = apiBa
             const message = unavailable ? 'AI 서버가 일시적으로 응답하지 않아요. 잠시 후 상태를 다시 확인해 주세요.'
                 : isObject(data) && typeof data.error === 'string' ? data.error
                     : service === 'ai' ? 'AI 서버 요청을 처리하지 못했어요. 잠시 후 상태를 확인해 주세요.' : '서버 요청을 처리하지 못했어요. API 서버 실행 상태를 확인해 주세요.'
-            throw Object.assign(new Error(message), { status: response.status })
+            throw Object.assign(new Error(message), { status: response.status,
+                ...(isObject(data) && typeof data.code === 'string' ? { code: data.code } : {}),
+                ...(isObject(data) && data.code === 'duplicate_files' && Array.isArray(data.duplicates) ? { duplicates: data.duplicates } : {}),
+            })
         }
         return data
     } catch (error) {
@@ -202,17 +205,46 @@ export function isActivityProposal(value: unknown): value is ActivityProposal {
     return true
 }
 
+export function isDeduplication(value: unknown, count: number): boolean {
+    if (!isObject(value) || value.schemaVersion !== 'file-dedup-v1'
+        || !(value.activityId === null || typeof value.activityId === 'string' && value.activityId.trim())
+        || typeof value.saveBlocked !== 'boolean' || !Array.isArray(value.files) || value.files.length !== count || count < 1 || count > 10
+        || Object.keys(value).some(key => !['schemaVersion', 'activityId', 'files', 'saveBlocked'].includes(key))) return false
+    let blocked = false
+    for (let index = 0; index < value.files.length; index++) {
+        const file = value.files[index]
+        if (!isObject(file) || file.inputIndex !== index || !['new', 'duplicate', 'pending'].includes(String(file.status))
+            || !Array.isArray(file.matches) || file.matches.length > 20
+            || Object.keys(file).some(key => !['inputIndex', 'status', 'matches', 'duplicateOfInputIndex'].includes(key))) return false
+        const repeated = file.duplicateOfInputIndex !== undefined
+        if (repeated && (!Number.isInteger(file.duplicateOfInputIndex) || Number(file.duplicateOfInputIndex) < 0
+            || Number(file.duplicateOfInputIndex) >= index || file.status !== 'duplicate' || file.matches.length !== 0)) return false
+        if (file.status === 'new' && (value.activityId === null || file.matches.length !== 0)
+            || file.status === 'pending' && value.activityId !== null
+            || file.status === 'duplicate' && !repeated && (value.activityId === null || file.matches.length === 0)) return false
+        const ids = new Set<string>()
+        for (const match of file.matches) {
+            if (!isObject(match) || Object.keys(match).length !== 3 || !['activityId', 'recordId', 'fileId'].every(key => typeof match[key] === 'string' && String(match[key]).trim())
+                || value.activityId !== null && match.activityId !== value.activityId || ids.has(String(match.fileId))) return false
+            ids.add(String(match.fileId))
+        }
+        blocked ||= file.status === 'duplicate'
+    }
+    return value.saveBlocked === blocked
+}
+
 export function isReply(value: unknown): value is ChatReply {
     if (!isObject(value) || typeof value.id !== 'string' || value.role !== 'assistant' || typeof value.content !== 'string') return false
     if (value.activityCreated !== undefined && typeof value.activityCreated !== 'boolean') return false
     if (value.updatedActivityId !== undefined && (typeof value.updatedActivityId !== 'string' || !value.updatedActivityId)) return false
-    if (value.kind === 'general') return value.analysis === null
+    if (value.kind === 'general') return value.analysis === null && value.deduplication === undefined
     if (!['text-analysis', 'file-analysis', 'no-change', 'batch-analysis', 'link-analysis'].includes(String(value.kind))) return false
     if (value.sourceUrl !== undefined && (typeof value.sourceUrl !== 'string' || !isHttpUrl(value.sourceUrl))) return false
     const analysis = value.analysis
     if (!isObject(analysis) || !isActivityProposal(analysis.activity)) return false
     if (typeof analysis.materialType !== 'string' || typeof analysis.summary !== 'string' || !(analysis.stage === null || typeof analysis.stage === 'string')) return false
     if (analysis.noChangeMessage !== undefined && typeof analysis.noChangeMessage !== 'string') return false
+    if (value.deduplication !== undefined && (!Array.isArray(analysis.files) || !isDeduplication(value.deduplication, analysis.files.length))) return false
     return Array.isArray(analysis.changes) && analysis.changes.every(change => isObject(change) && typeof change.before === 'string' && typeof change.after === 'string' && typeof change.category === 'string' && Array.isArray(change.evidence) && change.evidence.every(item => typeof item === 'string'))
         && Array.isArray(analysis.files) && analysis.files.every(file => isObject(file) && typeof file.name === 'string' && typeof file.materialType === 'string' && (file.previousVersion === null || typeof file.previousVersion === 'string'))
         && Array.isArray(analysis.groups) && analysis.groups.every(group => isObject(group) && typeof group.materialType === 'string' && Number.isInteger(group.count) && Number(group.count) > 0)

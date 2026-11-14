@@ -43,7 +43,7 @@ for (const name of ['backend', 'ai']) {
         assert.equal(documented.length, name === 'backend' ? 16 : 4)
         assert.deepEqual(actual.sort(), documented)
         assert.deepEqual(internal.sort(), name === 'backend'
-            ? ['GET /internal/chat-jobs/{jobId}', 'GET /internal/home-context', 'PUT /internal/chat-jobs/{jobId}']
+            ? ['GET /internal/chat-jobs/{jobId}', 'GET /internal/home-context', 'POST /internal/file-duplicates/check', 'PUT /internal/chat-jobs/{jobId}']
             : ['POST /analyze/activities/{activityId}', 'POST /analyze/journey', 'POST /analyze/records/{recordId}/exclude-file'])
 
         function checkReferences(value) {

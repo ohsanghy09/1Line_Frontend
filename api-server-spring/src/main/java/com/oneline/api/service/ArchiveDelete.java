@@ -7,8 +7,6 @@ import com.oneline.api.js.Json;
 import com.oneline.api.support.EventLoop;
 import com.oneline.api.support.Fetch;
 import com.oneline.api.support.AiCallLog;
-import com.oneline.api.validation.Schemas;
-import com.oneline.api.zod.Z;
 
 import java.util.ArrayList;
 import java.util.Base64;
@@ -95,7 +93,7 @@ public final class ArchiveDelete {
     }
 
     public static void deleteMaterial(Database db, EventLoop loop, Object activityId, Object fileId, String aiBaseUrl, InternalServiceAuth auth,
-                                      BiConsumer<Object, Map<String, Object>> syncEvents) {
+                                      BiConsumer<Object, Map<String, Object>> syncEvents, boolean v2Enabled) {
         Map<String, Object> detail = Archive.readArchiveFile(db, activityId, fileId);
         if (detail == null) throw publicFail(404, "이 활동에서 자료를 찾을 수 없어요.");
         Map<String, Object> file = Js.asObject(detail.get("file"));
@@ -105,9 +103,14 @@ public final class ArchiveDelete {
         List<Map<String, Object>> remaining = Js.truthy(analysisId)
                 ? db.all("SELECT id, name, mime_type, size, content FROM files WHERE analysis_id = ? AND id != ? ORDER BY rowid", analysisId, fileId)
                 : List.of();
+        if (!remaining.isEmpty() && !v2Enabled) throw publicFail(503, "남은 자료 재분석 연동을 준비 중이라 부분 삭제를 진행할 수 없어요.");
+        final String originalSignature;
+        try { originalSignature = remaining.isEmpty() ? null : FileDuplicates.signature(db, analysisId); }
+        catch (FileDuplicates.Problem problem) { throw publicFail(502, "보관된 원본을 확인하지 못해 삭제하지 않았어요."); }
         try (var call = Js.strictEquals(file.get("kind"), "file") && !remaining.isEmpty()
                 ? new AiCallLog("exclude_file", original.get("id")) : null) {
             Map<String, Object> nextReply = null;
+            List<Object> evidence = List.of();
             if (Js.strictEquals(file.get("kind"), "file") && !remaining.isEmpty()) {
                 Fetch.Response response;
                 try {
@@ -128,7 +131,7 @@ public final class ArchiveDelete {
                         throw new IllegalStateException("남은 원본이 분석 한도를 초과했습니다.");
                     }
                     Map<String, Object> activity = db.get("SELECT id, name, category FROM activities WHERE id = ?", activityId);
-                    String input = Json.stringify(obj("fileId", fileId, "recordReply", original.get("reply"),
+                    String input = Json.stringify(obj("schemaVersion", ExcludeFileResult.VERSION, "fileId", fileId, "recordReply", original.get("reply"),
                             "activity", activity, "files", originals));
                     response = Fetch.post(loop, base + "/api/analyze/records/" + Js.encodeURIComponent(Js.str(original.get("id"))) + "/exclude-file",
                             input, 150000, null, auth, call);
@@ -136,33 +139,29 @@ public final class ArchiveDelete {
                     throw publicFail(502, "남은 파일을 재분석하지 못해 삭제하지 않았어요. AI 서버를 확인하고 다시 시도해 주세요.");
                 }
                 Object body = response.jsonOrNull();
-                Z.SafeParseResult parsed = Schemas.REPLY.safeParse(Js.opt(body, "reply"));
-                List<Object> remainingIds = new ArrayList<>(), remainingNames = new ArrayList<>();
-                for (Map<String, Object> item : remaining) {
-                    remainingIds.add(item.get("id"));
-                    remainingNames.add(item.get("name"));
-                }
-                if (!response.ok() || !parsed.success() || !Js.strictEquals(Js.get(body, "recordReply"), original.get("reply"))
-                        || !java.util.Objects.equals(Json.stringify(Js.get(body, "fileIds")), Json.stringify(remainingIds))) {
+                if (!response.ok()) {
                     throw publicFail(502, "남은 파일의 분석 결과를 확인하지 못해 삭제하지 않았어요. 다시 시도해 주세요.");
                 }
-                nextReply = Js.asObject(parsed.data());
+                var validated = ExcludeFileResult.validate(body, original.get("reply"), remaining);
+                nextReply = validated.reply();
+                evidence = validated.evidence();
                 Object nextAnalysis = nextReply.get("analysis");
-                List<Object> nextNames = new ArrayList<>();
-                for (Object item : Js.asArray(Js.get(nextAnalysis, "files"))) nextNames.add(Js.get(item, "name"));
-                if (Js.truthy(nextReply.getOrDefault("sourceUrl", Js.UNDEFINED)) || !Js.asArray(Js.get(nextAnalysis, "changes")).isEmpty()
-                        || !java.util.Objects.equals(Json.stringify(nextNames), Json.stringify(remainingNames))) {
-                    throw publicFail(502, "남은 파일의 분석 대상이 일치하지 않아 삭제하지 않았어요. 다시 시도해 주세요.");
-                }
                 Object oldReply = Json.parse((String) original.get("reply"));
                 Js.set(nextAnalysis, "activity", Js.get(Js.get(oldReply, "analysis"), "activity"));
                 nextReply.put("activityCreated", Js.get(oldReply, "activityCreated"));
             }
             Map<String, Object> finalReply = nextReply;
+            List<Object> finalEvidence = evidence;
             db.transaction(() -> {
                 ActivityMetadata.Snapshot current = ActivityMetadata.activitySnapshot(db, activityId);
                 if (current == null || !current.fingerprint().equals(snapshot.fingerprint())) {
                     throw publicFail(409, "삭제 중 활동 기록이 변경됐어요. 새로고침 후 다시 시도해 주세요.");
+                }
+                if (originalSignature != null) {
+                    try {
+                        if (!originalSignature.equals(FileDuplicates.signature(db, analysisId)))
+                            throw publicFail(409, "삭제 중 원본 파일이 변경되어 삭제하지 않았어요.");
+                    } catch (FileDuplicates.Problem problem) { throw publicFail(409, "삭제 중 원본 파일이 변경되어 삭제하지 않았어요."); }
                 }
                 if (Js.strictEquals(file.get("kind"), "file")) db.run("DELETE FROM files WHERE id = ?", fileId);
                 retireDraft(db, analysisId);
@@ -170,6 +169,7 @@ public final class ArchiveDelete {
                     db.run("UPDATE records SET message = '', reply = ?, updated_at = ? WHERE id = ?",
                             Json.stringify(finalReply), Js.nowIso(), original.get("id"));
                     syncEvents.accept(original.get("id"), finalReply);
+                    ExcludeFileResult.saveEvidence(db, original.get("id"), finalEvidence);
                 } else {
                     db.run("DELETE FROM records WHERE id = ?", original.get("id"));
                 }

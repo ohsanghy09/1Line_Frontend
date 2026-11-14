@@ -30,6 +30,9 @@ export default function ConnectedChatReplyCard({ reply: initial, now, onChange }
     // 변화 없음 카드의 저장 안내 문구를 화면의 카드 구분과 맞춘다.
     const isNoChange = (reply.kind === 'file-analysis' || reply.kind === 'no-change')
         && reply.analysis?.files.length === 1 && reply.analysis.changes.length === 0
+    const blockedFor = (target: string | null) => !recordId && Boolean(reply.deduplication?.files.some(file =>
+        file.status === 'duplicate' && (file.duplicateOfInputIndex !== undefined || reply.deduplication?.activityId === target)))
+    const saveBlocked = blockedFor(activityId || reply.analysis?.activity.id || null)
     const locked = useRef(false)
     const alive = useRef(true)
     useEffect(() => { alive.current = true; return () => { alive.current = false } }, [])
@@ -87,7 +90,15 @@ export default function ConnectedChatReplyCard({ reply: initial, now, onChange }
         locked.current = true
         setBusy(true); setError(''); setNotice('')
         try { await work() } catch (error) {
-            if (alive.current) setError(error instanceof Error ? error.message : '요청을 처리하지 못했어요.')
+            if (alive.current) {
+                let message = error instanceof Error ? error.message : '요청을 처리하지 못했어요.'
+                if (error && typeof error === 'object' && 'code' in error && error.code === 'duplicate_files' && 'duplicates' in error && Array.isArray(error.duplicates)) {
+                    const names = error.duplicates.flatMap(item => item && Number.isInteger(item.inputIndex)
+                        && reply.analysis?.files[item.inputIndex] ? [reply.analysis.files[item.inputIndex].name] : [])
+                    if (names.length) message += ` 중복 자료: ${names.join(', ')}`
+                }
+                setError(message)
+            }
         } finally {
             locked.current = false
             if (alive.current) setBusy(false)
@@ -103,6 +114,7 @@ export default function ConnectedChatReplyCard({ reply: initial, now, onChange }
 
     async function saveTo(selection: ActivitySelection, materialType: string) {
         if (!reply.analysis) return
+        if (blockedFor('activityId' in selection ? selection.activityId : null)) throw new Error('중복 파일을 제외하고 신규 자료만 다시 보내 주세요. 다른 활동에 연결하려면 활동을 변경해 주세요.')
         const saved = await saveRecord({ ...reply, analysis: { ...reply.analysis, materialType } }, selection)
         if (!alive.current) return
         setRecordId(saved.id); setActivityId(saved.activityId)
@@ -192,6 +204,7 @@ export default function ConnectedChatReplyCard({ reply: initial, now, onChange }
                 if (analysis.groups.length) analysis.groups = [{ materialType, count: analysis.files.length }]
             }
             const next = { ...reply, analysis, content: reply.content.replaceAll(reply.analysis.activity.name, analysis.activity.name) }
+            if (selection.activityId !== reply.analysis.activity.id) next.deduplication = undefined
             if (recordId) {
                 const saved = await updateRecord(recordId, selection.activityId, materialType)
                 if (!alive.current) return
@@ -213,9 +226,9 @@ export default function ConnectedChatReplyCard({ reply: initial, now, onChange }
                     : '연결할 활동을 정하지 못했어요. 새 활동으로 저장하거나 기존 활동을 선택해 주세요.'
 
     return <div className="space-y-2">
-        <ChatReplyCard reply={reply} now={now} actions={{ busy, saved: Boolean(recordId), onSave: save, onEdit: edit }} activityGuidance={activityGuidance} activityActions={<>
+        <ChatReplyCard reply={reply} now={now} actions={{ busy, saved: Boolean(recordId), blocked: saveBlocked, onSave: save, onEdit: edit }} activityGuidance={activityGuidance} activityActions={<>
             {showProposalActions && <div className="flex flex-wrap gap-2">
-                <button type="button" disabled={busy} onClick={() => {
+                <button type="button" disabled={busy || blockedFor(null)} onClick={() => {
                     if (reply.analysis?.activity.match === 'new') save()
                     else { setIsNamingActivity(true); setIsChoosingActivity(false); setError('') }
                 }} className="rounded-lg bg-brand-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-primaryHover disabled:opacity-50">{busy ? '처리 중…' : '새 활동으로 저장'}</button>
@@ -225,7 +238,7 @@ export default function ConnectedChatReplyCard({ reply: initial, now, onChange }
                 <label htmlFor={`${activityPickerId}-name`} className="block text-xs font-medium">새 활동 이름</label>
                 <input id={`${activityPickerId}-name`} autoFocus required maxLength={200} value={newActivityName} disabled={busy} onChange={event => setNewActivityName(event.target.value)} className="w-full rounded-lg border border-brand-border bg-white p-2 text-xs" />
                 <div className="flex gap-2">
-                    <button type="submit" disabled={busy || !newActivityName.trim()} className="rounded-lg bg-brand-primary px-3 py-1.5 text-xs text-white disabled:opacity-50">{busy ? '저장 중…' : '이 이름으로 저장'}</button>
+                    <button type="submit" disabled={busy || blockedFor(null) || !newActivityName.trim()} className="rounded-lg bg-brand-primary px-3 py-1.5 text-xs text-white disabled:opacity-50">{busy ? '저장 중…' : '이 이름으로 저장'}</button>
                     <button type="button" disabled={busy} onClick={() => { setIsNamingActivity(false); setError('') }} className="rounded-lg border border-brand-border px-3 py-1.5 text-xs">취소</button>
                 </div>
             </form>}
@@ -239,7 +252,7 @@ export default function ConnectedChatReplyCard({ reply: initial, now, onChange }
                     <p className="text-xs text-brand-muted">선택한 활동에 이번 자료를 함께 저장해요.</p>
                 </> : <p role="status" className="text-xs text-brand-muted">연결할 기존 활동이 없어요. 새 활동으로 저장해 주세요.</p>}
                 <div className="flex flex-wrap gap-2">
-                    {activities.length > 0 && <button type="submit" disabled={busy || !selectedExistingId} className="rounded-lg bg-brand-primary px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50">{busy ? '저장 중…' : '선택한 활동에 저장'}</button>}
+                    {activities.length > 0 && <button type="submit" disabled={busy || !selectedExistingId || blockedFor(selectedExistingId)} className="rounded-lg bg-brand-primary px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50">{busy ? '저장 중…' : '선택한 활동에 저장'}</button>}
                     <button type="button" disabled={busy} onClick={() => { setIsChoosingActivity(false); setError(''); existingActivityButtonRef.current?.focus() }} className="rounded-lg border border-brand-border px-3 py-1.5 text-xs text-slate-700 disabled:opacity-50">취소</button>
                 </div>
             </form>}

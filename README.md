@@ -91,7 +91,7 @@ Vercel에서는 원격 Base URL을 빌드 환경변수로 지정합니다.
 프론트의 Swagger 화면과 handoff HTML 제공을 종료했습니다. 개발·빌드 시 문서를 생성하지 않으며 새 배포에서 `/swagger`와 하위 경로는 404로 응답합니다. [문서 확인 안내](docs/common/integration/API_계약/Swagger_사용안내.md)를 참고하세요.
 
 `docs/frontend-integration/openapi/`의 독립 OpenAPI와 handoff 문서를 사용합니다.
-백엔드 공개 API 16개·AI 공개 API 4개와 서버 간 내부 API 6개를 문서화했으며, 문서 확인에는 서버 실행·DB·AI 키가 필요 없습니다.
+백엔드 공개 API 16개·AI 공개 API 4개와 서버 간 내부 API 7개를 문서화했으며, 문서 확인에는 서버 실행·DB·AI 키가 필요 없습니다.
 문서의 Base URL은 실제 원격 연결 완료를 뜻하지 않습니다.
 
 ## 주요 명령어

@@ -1,5 +1,7 @@
 # 백엔드 API 정의서
 
+2026-11-14 공동 작업 구현: [백엔드 연동 안내](../../integration-test-fixes/공동작업_백엔드_연동안내.md)와 [완전한 교환 예시](../../integration-test-fixes/examples/joint-file-exchange.json)를 기준으로 F19 v2와 F11 중복 조회·저장 차단을 구현했다. 기능은 기본 비활성화이며 실제 AI 연동·비텍스트 추출 검증은 별도다. 아래 구형 저장 중복·삭제 규칙보다 최신 안내가 우선한다.
+
 > Growth Journey v2 (2026-11-12): [최신 공통 JSON 계약](../../growth-journey-update/공통_JSON_계약.md)과 [전체 요청·응답 예시](../../growth-journey-update/examples/journey-exchange.json)를 따른다. Spring·프론트 및 OpenAPI·Swagger는 반영했으나 실제 AI 구현·원격 연동·배포는 미검증이다.
 
 
@@ -12,7 +14,7 @@ Base는 백엔드가 제공하는 HTTPS 주소이며 /api까지 포함한다. �
 | 메서드·경로 | 기능 ID | 요청 | 정상 상태·응답 | 주요 실패 |
 | --- | --- | --- | --- | --- |
 | GET /activities | HOME-04~06 | 없음 | 200 ActivityOption[] (id,name + nullable 메타정보) | 500 |
-| POST /records | HOME-04,05 | 아래 SaveInput | 201 SavedRecord | 400/404/409 |
+| POST /records | HOME-04,05 | 아래 SaveInput | 201 SavedRecord, 중복 기능 활성화 후 동일 저장 재시도는 200 | 400/404/409/503 |
 | PATCH /records/:id | HOME-06 | 아래 EditInput | 200 SavedRecord | 400/404 |
 | GET /records/:id | HOME-08 | 없음 | 200 SavedRecord, 서버 카드 복구 | 404 |
 | POST /activities/apply-chat-update | HOME-07 | analysisId 필수 비빈 string ≤20000, 추가 키 금지 | 200 {analysisId,conversationId,reply:general} | 400/404/409 |
@@ -23,7 +25,7 @@ Base는 백엔드가 제공하는 HTTPS 주소이며 /api까지 포함한다. �
 | GET /archive/activities/:id | ARCHIVE-02,TIMELINE-01 | 없음 | 200 ActivityDetail | 404 |
 | GET /archive/activities/:id/materials/:fileId | ARCHIVE-03 | 실제 file ID 또는 record:ID | 200 {activityId,file,events,versionHistory:[]} | 404 |
 | DELETE /archive/activities/:id | ARCHIVE-04 | {confirmation:정확한 활동명} | 200 {deleted:true} | 400/404/409 |
-| DELETE /archive/activities/:id/materials/:fileId | ARCHIVE-05 | 현재 서비스는 빈 객체 {} 전송 | 200 {deleted:true} | 404/409/502 |
+| DELETE /archive/activities/:id/materials/:fileId | ARCHIVE-05 | 현재 서비스는 빈 객체 {} 전송 | 200 {deleted:true} | 404/409/502/503(부분 삭제 비활성화) |
 | GET /journey | JOURNEY-01 | 없음 | 200 GrowthJourney + analysis | 500(손상 저장값 등) |
 | POST /journey/analyze | JOURNEY-02 | 본문 없음 | 200 GrowthJourney + analysis | 409/422/429/502/503/504 |
 | POST /settings/reset-data | SETTINGS-01 | {confirmation:"전체 삭제"}, 앞뒤 공백도 불허 | 200 {deleted:true} | 400/409 |

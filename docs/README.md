@@ -23,6 +23,9 @@ docs/
     README.md
     통합테스트_공동작업_책임범위.md
     백엔드_단독작업_구현_검증.md
+    공동작업_백엔드_연동안내.md
+    examples/
+      joint-file-exchange.json
   backend-ai-fixes/
     README.md
     작업_및_검증_기록.md

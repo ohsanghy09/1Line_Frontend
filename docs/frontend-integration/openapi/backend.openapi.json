@@ -99,6 +99,16 @@
         ],
         "x-audience": "frontend",
         "responses": {
+          "200": {
+            "description": "FILE_DEDUP_ENABLED: identical save retry returns the existing record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedRecord"
+                }
+              }
+            }
+          },
           "201": {
             "description": "정상 응답",
             "content": {
@@ -169,7 +179,14 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Error"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DuplicateSaveError"
+                    }
+                  ]
                 }
               }
             }
@@ -212,7 +229,7 @@
             }
           }
         },
-        "description": "백엔드 담당자가 제공하고 프론트가 호출합니다.\n\n완료 초안·원본·작업 상태와 실제 활동 ID를 확인한다. 동일 analysisId의 저장은 409. 성공 후 활동 종합을 예약하며 예약 이후 분석 실패로 확정 기록을 취소하지 않는다."
+        "description": "백엔드 담당자가 제공하고 프론트가 호출합니다.\n\n완료 초안·원본·작업 상태와 실제 활동 ID를 확인한다. 동일 analysisId의 저장은 409. 성공 후 활동 종합을 예약하며 예약 이후 분석 실패로 확정 기록을 취소하지 않는다.\nFILE_DEDUP_ENABLED enables original-byte duplicate checks, whole-request rollback for mixed uploads, and idempotent save retries."
       }
     },
     "/records/{id}": {
@@ -2156,6 +2173,109 @@
           }
         ]
       }
+    },
+    "/internal/file-duplicates/check": {
+      "post": {
+        "operationId": "checkInternalFileDuplicates",
+        "summary": "[AI -> backend] Check saved original file hashes",
+        "tags": [
+          "Internal"
+        ],
+        "x-audience": "server",
+        "security": [
+          {
+            "InternalServiceToken": []
+          }
+        ],
+        "servers": [
+          {
+            "url": "https://backend-internal.example.org/api"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DuplicateCheckInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Complete duplicate lookup result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DuplicateCheckResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Lookup failed; never interpret as no duplicates",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Lookup failed; never interpret as no duplicates",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Lookup failed; never interpret as no duplicates",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Lookup failed; never interpret as no duplicates",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Lookup failed; never interpret as no duplicates",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Lookup failed; never interpret as no duplicates",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Existing authenticated single-dataset scope; no caller-supplied user scope. Input indices are unique; output preserves input order. More than 20 matches fails with 422. Cache-Control: no-store."
+      }
     }
   },
   "components": {
@@ -3041,6 +3161,9 @@
           },
           "analysis": {
             "$ref": "#/components/schemas/Analysis"
+          },
+          "deduplication": {
+            "$ref": "#/components/schemas/Deduplication"
           }
         },
         "required": [
@@ -3134,6 +3257,9 @@
               },
               "description": {
                 "type": "string"
+              },
+              "changeEvidence": {
+                "$ref": "#/components/schemas/EventChangeEvidence"
               }
             },
             "required": [
@@ -3199,6 +3325,9 @@
               },
               "reason": {
                 "type": "string"
+              },
+              "changeEvidence": {
+                "$ref": "#/components/schemas/EventChangeEvidence"
               }
             },
             "required": [
@@ -5313,6 +5442,358 @@
           "recordId",
           "activityId",
           "activityName"
+        ],
+        "additionalProperties": false
+      },
+      "DuplicateMatch": {
+        "type": "object",
+        "properties": {
+          "activityId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "\\S"
+          },
+          "recordId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "\\S"
+          },
+          "fileId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "\\S"
+          }
+        },
+        "required": [
+          "activityId",
+          "recordId",
+          "fileId"
+        ],
+        "additionalProperties": false
+      },
+      "DeduplicationFile": {
+        "type": "object",
+        "properties": {
+          "inputIndex": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9
+          },
+          "status": {
+            "enum": [
+              "new",
+              "duplicate",
+              "pending"
+            ]
+          },
+          "matches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DuplicateMatch"
+            },
+            "maxItems": 20
+          },
+          "duplicateOfInputIndex": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9
+          }
+        },
+        "required": [
+          "inputIndex",
+          "status",
+          "matches"
+        ],
+        "additionalProperties": false
+      },
+      "Deduplication": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "const": "file-dedup-v1"
+          },
+          "activityId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000,
+                "pattern": "\\S"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeduplicationFile"
+            },
+            "minItems": 1,
+            "maxItems": 10
+          },
+          "saveBlocked": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "activityId",
+          "files",
+          "saveBlocked"
+        ],
+        "additionalProperties": false,
+        "description": "File positions cover the complete upload in order. Duplicate implies saveBlocked. Pending applies only to an unresolved activity. duplicateOfInputIndex refers to an earlier identical upload. Saving rechecks bytes."
+      },
+      "FileQuoteEvidence": {
+        "type": "object",
+        "properties": {
+          "fileId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "\\S"
+          },
+          "quote": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "\\S"
+          }
+        },
+        "required": [
+          "fileId",
+          "quote"
+        ],
+        "additionalProperties": false
+      },
+      "EventChangeEvidence": {
+        "type": "object",
+        "properties": {
+          "before": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FileQuoteEvidence"
+            },
+            "minItems": 1,
+            "maxItems": 20
+          },
+          "after": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FileQuoteEvidence"
+            },
+            "minItems": 1,
+            "maxItems": 20
+          }
+        },
+        "required": [
+          "before",
+          "after"
+        ],
+        "additionalProperties": false
+      },
+      "ChangeEvidence": {
+        "type": "object",
+        "properties": {
+          "changeIndex": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 99
+          },
+          "before": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FileQuoteEvidence"
+            },
+            "minItems": 1,
+            "maxItems": 20
+          },
+          "after": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FileQuoteEvidence"
+            },
+            "minItems": 1,
+            "maxItems": 20
+          }
+        },
+        "required": [
+          "changeIndex",
+          "before",
+          "after"
+        ],
+        "additionalProperties": false
+      },
+      "DuplicateCheckInput": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "const": "file-dedup-v1"
+          },
+          "activityId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000,
+                "pattern": "\\S"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "files": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 10,
+            "items": {
+              "type": "object",
+              "properties": {
+                "inputIndex": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "size": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 10485760
+                }
+              },
+              "required": [
+                "inputIndex",
+                "sha256",
+                "size"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "activityId",
+          "files"
+        ],
+        "additionalProperties": false
+      },
+      "DuplicateCheckResult": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "const": "file-dedup-v1"
+          },
+          "activityId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000,
+                "pattern": "\\S"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "files": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 10,
+            "items": {
+              "type": "object",
+              "properties": {
+                "inputIndex": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9
+                },
+                "status": {
+                  "enum": [
+                    "new",
+                    "duplicate",
+                    "pending"
+                  ]
+                },
+                "matches": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DuplicateMatch"
+                  },
+                  "maxItems": 20
+                }
+              },
+              "required": [
+                "inputIndex",
+                "status",
+                "matches"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "activityId",
+          "files"
+        ],
+        "additionalProperties": false
+      },
+      "DuplicateSaveError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "const": "duplicate_files"
+          },
+          "error": {
+            "type": "string"
+          },
+          "duplicates": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 10,
+            "items": {
+              "type": "object",
+              "properties": {
+                "inputIndex": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9
+                },
+                "matches": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DuplicateMatch"
+                  },
+                  "maxItems": 20
+                },
+                "duplicateOfInputIndex": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9
+                }
+              },
+              "required": [
+                "inputIndex",
+                "matches"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "code",
+          "error",
+          "duplicates"
         ],
         "additionalProperties": false
       }

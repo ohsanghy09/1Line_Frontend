@@ -73,10 +73,12 @@ public class AppConfig implements WebMvcConfigurer {
             @Value("${oneline.frontend-origin:#{null}}") String origin,
             @Value("${oneline.ai-base-url:#{null}}") String aiBaseUrl,
             @Value("${oneline.auto-activity-analysis:true}") boolean autoActivityAnalysis,
-            @Value("${oneline.activity-analysis-delay-ms:500}") long activityAnalysisDelayMs, InternalServiceAuth auth) {
+            @Value("${oneline.activity-analysis-delay-ms:500}") long activityAnalysisDelayMs, InternalServiceAuth auth,
+            @Value("${oneline.exclude-file-v2-enabled:${EXCLUDE_FILE_V2_ENABLED:false}}") boolean excludeFileV2Enabled,
+            @Value("${oneline.file-dedup-enabled:${FILE_DEDUP_ENABLED:false}}") boolean fileDedupEnabled) {
         String frontendOrigin = origin != null ? origin : System.getenv("FRONTEND_ORIGIN");
         if (frontendOrigin == null) frontendOrigin = "http://localhost:5173";
-        return new ServerOptions(frontendOrigin, aiBaseUrl, autoActivityAnalysis, activityAnalysisDelayMs, auth);
+        return new ServerOptions(frontendOrigin, aiBaseUrl, autoActivityAnalysis, activityAnalysisDelayMs, auth, excludeFileV2Enabled, fileDedupEnabled);
     }
 
     @Bean(destroyMethod = "")

@@ -31,6 +31,12 @@ function isFile(value: unknown): value is RawFile {
 function isEvent(value: unknown): value is RawEvent {
     return object(value) && typeof value.id === 'string' && typeof value.title === 'string' && date(value.occurredAt)
         && strings(value.evidenceFileIds) && (value.evidenceLabels === undefined || strings(value.evidenceLabels))
+        && (value.changeEvidence === undefined || object(value.changeEvidence) && ['before', 'after'].every(side => {
+            const refs = (value.changeEvidence as Record<string, unknown>)[side]
+            return Array.isArray(refs) && refs.length > 0 && refs.length <= 20 && refs.every(ref => object(ref)
+                && typeof ref.fileId === 'string' && (value.evidenceFileIds as string[]).includes(ref.fileId)
+                && typeof ref.quote === 'string' && Boolean(ref.quote.trim()) && Array.from(ref.quote).length <= 2000)
+        }))
         && (value.change === undefined || object(value.change) && typeof value.change.before === 'string' && typeof value.change.after === 'string')
         && (value.isTurningPoint === true ? ['before', 'after', 'reason'].every(key => typeof value[key] === 'string') : value.isTurningPoint === false && typeof value.description === 'string')
 }

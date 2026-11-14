@@ -49,6 +49,7 @@ export type FootprintActivityDetail = FootprintActivity & {
 }
 
 type TimelineEventBase = {
+    changeEvidence?: { before: { fileId: string; quote: string }[]; after: { fileId: string; quote: string }[] }
     id: string
     dateLabel: string
     occurredAt: string

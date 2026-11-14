@@ -14,6 +14,7 @@ import com.oneline.api.service.ArchiveSearch;
 import com.oneline.api.service.Home;
 import com.oneline.api.service.InternalChatJobs;
 import com.oneline.api.service.Journey;
+import com.oneline.api.service.FileDuplicates;
 import com.oneline.api.support.EventLoop;
 import com.oneline.api.validation.Schemas;
 import jakarta.servlet.http.HttpServletRequest;
@@ -237,7 +238,7 @@ public class ApiController {
         deletingRecords.add(recordId);
         try {
             ArchiveDelete.deleteMaterial(db, loop, id, fileId, options.aiBaseUrl(), options.internalServiceAuth(),
-                    (target, reply) -> syncEvents(target, reply, Js.nowIso()));
+                    (target, reply) -> syncEvents(target, reply, Js.nowIso()), options.excludeFileV2Enabled());
             activityMetadata.cancelPending(id);
             if (options.autoActivityAnalysis() && db.get("SELECT id FROM records WHERE activity_id = ? LIMIT 1", id) != null) {
                 activityMetadata.schedule(id);
@@ -285,6 +286,14 @@ public class ApiController {
         Object analysisId = input.getOrDefault("analysisId", Js.UNDEFINED);
         Object reply = input.getOrDefault("reply", Js.UNDEFINED);
         Object message = input.get("message");
+        String requestSignature = Js.sha256Hex(Json.stringify(input));
+        if (options.fileDedupEnabled() && Js.truthy(analysisId)) {
+            var previous = db.get("SELECT request_signature, record_id FROM record_save_requests WHERE analysis_id = ?", analysisId);
+            if (previous != null) {
+                if (!requestSignature.equals(previous.get("request_signature"))) throw fail(409, "이미 다른 선택으로 저장한 분석이에요.");
+                return json(record(previous.get("record_id")));
+            }
+        }
         if (Js.truthy(analysisId)) {
             Map<String, Object> draft = db.get("SELECT * FROM analyses WHERE id = ?", analysisId);
             if (draft == null) throw fail(404, "분석 초안을 찾을 수 없습니다.");
@@ -305,6 +314,8 @@ public class ApiController {
                 || Js.truthy(analysisId) && db.get("SELECT id FROM files WHERE analysis_id = ? LIMIT 1", analysisId) != null;
         if (hasMaterial) message = "";
         Map<String, Object> analysis = Js.asObject(replyObject.get("analysis"));
+        if (options.fileDedupEnabled() && !Js.truthy(analysisId) && !Js.asArray(analysis.get("files")).isEmpty())
+            throw fail(400, "파일 자료는 원본이 보관된 분석 초안으로 저장해 주세요.");
         Object classification = input.getOrDefault("classification", Js.UNDEFINED);
         if (Js.truthy(classification) && !Js.strictEquals(Js.get(classification, "materialType"), analysis.get("materialType"))) {
             applyMaterialType(analysis, Js.get(classification, "materialType"));
@@ -315,6 +326,9 @@ public class ApiController {
         db.transaction(() -> {
             Map<String, Object> target = Activities.resolveActivity(db, newActivity, input.getOrDefault("activityId", Js.UNDEFINED),
                     input.getOrDefault("activityUpdates", Js.UNDEFINED), this::activity);
+            if (options.fileDedupEnabled() && Js.truthy(analysisId)) FileDuplicates.guardSave(db, analysisId, target.get("id"));
+            if (options.fileDedupEnabled() && !Js.asArray(analysis.get("files")).isEmpty())
+                replyObject.put("deduplication", FileDuplicates.verifiedNew(target.get("id"), Js.asArray(analysis.get("files")).size()));
             replyObject.put("content", Js.replaceAll(Js.requireString(replyObject.get("content"), "replaceAll"),
                     Js.str(Js.path(analysis, "activity", "name")), Js.str(target.get("name"))));
             replyObject.put("activityCreated", Js.truthy(newActivity));
@@ -326,6 +340,8 @@ public class ApiController {
             db.run("INSERT INTO records VALUES (?, ?, ?, ?, ?, ?, ?)", id, target.get("id"), Js.coalesce(analysisId, null),
                     finalMessage, Json.stringify(replyObject), now, now);
             syncEvents(id, replyObject, now);
+            if (options.fileDedupEnabled() && Js.truthy(analysisId))
+                db.run("INSERT INTO record_save_requests VALUES (?, ?, ?)", analysisId, requestSignature, id);
             Activities.touchActivities(db, Js.arr(target.get("id")), now);
         });
         LinkedHashMap<String, Object> saved = record(id);
@@ -384,6 +400,10 @@ public class ApiController {
             Object activityId = Js.coalesce(input.getOrDefault("activityId", Js.UNDEFINED), currentActivityId);
             Map<String, Object> target = Activities.resolveActivity(db, Js.UNDEFINED, activityId,
                     input.getOrDefault("activityUpdates", Js.UNDEFINED), this::activity);
+            if (options.fileDedupEnabled() && current.get("analysisId") != null && !Js.strictEquals(target.get("id"), currentActivityId))
+                FileDuplicates.guardSave(db, current.get("analysisId"), target.get("id"));
+            if (options.fileDedupEnabled() && !Js.strictEquals(target.get("id"), currentActivityId) && !Js.asArray(Js.get(analysis, "files")).isEmpty())
+                Js.set(reply, "deduplication", FileDuplicates.verifiedNew(target.get("id"), Js.asArray(Js.get(analysis, "files")).size()));
             Js.set(reply, "content", Js.replaceAll(Js.requireString(Js.get(reply, "content"), "replaceAll"),
                     Js.str(Js.path(analysis, "activity", "name")), Js.str(target.get("name"))));
             if (!Js.strictEquals(target.get("id"), currentActivityId)) Js.set(reply, "activityCreated", false);

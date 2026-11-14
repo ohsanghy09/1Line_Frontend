@@ -30,7 +30,7 @@ class MetadataDeletionTest {
         var names = files.stream().map(f -> (String) Js.get(f, "name")).toList();
         var reply = TestServer.mockReply("", names, false);
         Js.asObject(reply.get("analysis")).put("summary", REMAINING);
-        return obj("reply", reply, "recordReply", Js.get(raw, "recordReply"), "fileIds", files.stream().map(f -> Js.get(f, "id")).toList());
+        return obj("schemaVersion", "exclude-file-result-v2", "changeEvidence", List.of(), "reply", reply, "recordReply", Js.get(raw, "recordReply"), "fileIds", files.stream().map(f -> Js.get(f, "id")).toList());
     }
 
     private static Object metadata(Object raw, boolean confirmed) {

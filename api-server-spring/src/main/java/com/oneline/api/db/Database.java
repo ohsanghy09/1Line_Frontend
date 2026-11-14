@@ -105,7 +105,23 @@ public final class Database implements AutoCloseable {
                     );
                     CREATE INDEX IF NOT EXISTS files_analysis_id ON files(analysis_id);
                     CREATE INDEX IF NOT EXISTS analysis_retention_touched ON analysis_retention(touched_at_ms);
+                    CREATE TABLE IF NOT EXISTS file_hashes (
+                      file_id TEXT PRIMARY KEY REFERENCES files(id) ON DELETE CASCADE,
+                      sha256 TEXT NOT NULL, size INTEGER NOT NULL
+                    );
+                    CREATE INDEX IF NOT EXISTS file_hashes_content ON file_hashes(sha256, size);
+                    CREATE TABLE IF NOT EXISTS timeline_event_evidence (
+                      event_id TEXT PRIMARY KEY REFERENCES timeline_events(id) ON DELETE CASCADE,
+                      evidence_json TEXT NOT NULL
+                    );
+                    CREATE TABLE IF NOT EXISTS record_save_requests (
+                      analysis_id TEXT PRIMARY KEY REFERENCES analyses(id) ON DELETE CASCADE,
+                      request_signature TEXT NOT NULL, record_id TEXT NOT NULL UNIQUE REFERENCES records(id) ON DELETE CASCADE
+                    );
                     """);
+            db.execStatement("""
+                    CREATE TRIGGER IF NOT EXISTS invalidate_file_hash AFTER UPDATE OF content, size ON files
+                    BEGIN DELETE FROM file_hashes WHERE file_id = OLD.id; END""");
             // 기존 미저장 원본도 첫 도입 시점부터 보관 기간을 보장한다. AI 시각은 정리 기준으로 신뢰하지 않는다.
             db.run("INSERT OR IGNORE INTO analysis_retention SELECT id, ? FROM analyses", System.currentTimeMillis());
             boolean hasCriteria = db.all("PRAGMA table_info(journey_analyses)").stream()

@@ -1288,7 +1288,7 @@
             }
           }
         },
-        "description": "AI 담당자가 제공하고 백엔드 서버가 호출합니다.\n\n백엔드 전용. 삭제 대상이 없거나 기존 원본이 2개 미만이면 409. 삭제 대상 bytes·기존 기록 요약·대화를 문맥에서 제외한다. 남은 파일 원본만 분석하며 changes=[]와 sourceUrl 생략을 보장한다. recordReply 원문과 fileIds 순서를 그대로 반환한다. 제한 150초.\n\n[서버 간 요청·응답 원문](/swagger/handoff/common/handoff/서버간_데이터_전달_계약.html)\n\n2026-11-13 Spring 송신 구현 완료: fileId·recordReply·activity와 삭제 대상을 제외한 실제 files 원본을 JSON으로 전달한다. files는 id/name/mimeType/실제 size/contentBase64이며 저장 순서를 유지한다. 남은 파일 1개도 정상 입력이다. AI는 recordReply를 모델에 넣거나 재직렬화하지 않고 그대로 반환한다. 삭제 대상의 실재 여부는 백엔드가 검증하며 AI는 받은 files에서 삭제 대상 ID 제외 여부를 검증한다. 수신 서버·프록시는 25MiB 원본의 base64 증가분과 기록 응답·메타정보를 수용해야 한다. 실제 AI 연동은 미검증이다.",
+        "description": "exclude-file-result-v2: remaining originals only, changes with before/after quotes. No legacy response fallback. Backend activation requires EXCLUDE_FILE_V2_ENABLED. Do not return old deduplication metadata.",
         "security": [
           {
             "InternalServiceToken": []
@@ -2228,6 +2228,9 @@
           },
           "analysis": {
             "$ref": "#/components/schemas/Analysis"
+          },
+          "deduplication": {
+            "$ref": "#/components/schemas/Deduplication"
           }
         },
         "required": [
@@ -2504,9 +2507,13 @@
             },
             "minItems": 1,
             "maxItems": 10
+          },
+          "schemaVersion": {
+            "const": "exclude-file-result-v2"
           }
         },
         "required": [
+          "schemaVersion",
           "fileId",
           "recordReply",
           "activity",
@@ -2516,28 +2523,28 @@
       "ExcludeFileResult": {
         "type": "object",
         "properties": {
+          "schemaVersion": {
+            "const": "exclude-file-result-v2"
+          },
           "reply": {
             "allOf": [
               {
                 "$ref": "#/components/schemas/AnalysisReply"
               },
               {
-                "type": "object",
                 "not": {
-                  "required": [
-                    "sourceUrl"
-                  ]
-                },
-                "properties": {
-                  "analysis": {
-                    "type": "object",
-                    "properties": {
-                      "changes": {
-                        "type": "array",
-                        "maxItems": 0
-                      }
+                  "anyOf": [
+                    {
+                      "required": [
+                        "sourceUrl"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "deduplication"
+                      ]
                     }
-                  }
+                  ]
                 }
               }
             ]
@@ -2548,16 +2555,31 @@
           "fileIds": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/AIIdentifier"
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 20000,
+              "pattern": "\\S"
             },
-            "minItems": 1
+            "minItems": 1,
+            "maxItems": 10
+          },
+          "changeEvidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChangeEvidence"
+            },
+            "maxItems": 100
           }
         },
         "required": [
+          "schemaVersion",
           "reply",
           "recordReply",
-          "fileIds"
-        ]
+          "fileIds",
+          "changeEvidence"
+        ],
+        "additionalProperties": false,
+        "description": "Every change has exactly one unique changeIndex with before/after file-ID quotes. Empty changes AND evidence explicitly mean no-change. Echo recordReply exactly; never use it as model context. Normalize only CRLF/CR to LF. Unsupported quote extractors fail closed."
       },
       "Fingerprint": {
         "type": "string",
@@ -3879,6 +3901,190 @@
           "currentRecordCount",
           "model",
           "promptVersion"
+        ],
+        "additionalProperties": false
+      },
+      "DuplicateMatch": {
+        "type": "object",
+        "properties": {
+          "activityId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "\\S"
+          },
+          "recordId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "\\S"
+          },
+          "fileId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "\\S"
+          }
+        },
+        "required": [
+          "activityId",
+          "recordId",
+          "fileId"
+        ],
+        "additionalProperties": false
+      },
+      "DeduplicationFile": {
+        "type": "object",
+        "properties": {
+          "inputIndex": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9
+          },
+          "status": {
+            "enum": [
+              "new",
+              "duplicate",
+              "pending"
+            ]
+          },
+          "matches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DuplicateMatch"
+            },
+            "maxItems": 20
+          },
+          "duplicateOfInputIndex": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9
+          }
+        },
+        "required": [
+          "inputIndex",
+          "status",
+          "matches"
+        ],
+        "additionalProperties": false
+      },
+      "Deduplication": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "const": "file-dedup-v1"
+          },
+          "activityId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000,
+                "pattern": "\\S"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeduplicationFile"
+            },
+            "minItems": 1,
+            "maxItems": 10
+          },
+          "saveBlocked": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "activityId",
+          "files",
+          "saveBlocked"
+        ],
+        "additionalProperties": false,
+        "description": "File positions cover the complete upload in order. Duplicate implies saveBlocked. Pending applies only to an unresolved activity. duplicateOfInputIndex refers to an earlier identical upload. Saving rechecks bytes."
+      },
+      "FileQuoteEvidence": {
+        "type": "object",
+        "properties": {
+          "fileId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "\\S"
+          },
+          "quote": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "\\S"
+          }
+        },
+        "required": [
+          "fileId",
+          "quote"
+        ],
+        "additionalProperties": false
+      },
+      "EventChangeEvidence": {
+        "type": "object",
+        "properties": {
+          "before": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FileQuoteEvidence"
+            },
+            "minItems": 1,
+            "maxItems": 20
+          },
+          "after": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FileQuoteEvidence"
+            },
+            "minItems": 1,
+            "maxItems": 20
+          }
+        },
+        "required": [
+          "before",
+          "after"
+        ],
+        "additionalProperties": false
+      },
+      "ChangeEvidence": {
+        "type": "object",
+        "properties": {
+          "changeIndex": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 99
+          },
+          "before": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FileQuoteEvidence"
+            },
+            "minItems": 1,
+            "maxItems": 20
+          },
+          "after": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FileQuoteEvidence"
+            },
+            "minItems": 1,
+            "maxItems": 20
+          }
+        },
+        "required": [
+          "changeIndex",
+          "before",
+          "after"
         ],
         "additionalProperties": false
       }

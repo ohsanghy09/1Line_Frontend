@@ -56,6 +56,7 @@ public final class TestServer implements AutoCloseable {
                     "INTERNAL_SERVICE_TOKEN=" + TOKEN,
                     "oneline.db-path=" + directory.resolve("test.db").toString().replace('\\', '/'),
                     "oneline.auto-activity-analysis=false",
+                    "oneline.exclude-file-v2-enabled=true",
                     "logging.level.root=ERROR"));
             props.addAll(List.of(properties));
             ConfigurableApplicationContext context = new SpringApplicationBuilder(Application.class)

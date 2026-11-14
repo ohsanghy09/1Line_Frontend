@@ -1,5 +1,11 @@
 # 1Line API 서버 (Spring Boot)
 
+## 공동 파일 연동 (2026-11-14)
+
+F19 `exclude-file-result-v2`와 F11 `file-dedup-v1` 백엔드·관련 프론트를 구현했다. 두 기능은 기본 비활성화다. AI 측 준비 후 `EXCLUDE_FILE_V2_ENABLED=true`, `FILE_DEDUP_ENABLED=true`로 전환한다. 비활성 상태의 부분 삭제는 503으로 원본을 보존한다. 새 내부 API는 `POST /api/internal/file-duplicates/check`다.
+
+F19 독립 원문 검증은 현재 UTF-8 텍스트 형식만 지원하며, PDF·Office·이미지의 부분 삭제는 추출기 검증 전까지 거절한다. 요청·응답, 형식 제한, 설정·전환 순서는 [공동 연동 안내](../docs/integration-test-fixes/공동작업_백엔드_연동안내.md)를 참고한다. 실제 AI·운영 서버 검증은 별도다.
+
 ## 통합 테스트 후속 수정 (2026-11-14)
 
 부분 삭제 시 활동 속성을 임시 보존하고 재확인이 필요한 상태로 표시한다. 마지막 기록 삭제 시 관련 정보는 비운다. 미저장 원본은 기본 24시간 보관 후 5분 주기로 정리하며, 진행 중 작업과 정식 저장 자료는 보호한다. `UNSAVED_ANALYSIS_RETENTION_MS`로 보관 시간을 지정할 수 있다.

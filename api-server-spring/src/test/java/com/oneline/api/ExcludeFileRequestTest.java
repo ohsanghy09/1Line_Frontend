@@ -35,7 +35,7 @@ class ExcludeFileRequestTest {
         String content = files.stream().map(f -> Base64.getDecoder().decode((String) Js.get(f, "contentBase64")))
                 .map(bytes -> new String(bytes, StandardCharsets.UTF_8)).reduce("", (a, b) -> a + b);
         Js.asObject(reply.get("analysis")).put("summary", "남은 원본만의 요약: " + content);
-        return obj("reply", reply, "recordReply", request.get("recordReply"),
+        return obj("schemaVersion", "exclude-file-result-v2", "changeEvidence", List.of(), "reply", reply, "recordReply", request.get("recordReply"),
                 "fileIds", files.stream().map(f -> Js.get(f, "id")).toList());
     }
     private static long fileCount(TestServer s, Saved saved) {
@@ -50,7 +50,7 @@ class ExcludeFileRequestTest {
         try (var ai = new TestServer.FakeAi(); var s = TestServer.start("oneline.ai-base-url=" + ai.url)) {
             var saved = save(s, "a.txt", "b.txt", "c.txt");
             var unrelated = save(s, "unrelated.txt");
-            byte[] a = "DELETED_A_ORIGINAL".getBytes(StandardCharsets.UTF_8), b = new byte[]{0, -1, -128, 10}, c = "남은 C 원본".getBytes(StandardCharsets.UTF_8);
+            byte[] a = "DELETED_A_ORIGINAL".getBytes(StandardCharsets.UTF_8), b = new byte[]{0, (byte) 0xc3, (byte) 0xa9, 10}, c = "남은 C 원본".getBytes(StandardCharsets.UTF_8);
             setBytes(s, saved.draft().fileIds().get(0), a); setBytes(s, saved.draft().fileIds().get(1), b); setBytes(s, saved.draft().fileIds().get(2), c);
             var captured = new CopyOnWriteArrayList<Map<String, Object>>();
             ai.handler = (url, body) -> {
@@ -59,7 +59,8 @@ class ExcludeFileRequestTest {
             };
             assertEquals(200, s.send("DELETE", path(saved, 0), obj()).status());
             var request = captured.get(0);
-            assertEquals(Set.of("fileId", "recordReply", "activity", "files"), request.keySet());
+            assertEquals(Set.of("schemaVersion", "fileId", "recordReply", "activity", "files"), request.keySet());
+            assertEquals("exclude-file-result-v2", request.get("schemaVersion"));
             assertEquals(saved.draft().fileIds().get(0), request.get("fileId"));
             assertEquals(saved.reply(), request.get("recordReply"));
             assertEquals(obj("id", ACTIVITY, "name", "1호선톤", "category", null), request.get("activity"));
