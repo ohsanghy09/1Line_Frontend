@@ -92,6 +92,35 @@ cd api-server-spring
 - 검사: `.\gradlew.bat test`
 - JDK 21 이상 필요. Gradle은 wrapper가 자동으로 받는다.
 
+### Linux 실행·검사
+
+Java 21 JDK가 필요하다. Gradle Wrapper가 필요한 Gradle 버전을 내려받으므로 최초 실행에는 다운로드 가능한 환경이 필요하다.
+
+```bash
+cd api-server-spring
+java -version
+./gradlew test --console=plain
+./gradlew bootJar --console=plain
+```
+
+`gradlew`의 Git 실행 권한은 `100755`로 관리한다. 기존 체크아웃·압축 해제 등으로 실행 권한이 없으면 해당 환경에서 한 번 `chmod +x gradlew`를 실행한다. 권한이 정상인 Git 체크아웃에서는 필요하지 않다.
+
+실제 개발 서버의 포트는 환경변수로 지정한다. 테스트 실행과 서버 기동은 별개이며, 다음 예시는 3999 포트로 서버를 실행한다. 실제 AI 연결·DB 경로 등은 해당 배포 환경의 설정을 사용한다.
+
+```bash
+PORT=3999 ./gradlew bootRun --console=plain
+```
+
+서버 담당자의 검사 명령은 `PORT=3999 ./gradlew test --console=plain`이며, 이 명령은 애플리케이션을 운영 서버로 기동하는 명령이 아니다.
+
+Ubuntu/Debian에서 DB를 직접 조회할 CLI가 필요한 경우에만 설치한다. 앱 자체는 JDBC를 사용하므로 별도 sqlite3 CLI 설치가 필수는 아니다.
+
+```bash
+sudo apt install -y sqlite3
+```
+
+SQLite `busy_timeout`은 기존 동작과 동일하게 0을 유지한다. 현재 `SQLITE_BUSY_TIMEOUT_MS`를 읽는 기능은 없으며, 환경변수 지원은 필요할 때 별도로 구현·검증한다.
+
 ### 환경변수 (기존과 동일)
 
 | 이름 | 기본값 | 설명 |
