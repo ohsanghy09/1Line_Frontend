@@ -1,0 +1,46 @@
+import { isActivityProposal, isReply, request } from './chat'
+import type { ActivityMetadata, ActivitySelection, ChatReply } from '../types/chat'
+
+export type ActivityOption = ActivityMetadata & { id: string; name: string }
+export type SavedRecord = { id: string; activityId: string; reply: ChatReply }
+
+export async function getActivities(signal?: AbortSignal): Promise<ActivityOption[]> {
+    const data = await request('/activities', { signal })
+    if (!Array.isArray(data) || !data.every(item => item && typeof item.id === 'string' && isActivityProposal({ ...item, confidence: null }))) throw new Error('활동 목록 형식이 올바르지 않습니다.')
+    return data.map(item => ({ ...item, category: item.category ?? null, status: item.status ?? null, role: item.role ?? null, period: item.period ?? null, summary: item.summary ?? null }))
+}
+
+function notifyActivitiesChanged() {
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('1line:activities-changed'))
+        window.dispatchEvent(new Event('1line:records-changed'))
+    }
+}
+
+// 실제 분석 초안은 ID로 원본 파일 연결을 유지한다.
+export async function saveRecord(reply: ChatReply, target: string | ActivitySelection): Promise<SavedRecord> {
+    const analysisId = reply.analysisId?.trim()
+    if (!analysisId || analysisId.length > 20_000) {
+        throw new Error('분석 결과를 저장할 수 없어요. 원본을 다시 분석한 뒤 저장해 주세요.')
+    }
+    const selection = typeof target === 'string' ? { activityId: target } : target
+    const saved = readRecord(await request('/records', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...selection, analysisId, classification: { materialType: reply.analysis?.materialType } }),
+    }))
+    notifyActivitiesChanged()
+    return saved
+}
+
+export async function updateRecord(id: string, activityId: string, materialType: string, activityUpdates?: ActivityMetadata): Promise<SavedRecord> {
+    const saved = readRecord(await request(`/records/${encodeURIComponent(id)}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ activityId, materialType, activityUpdates }),
+    }))
+    notifyActivitiesChanged()
+    return saved
+}
+
+function readRecord(data: unknown): SavedRecord {
+    if (!data || typeof data !== 'object' || !('id' in data) || typeof data.id !== 'string' || !('activityId' in data) || typeof data.activityId !== 'string' || !('reply' in data) || !isReply(data.reply)) throw new Error('기록 응답 형식을 확인할 수 없습니다.')
+    return { id: data.id, activityId: data.activityId, reply: data.reply }
+}

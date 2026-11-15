@@ -1,0 +1,145 @@
+{
+  "note": "Illustrative values only. PUT queuedPublication, then PUT completedPublication with returned revision. Return public completed only after backend confirms persistence. Never copy files.contentBase64 to the public response.",
+  "queuedPublication": {
+    "jobId": "ai-example-01",
+    "analysisId": "analysis-example-01",
+    "conversationId": "conversation-example-01",
+    "requestId": "request-example-01",
+    "requestFingerprint": "example-fingerprint-use-your-actual-input-fingerprint",
+    "kind": "chat",
+    "status": "queued",
+    "phase": "preparing",
+    "message": "Please archive this document.",
+    "sourceUrl": null,
+    "reply": null,
+    "files": [
+      {
+        "id": "file-example-01",
+        "name": "note.txt",
+        "mimeType": "text/plain",
+        "size": 5,
+        "contentBase64": "aGVsbG8="
+      }
+    ],
+    "error": null,
+    "createdAt": "2026-11-13T00:00:00.000Z",
+    "updatedAt": "2026-11-13T00:00:00.000Z",
+    "expectedRevision": 0
+  },
+  "completedPublication": {
+    "jobId": "ai-example-01",
+    "analysisId": "analysis-example-01",
+    "conversationId": "conversation-example-01",
+    "requestId": "request-example-01",
+    "requestFingerprint": "example-fingerprint-use-your-actual-input-fingerprint",
+    "kind": "chat",
+    "status": "completed",
+    "phase": "completed",
+    "message": "Please archive this document.",
+    "sourceUrl": null,
+    "reply": {
+      "id": "reply-example-01",
+      "role": "assistant",
+      "kind": "file-analysis",
+      "content": "Review this draft before saving.",
+      "analysis": {
+        "activity": {
+          "id": null,
+          "name": "New activity",
+          "match": "new",
+          "confidence": "low",
+          "category": null,
+          "status": null,
+          "role": null,
+          "period": null,
+          "summary": null
+        },
+        "materialType": "Reference document",
+        "stage": null,
+        "summary": "The attached text says hello.",
+        "changes": [],
+        "files": [
+          {
+            "name": "note.txt",
+            "materialType": "Reference document",
+            "previousVersion": null
+          }
+        ],
+        "groups": [],
+        "suggestedSaveMode": "archive"
+      }
+    },
+    "files": [
+      {
+        "id": "file-example-01",
+        "name": "note.txt",
+        "mimeType": "text/plain",
+        "size": 5,
+        "contentBase64": "aGVsbG8="
+      }
+    ],
+    "error": null,
+    "createdAt": "2026-11-13T00:00:00.000Z",
+    "updatedAt": "2026-11-13T00:00:01.000Z",
+    "expectedRevision": 1
+  },
+  "completedResponse": {
+    "job": {
+      "jobId": "ai-example-01",
+      "analysisId": "analysis-example-01",
+      "conversationId": "conversation-example-01",
+      "requestId": "request-example-01",
+      "requestFingerprint": "example-fingerprint-use-your-actual-input-fingerprint",
+      "kind": "chat",
+      "status": "completed",
+      "phase": "completed",
+      "message": "Please archive this document.",
+      "sourceUrl": null,
+      "reply": {
+        "id": "reply-example-01",
+        "role": "assistant",
+        "kind": "file-analysis",
+        "content": "Review this draft before saving.",
+        "analysis": {
+          "activity": {
+            "id": null,
+            "name": "New activity",
+            "match": "new",
+            "confidence": "low",
+            "category": null,
+            "status": null,
+            "role": null,
+            "period": null,
+            "summary": null
+          },
+          "materialType": "Reference document",
+          "stage": null,
+          "summary": "The attached text says hello.",
+          "changes": [],
+          "files": [
+            {
+              "name": "note.txt",
+              "materialType": "Reference document",
+              "previousVersion": null
+            }
+          ],
+          "groups": [],
+          "suggestedSaveMode": "archive"
+        }
+      },
+      "files": [
+        {
+          "id": "file-example-01",
+          "name": "note.txt",
+          "mimeType": "text/plain",
+          "size": 5,
+          "contentBase64": "aGVsbG8="
+        }
+      ],
+      "error": null,
+      "createdAt": "2026-11-13T00:00:00.000Z",
+      "updatedAt": "2026-11-13T00:00:01.000Z",
+      "revision": 2
+    }
+  }
+}
